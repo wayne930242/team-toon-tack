@@ -662,23 +662,62 @@ async function init() {
 		console.log(`  Primary: ${primaryTeam.name}`);
 	}
 
-	// Fetch data from primary team
-	const selectedTeam = await client.team(primaryTeam.id);
-	const members = await selectedTeam.members();
-	const users = members.nodes as LinearUser[];
+	// Fetch data from ALL teams (not just primary) to support cross-team operations
+	console.log(`  Fetching data from ${teams.length} teams...`);
+
+	// Collect users, labels, states from all teams
+	const allUsers: LinearUser[] = [];
+	const allLabels: LinearLabel[] = [];
+	const allStates: LinearState[] = [];
+	const seenUserIds = new Set<string>();
+	const seenLabelIds = new Set<string>();
+	const seenStateIds = new Set<string>();
+
+	for (const team of teams) {
+		try {
+			const teamData = await client.team(team.id);
+			const members = await teamData.members();
+			for (const user of members.nodes as LinearUser[]) {
+				if (!seenUserIds.has(user.id)) {
+					seenUserIds.add(user.id);
+					allUsers.push(user);
+				}
+			}
+
+			const labelsData = await client.issueLabels({
+				filter: { team: { id: { eq: team.id } } },
+			});
+			for (const label of labelsData.nodes as LinearLabel[]) {
+				if (!seenLabelIds.has(label.id)) {
+					seenLabelIds.add(label.id);
+					allLabels.push(label);
+				}
+			}
+
+			const statesData = await client.workflowStates({
+				filter: { team: { id: { eq: team.id } } },
+			});
+			for (const state of statesData.nodes as LinearState[]) {
+				if (!seenStateIds.has(state.id)) {
+					seenStateIds.add(state.id);
+					allStates.push(state);
+				}
+			}
+		} catch (error) {
+			console.warn(`  ⚠ Could not fetch data for team ${team.name}, skipping...`);
+		}
+	}
+
+	const users = allUsers;
+	const labels = allLabels;
+	const states = allStates;
+
 	console.log(`  Users: ${users.length}`);
-
-	const labelsData = await client.issueLabels({
-		filter: { team: { id: { eq: primaryTeam.id } } },
-	});
-	const labels = labelsData.nodes as LinearLabel[];
 	console.log(`  Labels: ${labels.length}`);
+	console.log(`  Workflow states: ${states.length}`);
 
-	const statesData = await client.workflowStates({
-		filter: { team: { id: { eq: primaryTeam.id } } },
-	});
-	const states = statesData.nodes as LinearState[];
-
+	// Get cycle from primary team (for current work tracking)
+	const selectedTeam = await client.team(primaryTeam.id);
 	const currentCycle = (await selectedTeam.activeCycle) as LinearCycle | null;
 
 	// User selections
@@ -828,6 +867,9 @@ async function init() {
 	if (commandsInstalled) {
 		const cmdPrefix = commandPrefix ? `${commandPrefix}` : "";
 		console.log(`  3. In Claude Code: /${cmdPrefix}work-on next`);
+		console.log(
+			`\n💡 Tip: Edit .claude/commands/${cmdPrefix}work-on.md to customize the "Verify" section for your project.`,
+		);
 	} else {
 		console.log("  3. Start working: ttt work-on");
 	}

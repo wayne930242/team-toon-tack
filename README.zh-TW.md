@@ -11,6 +11,8 @@
 - **多團隊支援** — 跨多個團隊同步與過濾 issue
 - **彈性同步模式** — 選擇 remote（即時同步 Linear）或 local（離線優先，稍後用 `--update` 同步）
 - **QA/PM 團隊支援** — 完成開發任務時自動將 QA/PM 團隊的 parent issue 更新為「Testing」
+- **附件下載** — 自動下載 Linear 圖片和檔案到本地 `.ttt/output/`，供 AI 視覺分析
+- **阻塞狀態** — 等待外部依賴時可設定任務為 blocked
 - **自動安裝指令** — `ttt init` 可自動安裝 Claude Code commands，支援自訂前綴
 - **Cycle 歷史保存** — 本地 `.toon` 檔案保留 cycle 資料，方便 AI 檢閱
 - **使用者過濾** — 只顯示指派給你或未指派的工作
@@ -98,6 +100,7 @@ ttt status              # 顯示當前進行中的任務
 ttt status MP-123       # 顯示特定 issue 狀態
 ttt status MP-123 --set +1      # 移動到下一狀態
 ttt status MP-123 --set done    # 標記為完成
+ttt status MP-123 --set blocked # 設為阻塞（等待外部依賴）
 ```
 
 ### `ttt config`
@@ -120,7 +123,8 @@ your-project/
 └── .ttt/
     ├── config.toon     # 團隊配置（建議 gitignore）
     ├── local.toon      # 個人設定（gitignore）
-    └── cycle.toon      # 當前 cycle 資料（自動產生）
+    ├── cycle.toon      # 當前 cycle 資料（自動產生）
+    └── output/         # 下載的附件（圖片、檔案）
 ```
 
 ### 環境變數

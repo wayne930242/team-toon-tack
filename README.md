@@ -11,6 +11,8 @@ Optimized Linear workflow for Claude Code — saves significant tokens compared 
 - **Multi-team Support** — Sync and filter issues across multiple teams
 - **Flexible Sync Modes** — Choose between remote (immediate Linear sync) or local (offline-first, sync later with `--update`)
 - **QA/PM Team Support** — Auto-update parent issues in QA/PM team to "Testing" when completing dev tasks
+- **Attachment Download** — Auto-download Linear images and files to local `.ttt/output/` for AI vision analysis
+- **Blocked Status** — Set tasks as blocked when waiting on external dependencies
 - **Auto Command Setup** — `ttt init` can install Claude Code commands with custom prefix
 - **Cycle History** — Local `.toon` files preserve cycle data for AI context
 - **User Filtering** — Only see issues assigned to you or unassigned
@@ -98,6 +100,7 @@ ttt status              # Show current in-progress task
 ttt status MP-123       # Show specific issue status
 ttt status MP-123 --set +1      # Move to next status
 ttt status MP-123 --set done    # Mark as done
+ttt status MP-123 --set blocked # Set as blocked (waiting on dependency)
 ```
 
 ### `ttt config`
@@ -120,7 +123,8 @@ your-project/
 └── .ttt/
     ├── config.toon     # Team config (gitignore recommended)
     ├── local.toon      # Personal settings (gitignore)
-    └── cycle.toon      # Current cycle data (auto-generated)
+    ├── cycle.toon      # Current cycle data (auto-generated)
+    └── output/         # Downloaded attachments (images, files)
 ```
 
 ### Environment Variables
