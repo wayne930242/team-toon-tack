@@ -2,11 +2,11 @@
 
 [繁體中文](./README.zh-TW.md) | English
 
-Optimized Linear workflow for Claude Code — save 50%+ tokens compared to MCP.
+Optimized Linear workflow for Claude Code — saves significant tokens compared to MCP.
 
 ## Features
 
-- **Token Efficient** — Local cycle cache eliminates repeated API calls, saving 50%+ tokens vs Linear MCP
+- **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs Linear MCP
 - **Smart Task Selection** — Auto-pick highest priority unassigned work with `/work-on next`
 - **Multi-team Support** — Sync and filter issues across multiple teams
 - **Cycle History** — Local `.toon` files preserve cycle data for AI context
@@ -26,9 +26,7 @@ ttt init
 
 ### 2. Setup Claude Code Commands
 
-```bash
-cp -r /path/to/team-toon-tack/templates/claude-code-commands/* .claude/commands/
-```
+Copy the command templates from [`templates/claude-code-commands/`](https://github.com/niclin/team-toon-tack/tree/main/templates/claude-code-commands) to your project's `.claude/commands/` directory.
 
 Edit `.claude/commands/work-on.md` lines 37-40 to add your project's verification steps:
 

@@ -2,11 +2,11 @@
 
 繁體中文 | [English](./README.md)
 
-為 Claude Code 最佳化的 Linear 工作流 — 比 MCP 節省 50% 以上的 token。
+為 Claude Code 最佳化的 Linear 工作流 — 比 MCP 節省大量 token。
 
 ## 特色功能
 
-- **節省 Token** — 本地 cycle 快取避免重複 API 呼叫，比 Linear MCP 省 50%+ token
+- **節省 Token** — 本地 cycle 快取避免重複 API 呼叫，比 Linear MCP 省下大量 token
 - **智慧任務挑選** — `/work-on next` 自動選擇最高優先級的未指派工作
 - **多團隊支援** — 跨多個團隊同步與過濾 issue
 - **Cycle 歷史保存** — 本地 `.toon` 檔案保留 cycle 資料，方便 AI 檢閱
@@ -26,9 +26,7 @@ ttt init
 
 ### 2. 設定 Claude Code Commands
 
-```bash
-cp -r /path/to/team-toon-tack/templates/claude-code-commands/* .claude/commands/
-```
+從 [`templates/claude-code-commands/`](https://github.com/niclin/team-toon-tack/tree/main/templates/claude-code-commands) 複製 command 範本到你專案的 `.claude/commands/` 目錄。
 
 編輯 `.claude/commands/work-on.md` 第 37-40 行，加入你專案的驗證步驟：
 
