@@ -28,9 +28,20 @@ Script displays title, description, priority, labels, and attachments.
 1. Read the issue description carefully
 2. Explore related code
 3. Implement the fix/feature
-4. Run `bun type-check && bun lint`
-5. Commit with conventional format
-6. Use `/done-job` to complete
+4. Commit with conventional format
+
+### 4. Verify
+
+Run project-required verification before completing:
+
+```bash
+# Run verification procedure defined in project
+# (e.g., type-check, lint, test, build)
+```
+
+### 5. Complete
+
+Use `/done-job` to mark task as completed
 
 ## Example Usage
 
