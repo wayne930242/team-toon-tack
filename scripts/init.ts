@@ -855,9 +855,8 @@ async function init() {
 	await fs.writeFile(paths.localPath, encode(localConfig), "utf-8");
 	console.log(`  ✓ ${paths.localPath}`);
 
-	// Update .gitignore
-	const tttDir = paths.baseDir.replace(/^\.\//, "");
-	await updateGitignore(tttDir, options.interactive ?? true);
+	// Update .gitignore (always use relative path .ttt)
+	await updateGitignore(".ttt", options.interactive ?? true);
 
 	// Install Claude Code commands
 	const { installed: commandsInstalled, prefix: commandPrefix } =
