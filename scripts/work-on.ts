@@ -1,26 +1,17 @@
 import prompts from "prompts";
+import { PRIORITY_LABELS, displayTaskFull } from "./lib/display.js";
+import { getStatusTransitions, updateIssueStatus } from "./lib/linear.js";
 import {
-	getLinearClient,
 	getPrioritySortIndex,
-	getTeamId,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
 	saveCycleData,
 } from "./utils.js";
 
-const PRIORITY_LABELS: Record<number, string> = {
-	0: "⚪ None",
-	1: "🔴 Urgent",
-	2: "🟠 High",
-	3: "🟡 Medium",
-	4: "🟢 Low",
-};
-
 async function workOn() {
 	const args = process.argv.slice(2);
 
-	// Handle help flag
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(`Usage: ttt work-on [issue-id]
 
@@ -65,9 +56,8 @@ Examples:
 			return pa - pb;
 		});
 
-	// Phase 0: Issue Resolution
+	// Issue Resolution
 	if (!issueId) {
-		// Interactive selection
 		if (pendingTasks.length === 0) {
 			console.log("✅ 沒有待處理的任務，所有工作已完成或進行中");
 			process.exit(0);
@@ -92,7 +82,6 @@ Examples:
 		}
 		issueId = response.issueId;
 	} else if (["next", "下一個", "下一個工作"].includes(issueId)) {
-		// Auto-select highest priority
 		if (pendingTasks.length === 0) {
 			console.log("✅ 沒有待處理的任務，所有工作已完成或進行中");
 			process.exit(0);
@@ -101,7 +90,7 @@ Examples:
 		console.log(`Auto-selected: ${issueId}`);
 	}
 
-	// Phase 1: Find task
+	// Find task
 	const task = data.tasks.find(
 		(t) => t.id === issueId || t.id === `MP-${issueId}`,
 	);
@@ -110,7 +99,7 @@ Examples:
 		process.exit(1);
 	}
 
-	// Phase 2: Availability Check
+	// Availability Check
 	if (task.localStatus === "in-progress") {
 		console.log(`⚠️ 此任務 ${task.id} 已在進行中`);
 	} else if (task.localStatus === "completed") {
@@ -118,73 +107,29 @@ Examples:
 		process.exit(0);
 	}
 
-	// Phase 3: Mark as In Progress
+	// Mark as In Progress
 	if (task.localStatus === "pending") {
 		task.localStatus = "in-progress";
 		await saveCycleData(data);
 		console.log(`Local: ${task.id} → in-progress`);
 
-		// Update Linear using stored linearId
+		// Update Linear
 		if (task.linearId && process.env.LINEAR_API_KEY) {
-			try {
-				const client = getLinearClient();
-				const workflowStates = await client.workflowStates({
-					filter: { team: { id: { eq: getTeamId(config, localConfig.team) } } },
-				});
-
-				// Get status name from config or use default
-				const inProgressStatusName =
-					config.status_transitions?.in_progress || "In Progress";
-				const inProgressState = workflowStates.nodes.find(
-					(s) => s.name === inProgressStatusName,
-				);
-
-				if (inProgressState) {
-					await client.updateIssue(task.linearId, {
-						stateId: inProgressState.id,
-					});
-					console.log(`Linear: ${task.id} → ${inProgressStatusName}`);
-				}
-			} catch (e) {
-				console.error("Failed to update Linear:", e);
+			const transitions = getStatusTransitions(config);
+			const success = await updateIssueStatus(
+				task.linearId,
+				transitions.in_progress,
+				config,
+				localConfig.team,
+			);
+			if (success) {
+				console.log(`Linear: ${task.id} → ${transitions.in_progress}`);
 			}
 		}
 	}
 
-	// Phase 4: Display task info
-	console.log(`\n${"═".repeat(50)}`);
-	console.log(`👷 ${task.id}: ${task.title}`);
-	console.log(`${"═".repeat(50)}`);
-	console.log(`Priority: ${PRIORITY_LABELS[task.priority] || "None"}`);
-	console.log(`Labels: ${task.labels.join(", ")}`);
-	console.log(`Branch: ${task.branch || "N/A"}`);
-	if (task.url) console.log(`URL: ${task.url}`);
-
-	if (task.description) {
-		console.log(`\n📝 Description:\n${task.description}`);
-	}
-
-	if (task.attachments && task.attachments.length > 0) {
-		console.log(`\n📎 Attachments:`);
-		for (const att of task.attachments) {
-			console.log(`   - ${att.title}: ${att.url}`);
-		}
-	}
-
-	if (task.comments && task.comments.length > 0) {
-		console.log(`\n💬 Comments (${task.comments.length}):`);
-		for (const comment of task.comments) {
-			const date = new Date(comment.createdAt).toLocaleDateString();
-			console.log(`\n   [${comment.user || "Unknown"} - ${date}]`);
-			// Indent comment body
-			const lines = comment.body.split("\n");
-			for (const line of lines) {
-				console.log(`   ${line}`);
-			}
-		}
-	}
-
-	console.log(`\n${"─".repeat(50)}`);
+	// Display task info
+	displayTaskFull(task, "👷");
 	console.log("Next: bun type-check && bun lint");
 }
 
