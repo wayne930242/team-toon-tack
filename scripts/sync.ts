@@ -1,4 +1,4 @@
-import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, saveConfig, getTeamId, getPrioritySortIndex, CycleData, Task, Attachment, Comment, CycleInfo } from './utils';
+import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, saveConfig, getTeamId, getPrioritySortIndex, CycleData, Task, Attachment, Comment, CycleInfo } from './utils.js';
 
 async function sync() {
   const args = process.argv.slice(2);

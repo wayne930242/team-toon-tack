@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import prompts from 'prompts';
 import { encode, decode } from '@toon-format/toon';
-import { getLinearClient, getPaths, fileExists, Config, LocalConfig } from './utils';
+import { getLinearClient, getPaths, fileExists, Config, LocalConfig } from './utils.js';
 
 interface InitOptions {
   apiKey?: string;

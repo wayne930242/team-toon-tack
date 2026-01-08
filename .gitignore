@@ -3,6 +3,10 @@ node_modules/
 
 # Build output
 dist/
+bin/*.js
+bin/*.d.ts
+scripts/*.js
+scripts/*.d.ts
 
 # Team configuration (contains team IDs and user data)
 # Use config.example.toon as template

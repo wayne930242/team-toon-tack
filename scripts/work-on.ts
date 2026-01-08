@@ -1,5 +1,5 @@
 import prompts from 'prompts';
-import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getUserEmail, getTeamId, getPrioritySortIndex } from './utils';
+import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getUserEmail, getTeamId, getPrioritySortIndex } from './utils.js';
 
 const PRIORITY_LABELS: Record<number, string> = {
   0: '⚪ None',

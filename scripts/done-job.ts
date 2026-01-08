@@ -1,6 +1,6 @@
 import prompts from 'prompts';
 import { execSync } from 'node:child_process';
-import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getTeamId, getDefaultTeamKey } from './utils';
+import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getTeamId, getDefaultTeamKey } from './utils.js';
 
 interface CommitInfo {
   shortHash: string;
