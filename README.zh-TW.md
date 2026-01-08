@@ -18,7 +18,7 @@
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Linear    │────▶│  ttt sync    │────▶│ cycle.ttt  │
+│   Linear    │────▶│  ttt sync    │────▶│ cycle.toon  │
 │   (雲端)    │     │               │    │  (本地)      │
 └─────────────┘     └──────────────┘     └─────────────┘
                                                 │
@@ -34,10 +34,10 @@
 1. **同步 (sync)**
    - 從 Linear API 抓取當前 Cycle 的任務
    - 根據 `local.ttt` 設定過濾（標籤、排除指派人）
-   - 寫入 `cycle.ttt`，包含完整任務資訊
+   - 寫入 `cycle.toon`，包含完整任務資訊
 
 2. **開始任務 (work-on)**
-   - 讀取 `cycle.ttt` 中的待處理任務
+   - 讀取 `cycle.toon` 中的待處理任務
    - 更新本地狀態為 `in-progress`
    - 同步更新 Linear 狀態為 "In Progress"
 
@@ -51,19 +51,22 @@
 
 ```
 .ttt/                    # 配置目錄（建議 gitignore）
-├── config.ttt          # 團隊配置
+├── config.toon         # 團隊配置
 │   ├── teams            # Linear 團隊 ID 映射
 │   ├── users            # 成員 ID/email 映射
 │   ├── labels           # 標籤 ID 映射
-│   ├── statuses         # 狀態定義
+│   ├── status_transitions # 狀態映射配置
 │   └── current_cycle    # 當前 Cycle 資訊
 │
-├── local.ttt           # 個人設定（必須 gitignore）
+├── local.toon          # 個人設定（必須 gitignore）
 │   ├── current_user     # 你的 user key
-│   ├── label            # 過濾標籤
+│   ├── team             # 主要團隊
+│   ├── teams            # 多團隊同步（可選）
+│   ├── label            # 過濾標籤（可選）
+│   ├── exclude_labels   # 排除的標籤
 │   └── exclude_assignees # 排除的指派人
 │
-└── cycle.ttt           # 任務資料（自動產生）
+└── cycle.toon          # 任務資料（自動產生）
     ├── cycleId          # Cycle UUID
     ├── cycleName        # Cycle 名稱
     ├── updatedAt        # 最後同步時間
@@ -120,7 +123,7 @@ ttt sync -d .ttt
 ttt work-on -d .ttt
 
 # Claude Code 現在可以讀取任務內容
-# 在 .ttt/cycle.ttt 中找到任務描述、附件等
+# 在 .ttt/cycle.toon 中找到任務描述、附件等
 ```
 
 ### 情境 2：搭配 Claude Code 自動化
@@ -137,7 +140,7 @@ description: Sync Linear issues to local TOON file
 
 # Sync Linear Issues
 
-Fetch current cycle's issues from Linear to `.ttt/cycle.ttt`.
+Fetch current cycle's issues from Linear to `.ttt/cycle.toon`.
 
 ## Process
 
@@ -216,7 +219,7 @@ Mark a task as done and update Linear with commit details.
 
 ### 1. Determine Issue ID
 
-Check `.ttt/cycle.ttt` for tasks with `localStatus: in-progress`.
+Check `.ttt/cycle.toon` for tasks with `localStatus: in-progress`.
 
 ### 2. Write Fix Summary
 
@@ -236,7 +239,7 @@ ttt done -d .ttt $ARGUMENTS -m "修復說明"
 - Linear issue status → "Done"
 - Adds comment with commit hash, message, and diff summary
 - Parent issue (if exists) → "Testing"
-- Local status → `completed` in `.ttt/cycle.ttt`
+- Local status → `completed` in `.ttt/cycle.toon`
 ```
 
 #### 使用方式
@@ -287,21 +290,48 @@ Linear 上會自動新增留言：
 
 前端工程師只想看前端任務：
 ```toon
-# local.ttt
+# local.toon
 current_user: alice
+team: frontend
 label: Frontend
-exclude_assignees[1]: bob    # 排除後端同事的任務
-exclude_assignees[2]: charlie
+exclude_labels[1]:
+  - Bug
+exclude_assignees[2]:
+  - bob    # 排除後端同事的任務
+  - charlie
 ```
 
-後端工程師的設定：
+後端工程師的設定（多團隊支援）：
 ```toon
-# local.ttt
+# local.toon
 current_user: bob
+team: backend
+teams[2]:
+  - backend
+  - devops
 label: Backend
 ```
 
-### 情境 5：多專案管理
+### 情境 5：狀態管理
+
+```bash
+# 查看當前進行中任務的詳細資訊
+ttt status
+
+# 查看特定任務狀態
+ttt status MP-624
+
+# 快速移動狀態
+ttt status MP-624 --set +1    # 移動到下一狀態
+
+# 配置 Linear 狀態映射
+ttt config status             # 互動式配置
+
+# 配置過濾器
+ttt config filters            # 設定 exclude_labels, exclude_assignees
+```
+
+### 情境 6：多專案管理
 
 ```bash
 # 專案 A
@@ -314,7 +344,7 @@ ttt init -d .ttt  # 初始化不同的配置
 ttt sync -d .ttt
 ```
 
-### 情境 6：CI/CD 整合
+### 情境 7：CI/CD 整合
 
 ```yaml
 # .github/workflows/sync.yml
@@ -332,7 +362,7 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
       - run: |
-          git add .ttt/cycle.ttt
+          git add .ttt/cycle.toon
           git commit -m "chore: sync linear tasks" || true
           git push
 ```
@@ -360,10 +390,17 @@ ttt init [options]
 從 Linear 同步任務到本地。
 
 ```bash
-ttt sync [options]
+ttt sync [issue-id] [options]
+
+參數：
+  issue-id              可選。只同步此特定任務（如 MP-624）
 
 選項：
   -d, --dir <path>      配置目錄
+
+範例：
+  ttt sync              # 同步所有符合條件的任務
+  ttt sync MP-624       # 只同步此特定任務
 ```
 
 ### `ttt work-on`
@@ -395,6 +432,54 @@ ttt done [issue-id] [options]
   -m, --message <msg>   完成說明
 ```
 
+### `ttt status`
+
+顯示或修改任務狀態。
+
+```bash
+ttt status [issue-id] [--set <status>]
+
+參數：
+  issue-id              任務編號（可選，預設顯示進行中任務）
+
+選項：
+  -s, --set <status>    設定狀態
+
+狀態選項：
+  +1, -1, +2, -2       相對移動狀態
+  pending              設為待處理
+  in-progress          設為進行中
+  completed            設為已完成
+  blocked              設為後端阻擋
+  todo, done, testing  設定 Linear 狀態
+
+範例：
+  ttt status              # 顯示當前進行中任務
+  ttt status MP-624       # 顯示特定任務狀態
+  ttt status MP-624 --set +1      # 移動到下一狀態
+  ttt status MP-624 --set done    # 標記為完成
+```
+
+### `ttt config`
+
+配置設定。
+
+```bash
+ttt config [subcommand]
+
+子指令：
+  show      顯示當前配置（預設）
+  status    配置狀態映射（todo, in_progress, done, testing）
+  filters   配置過濾器（label, exclude_labels, exclude_assignees）
+  teams     配置團隊選擇（多團隊支援）
+
+範例：
+  ttt config              # 顯示當前配置
+  ttt config status       # 配置狀態映射
+  ttt config filters      # 配置過濾器
+  ttt config teams        # 配置團隊選擇
+```
+
 ## 環境變數
 
 | 變數 | 說明 |
@@ -421,15 +506,19 @@ TOON 是一種人類可讀的資料格式，類似 YAML 但更簡潔。相比 JS
 
 ### Q: 如何處理衝突？
 
-`cycle.ttt` 是自動產生的，直接用 `ttt sync` 重新同步即可。
+`cycle.toon` 是自動產生的，直接用 `ttt sync` 重新同步即可。
 
 ### Q: 支援哪些 Linear 功能？
 
 - ✅ Cycle 任務同步
+- ✅ 單一任務同步 (`ttt sync MP-624`)
 - ✅ 狀態雙向同步
+- ✅ 自訂狀態映射（`ttt config status`）
 - ✅ 附件和留言讀取
 - ✅ 父子任務關聯
 - ✅ 優先級排序
+- ✅ 多團隊支援
+- ✅ 標籤/用戶過濾
 
 ## 授權
 

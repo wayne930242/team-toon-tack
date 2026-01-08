@@ -57,7 +57,8 @@ ttt init -y                        # Non-interactive mode
 Sync current cycle issues from Linear.
 
 ```bash
-ttt sync
+ttt sync              # Sync all matching issues
+ttt sync MP-123       # Sync only this specific issue
 ```
 
 ### `ttt work-on`
@@ -80,6 +81,31 @@ ttt done MP-123             # Specific issue
 ttt done -m "Fixed the bug" # With completion message
 ```
 
+### `ttt status`
+
+Show or modify task status.
+
+```bash
+ttt status              # Show current in-progress task
+ttt status MP-123       # Show specific issue status
+ttt status MP-123 --set +1      # Move to next status
+ttt status MP-123 --set done    # Mark as done
+ttt status --set pending        # Reset current task
+```
+
+Status options: `+1`, `-1`, `+2`, `-2`, `pending`, `in-progress`, `completed`, `blocked`, `todo`, `done`, `testing`
+
+### `ttt config`
+
+Configure settings.
+
+```bash
+ttt config              # Show current configuration
+ttt config status       # Configure status mappings
+ttt config filters      # Configure label/user filters
+ttt config teams        # Configure multi-team selection
+```
+
 ## Configuration
 
 ### Directory Structure
@@ -88,9 +114,10 @@ After `ttt init`, your project will have:
 
 ```
 your-project/
-├── config.ttt    # Team configuration (gitignore recommended)
-├── local.ttt     # Personal settings (gitignore)
-└── cycle.ttt     # Current cycle data (gitignore, auto-generated)
+└── .ttt/                  # Config directory
+    ├── config.toon        # Team configuration (gitignore recommended)
+    ├── local.toon         # Personal settings (gitignore)
+    └── cycle.toon         # Current cycle data (gitignore, auto-generated)
 ```
 
 ### Custom Config Directory
@@ -104,7 +131,7 @@ export TOON_DIR=./team
 ttt sync
 ```
 
-### config.ttt
+### config.toon
 
 Team-wide configuration (fetched from Linear):
 
@@ -130,21 +157,45 @@ current_cycle:
   name: Cycle #1
 ```
 
-### local.ttt
+### local.toon
 
 Personal settings:
 
 ```toon
 current_user: alice
+team: frontend
+teams[2]:
+  - frontend
+  - backend
 label: Frontend
-exclude_assignees[1]: bob
+exclude_labels[1]:
+  - Bug
+exclude_assignees[1]:
+  - bob
 ```
 
 | Field | Description |
 |-------|-------------|
-| `current_user` | Your user key from config.ttt |
+| `current_user` | Your user key from config.toon |
+| `team` | Primary team key |
+| `teams` | Multiple teams to sync (optional) |
 | `label` | Filter issues by label (optional) |
+| `exclude_labels` | Exclude issues with these labels (optional) |
 | `exclude_assignees` | Hide issues from these users (optional) |
+
+### config.toon - Status Mappings
+
+Configure which Linear statuses map to local states:
+
+```toon
+status_transitions:
+  todo: Todo
+  in_progress: In Progress
+  done: Done
+  testing: Testing
+```
+
+Run `ttt config status` to configure interactively.
 
 ## Environment Variables
 
