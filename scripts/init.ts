@@ -277,17 +277,7 @@ async function init() {
       complete: 'Done',
       need_review: 'In Review'
     },
-    current_cycle: currentCycle ? {
-      id: currentCycle.id,
-      name: currentCycle.name || 'Cycle',
-      start_date: currentCycle.startsAt?.toISOString().split('T')[0] || '',
-      end_date: currentCycle.endsAt?.toISOString().split('T')[0] || ''
-    } : {
-      id: '',
-      name: 'No active cycle',
-      start_date: '',
-      end_date: ''
-    }
+    priority_order: ['urgent', 'high', 'medium', 'low', 'none']
   };
 
   // Find current user key

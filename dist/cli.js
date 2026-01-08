@@ -48,7 +48,7 @@ function printVersion() {
   console.log(`team-toon-tack v${VERSION}`);
 }
 function parseGlobalArgs(args) {
-  let dir = process.env.TOON_DIR || process.cwd();
+  let dir = process.env.TOON_DIR || resolve(process.cwd(), ".ttt");
   const commandArgs = [];
   for (let i = 0;i < args.length; i++) {
     const arg = args[i];

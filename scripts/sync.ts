@@ -1,4 +1,4 @@
-import { getLinearClient, loadConfig, loadLocalConfig, saveConfig, loadCycleData, saveCycleData, getTeamId, CycleData, Task, Attachment, Comment } from './utils';
+import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getTeamId, getPrioritySortIndex, CycleData, Task, Attachment, Comment } from './utils';
 
 async function sync() {
   const args = process.argv.slice(2);
@@ -47,23 +47,16 @@ Examples:
   }
 
   const activeCycle = cycles.nodes[0];
-  const cycleChanged = config.current_cycle.id !== activeCycle.id;
+  const cycleId = activeCycle.id;
+  const cycleName = activeCycle.name ?? 'Cycle';
 
-  if (cycleChanged) {
-    console.log(`Cycle changed: ${config.current_cycle.name} → ${activeCycle.name}`);
-    config.current_cycle = {
-      id: activeCycle.id,
-      name: activeCycle.name ?? `Cycle`,
-      start_date: activeCycle.startsAt?.toISOString().split('T')[0] ?? '',
-      end_date: activeCycle.endsAt?.toISOString().split('T')[0] ?? ''
-    };
-    await saveConfig(config);
-    console.log('Config updated with new cycle.');
+  // Check if cycle changed by comparing with existing cycle.toon
+  const existingData = await loadCycleData();
+  if (existingData && existingData.cycleId !== cycleId) {
+    console.log(`Cycle changed: ${existingData.cycleName} → ${cycleName}`);
   } else {
-    console.log(`Current cycle: ${config.current_cycle.name}`);
+    console.log(`Current cycle: ${cycleName}`);
   }
-
-  const cycleId = config.current_cycle.id;
 
   // Phase 2: Fetch workflow states
   const workflowStates = await client.workflowStates({
@@ -72,8 +65,7 @@ Examples:
   const stateMap = new Map(workflowStates.nodes.map(s => [s.name, s.id]));
   const testingStateId = stateMap.get('Testing');
 
-  // Phase 3: Read existing local state
-  const existingData = await loadCycleData();
+  // Phase 3: Build existing tasks map for preserving local status
   const existingTasksMap = new Map(existingData?.tasks.map(t => [t.id, t]));
 
   // Phase 4: Fetch current issues with full content
@@ -168,22 +160,22 @@ Examples:
     tasks.push(task);
   }
 
-  // Sort by priority (urgent first)
+  // Sort by priority using config order
   tasks.sort((a, b) => {
-    const pa = a.priority === 0 ? 5 : a.priority;
-    const pb = b.priority === 0 ? 5 : b.priority;
+    const pa = getPrioritySortIndex(a.priority, config.priority_order);
+    const pb = getPrioritySortIndex(b.priority, config.priority_order);
     return pa - pb;
   });
 
   const newData: CycleData = {
     cycleId: cycleId,
-    cycleName: config.current_cycle.name,
+    cycleName: cycleName,
     updatedAt: new Date().toISOString(),
     tasks: tasks
   };
 
   await saveCycleData(newData);
-  console.log(`\n✅ Synced ${tasks.length} tasks for ${config.current_cycle.name}.`);
+  console.log(`\n✅ Synced ${tasks.length} tasks for ${cycleName}.`);
   if (updatedCount > 0) {
     console.log(`   Updated ${updatedCount} issues to Testing in Linear.`);
   }

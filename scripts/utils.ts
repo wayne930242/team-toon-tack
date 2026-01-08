@@ -55,11 +55,29 @@ export interface LabelConfig {
 export interface Config {
   teams: Record<string, TeamConfig>;
   users: Record<string, UserConfig>;
-  labels: Record<string, LabelConfig>;
-  priorities: Record<string, { value: number; name: string }>;
-  statuses: Record<string, { name: string; type: string }>;
-  status_transitions: Record<string, string>;
-  current_cycle: { id: string; name: string; start_date: string; end_date: string };
+  labels?: Record<string, LabelConfig>;
+  priorities?: Record<string, { value: number; name: string }>;
+  statuses?: Record<string, { name: string; type: string }>;
+  status_transitions?: Record<string, string>;
+  priority_order?: string[];  // e.g., ['urgent', 'high', 'medium', 'low', 'none']
+}
+
+// Linear priority value to name mapping (fixed by Linear API)
+export const PRIORITY_NAMES: Record<number, string> = {
+  0: 'none',
+  1: 'urgent',
+  2: 'high',
+  3: 'medium',
+  4: 'low'
+};
+
+export const DEFAULT_PRIORITY_ORDER = ['urgent', 'high', 'medium', 'low', 'none'];
+
+export function getPrioritySortIndex(priority: number, priorityOrder?: string[]): number {
+  const order = priorityOrder ?? DEFAULT_PRIORITY_ORDER;
+  const name = PRIORITY_NAMES[priority] ?? 'none';
+  const index = order.indexOf(name);
+  return index === -1 ? order.length : index;
 }
 
 export interface Attachment {

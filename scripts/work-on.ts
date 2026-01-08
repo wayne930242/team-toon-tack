@@ -1,8 +1,8 @@
 import prompts from 'prompts';
-import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getUserEmail, getTeamId } from './utils';
+import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getUserEmail, getTeamId, getPrioritySortIndex } from './utils';
 
 const PRIORITY_LABELS: Record<number, string> = {
-  0: '⚪',
+  0: '⚪ None',
   1: '🔴 Urgent',
   2: '🟠 High',
   3: '🟡 Medium',
@@ -53,8 +53,8 @@ Examples:
       !excludedEmails.has(t.assignee ?? '')
     )
     .sort((a, b) => {
-      const pa = a.priority === 0 ? 5 : a.priority;
-      const pb = b.priority === 0 ? 5 : b.priority;
+      const pa = getPrioritySortIndex(a.priority, config.priority_order);
+      const pb = getPrioritySortIndex(b.priority, config.priority_order);
       return pa - pb;
     });
 
