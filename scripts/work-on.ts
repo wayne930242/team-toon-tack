@@ -108,8 +108,13 @@ Examples:
 	if (task.localStatus === "pending") {
 		task.localStatus = "in-progress";
 
-		// Update Linear
-		if (task.linearId && process.env.LINEAR_API_KEY) {
+		// Update Linear (only if status_source is 'remote' or not set)
+		const statusSource = localConfig.status_source || "remote";
+		if (
+			statusSource === "remote" &&
+			task.linearId &&
+			process.env.LINEAR_API_KEY
+		) {
 			const transitions = getStatusTransitions(config);
 			const success = await updateIssueStatus(
 				task.linearId,
@@ -125,6 +130,9 @@ Examples:
 
 		await saveCycleData(data);
 		console.log(`Local: ${task.id} → in-progress`);
+		if (statusSource === "local") {
+			console.log(`(Linear status not updated - use 'sync --update' to push)`);
+		}
 	}
 
 	// Display task info

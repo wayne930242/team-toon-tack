@@ -135,12 +135,15 @@ export function getDefaultStatusTransitions(
 		"Done";
 	const defaultTesting =
 		findStatusByKeyword(states, ["testing", "review"]) || undefined;
+	const defaultBlocked =
+		findStatusByKeyword(states, ["blocked", "on hold", "waiting"]) || undefined;
 
 	return {
 		todo: defaultTodo,
 		in_progress: defaultInProgress,
 		done: defaultDone,
 		testing: defaultTesting,
+		blocked: defaultBlocked,
 	};
 }
 
@@ -202,6 +205,7 @@ export function buildLocalConfig(
 	selectedTeamKeys: string[],
 	defaultLabel?: string,
 	excludeLabels?: string[],
+	statusSource?: "remote" | "local",
 ): LocalConfig {
 	return {
 		current_user: currentUserKey,
@@ -210,5 +214,6 @@ export function buildLocalConfig(
 		label: defaultLabel,
 		exclude_labels:
 			excludeLabels && excludeLabels.length > 0 ? excludeLabels : undefined,
+		status_source: statusSource,
 	};
 }

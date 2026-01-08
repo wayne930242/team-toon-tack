@@ -17,7 +17,7 @@ const LOCAL_STATUS_ORDER: Task["localStatus"][] = [
 	"pending",
 	"in-progress",
 	"completed",
-	"blocked-backend",
+	"blocked",
 ];
 
 function parseArgs(args: string[]): { issueId?: string; setStatus?: string } {
@@ -56,7 +56,7 @@ Options:
                         pending  Set to pending
                         in-progress  Set to in-progress
                         completed    Set to completed
-                        blocked      Set to blocked-backend
+                        blocked      Set to blocked (syncs to Linear if configured)
                         todo     Set Linear to Todo status
                         done     Set Linear to Done status
 
@@ -132,18 +132,9 @@ Examples:
 			const newIndex = Math.max(currentIndex - 2, 0);
 			newLocalStatus = LOCAL_STATUS_ORDER[newIndex];
 		} else if (
-			[
-				"pending",
-				"in-progress",
-				"completed",
-				"blocked-backend",
-				"blocked",
-			].includes(setStatus)
+			["pending", "in-progress", "completed", "blocked"].includes(setStatus)
 		) {
-			newLocalStatus =
-				setStatus === "blocked"
-					? "blocked-backend"
-					: (setStatus as Task["localStatus"]);
+			newLocalStatus = setStatus as Task["localStatus"];
 		} else if (["todo", "in_progress", "done", "testing"].includes(setStatus)) {
 			const transitions = getStatusTransitions(config);
 			newLinearStatus =
@@ -171,8 +162,9 @@ Examples:
 			needsSave = true;
 		}
 
-		// Update Linear status
-		if (newLinearStatus || newLocalStatus) {
+		// Update Linear status (only if status_source is 'remote' or not set)
+		const statusSource = localConfig.status_source || "remote";
+		if (statusSource === "remote" && (newLinearStatus || newLocalStatus)) {
 			let targetStateName = newLinearStatus;
 			if (!targetStateName && newLocalStatus) {
 				targetStateName = mapLocalStatusToLinear(newLocalStatus, config);
@@ -191,6 +183,12 @@ Examples:
 					console.log(`Linear: ${task.id} → ${targetStateName}`);
 				}
 			}
+		} else if (
+			statusSource === "local" &&
+			(newLinearStatus || newLocalStatus)
+		) {
+			// Local mode: just note that Linear wasn't updated
+			needsSave = true;
 		}
 
 		// Save if anything changed
@@ -198,6 +196,11 @@ Examples:
 			await saveCycleData(data);
 			if (newLocalStatus && newLocalStatus !== oldLocalStatus) {
 				console.log(`Local: ${task.id} ${oldLocalStatus} → ${newLocalStatus}`);
+			}
+			if (statusSource === "local") {
+				console.log(
+					`(Linear status not updated - use 'sync --update' to push)`,
+				);
 			}
 		} else if (newLocalStatus) {
 			console.log(`Local: ${task.id} already ${newLocalStatus}`);

@@ -4,6 +4,7 @@ import {
 	type CycleData,
 	type CycleInfo,
 	getLinearClient,
+	getPaths,
 	getPrioritySortIndex,
 	getTeamId,
 	loadConfig,
@@ -13,18 +14,29 @@ import {
 	saveCycleData,
 	type Task,
 } from "./utils.js";
+import {
+	clearIssueImages,
+	downloadLinearImage,
+	ensureOutputDir,
+	extractLinearImageUrls,
+	isLinearImageUrl,
+} from "./lib/images.js";
 
 async function sync() {
 	const args = process.argv.slice(2);
 
 	// Handle help flag
 	if (args.includes("--help") || args.includes("-h")) {
-		console.log(`Usage: ttt sync [issue-id]
+		console.log(`Usage: ttt sync [issue-id] [--update]
 
 Sync issues from Linear to local cycle.ttt file.
 
 Arguments:
   issue-id    Optional. Sync only this specific issue (e.g., MP-624)
+
+Options:
+  --update    Push local status changes to Linear (for local mode users)
+              This updates Linear with your local in-progress/completed statuses
 
 What it does:
   - Fetches active cycle from Linear
@@ -35,9 +47,13 @@ What it does:
 Examples:
   ttt sync              # Sync all matching issues
   ttt sync MP-624       # Sync only this specific issue
+  ttt sync --update     # Push local changes to Linear, then sync
   ttt sync -d .ttt     # Sync using .ttt directory`);
 		process.exit(0);
 	}
+
+	// Check for --update flag
+	const shouldUpdate = args.includes("--update");
 
 	// Parse issue ID argument (if provided)
 	const singleIssueId = args.find(
@@ -48,6 +64,10 @@ Examples:
 	const localConfig = await loadLocalConfig();
 	const client = getLinearClient();
 	const teamId = getTeamId(config, localConfig.team);
+	const { outputPath } = getPaths();
+
+	// Ensure output directory exists
+	await ensureOutputDir(outputPath);
 
 	// Build excluded labels set
 	const excludedLabels = new Set(localConfig.exclude_labels ?? []);
@@ -123,6 +143,53 @@ Examples:
 	const testingStateId = statusTransitions.testing
 		? stateMap.get(statusTransitions.testing)
 		: undefined;
+	const inProgressStateId = stateMap.get(statusTransitions.in_progress);
+
+	// Phase 2.5: Push local status changes to Linear (if --update flag)
+	if (shouldUpdate && existingData) {
+		console.log("Pushing local status changes to Linear...");
+		let pushCount = 0;
+
+		for (const task of existingData.tasks) {
+			// Map local status to Linear status
+			let targetStateId: string | undefined;
+
+			if (task.localStatus === "in-progress" && inProgressStateId) {
+				// Check if Linear status is not already in-progress
+				if (task.status !== statusTransitions.in_progress) {
+					targetStateId = inProgressStateId;
+				}
+			} else if (task.localStatus === "completed" && testingStateId) {
+				// Check if Linear status is not already testing/done
+				const terminalStatuses = [statusTransitions.done];
+				if (statusTransitions.testing)
+					terminalStatuses.push(statusTransitions.testing);
+				if (!terminalStatuses.includes(task.status)) {
+					targetStateId = testingStateId;
+				}
+			}
+
+			if (targetStateId) {
+				try {
+					await client.updateIssue(task.linearId, { stateId: targetStateId });
+					const targetName =
+						targetStateId === inProgressStateId
+							? statusTransitions.in_progress
+							: statusTransitions.testing;
+					console.log(`  ${task.id} → ${targetName}`);
+					pushCount++;
+				} catch (e) {
+					console.error(`  Failed to update ${task.id}:`, e);
+				}
+			}
+		}
+
+		if (pushCount > 0) {
+			console.log(`Pushed ${pushCount} status updates to Linear.`);
+		} else {
+			console.log("No local changes to push.");
+		}
+	}
 
 	// Phase 3: Build existing tasks map for preserving local status
 	const existingTasksMap = new Map(existingData?.tasks.map((t) => [t.id, t]));
@@ -198,20 +265,70 @@ Examples:
 		const attachmentsData = await issue.attachments();
 		const commentsData = await issue.comments();
 
-		// Build attachments list
-		const attachments: Attachment[] = attachmentsData.nodes.map(
-			(a: {
-				id: string;
-				title: string;
-				url: string;
-				sourceType?: string | null;
-			}) => ({
+		// Clear old images for this issue before downloading new ones
+		await clearIssueImages(outputPath, issue.identifier);
+
+		// Build attachments list and download Linear images
+		const attachments: Attachment[] = [];
+		for (const a of attachmentsData.nodes as Array<{
+			id: string;
+			title: string;
+			url: string;
+			sourceType?: string | null;
+		}>) {
+			const attachment: Attachment = {
 				id: a.id,
 				title: a.title,
 				url: a.url,
 				sourceType: a.sourceType ?? undefined,
-			}),
-		);
+			};
+
+			// Download Linear domain images
+			if (isLinearImageUrl(a.url)) {
+				const localPath = await downloadLinearImage(
+					a.url,
+					issue.identifier,
+					a.id,
+					outputPath,
+				);
+				if (localPath) {
+					attachment.localPath = localPath;
+				}
+			}
+
+			attachments.push(attachment);
+		}
+
+		// Extract and download images from description
+		if (issue.description) {
+			const descriptionImageUrls = extractLinearImageUrls(issue.description);
+			for (const url of descriptionImageUrls) {
+				// Generate a short ID from URL (last segment of path)
+				const urlPath = new URL(url).pathname;
+				const segments = urlPath.split("/").filter(Boolean);
+				const imageId = segments[segments.length - 1] || `desc_${Date.now()}`;
+
+				// Skip if already in attachments
+				if (attachments.some((a) => a.url === url)) continue;
+
+				const localPath = await downloadLinearImage(
+					url,
+					issue.identifier,
+					imageId,
+					outputPath,
+				);
+
+				if (localPath) {
+					attachments.push({
+						id: imageId,
+						title: `Description Image`,
+						url: url,
+						sourceType: "description",
+						localPath: localPath,
+					});
+				}
+			}
+		}
 
 		// Build comments list
 		const comments: Comment[] = await Promise.all(

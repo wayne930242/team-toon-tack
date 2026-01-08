@@ -75,7 +75,7 @@ export async function addComment(
 }
 
 export function mapLocalStatusToLinear(
-	localStatus: "pending" | "in-progress" | "completed" | "blocked-backend",
+	localStatus: "pending" | "in-progress" | "completed" | "blocked",
 	config: Config,
 ): string | undefined {
 	const transitions = getStatusTransitions(config);
@@ -86,6 +86,8 @@ export function mapLocalStatusToLinear(
 			return transitions.in_progress;
 		case "completed":
 			return transitions.done;
+		case "blocked":
+			return transitions.blocked;
 		default:
 			return undefined;
 	}

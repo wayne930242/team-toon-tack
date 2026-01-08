@@ -30,7 +30,17 @@ Script displays title, description, priority, labels, and attachments.
 3. Implement the fix/feature
 4. Commit with conventional format
 
-### 4. Verify
+### 4. Handle Blockers (if any)
+
+If you encounter a blocker (waiting for backend, design, external dependency):
+
+```bash
+ttt status --set blocked
+```
+
+Add a comment explaining the blocker, then move to another task.
+
+### 5. Verify
 
 Run project-required verification before completing:
 
@@ -39,7 +49,7 @@ Run project-required verification before completing:
 # (e.g., type-check, lint, test, build)
 ```
 
-### 5. Complete
+### 6. Complete
 
 Use `/done-job` to mark task as completed
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import fs from "node:fs/promises";
+import path from "node:path";
 import { decode, encode } from "@toon-format/toon";
 import prompts from "prompts";
 import {
@@ -212,6 +213,37 @@ async function selectLabelFilter(
 	return undefined;
 }
 
+async function selectStatusSource(
+	options: InitOptions,
+): Promise<"remote" | "local"> {
+	if (!options.interactive) {
+		return "remote"; // default
+	}
+
+	console.log("\n🔄 Configure status sync mode:");
+	const response = await prompts({
+		type: "select",
+		name: "statusSource",
+		message: "Where should status updates be stored?",
+		choices: [
+			{
+				title: "Remote (recommended)",
+				value: "remote",
+				description:
+					"Update Linear immediately when you work-on or complete tasks",
+			},
+			{
+				title: "Local",
+				value: "local",
+				description: "Work offline, then sync to Linear with 'sync --update'",
+			},
+		],
+		initial: 0,
+	});
+
+	return response.statusSource || "remote";
+}
+
 async function selectStatusMappings(
 	states: LinearState[],
 	options: InitOptions,
@@ -267,11 +299,26 @@ async function selectStatusMappings(
 			: 0,
 	});
 
+	const blockedChoices = [
+		{ title: "(None)", value: undefined },
+		...stateChoices,
+	];
+	const blockedResponse = await prompts({
+		type: "select",
+		name: "blocked",
+		message: 'Select status for "Blocked" (optional, for blocked tasks):',
+		choices: blockedChoices,
+		initial: defaults.blocked
+			? blockedChoices.findIndex((c) => c.value === defaults.blocked)
+			: 0,
+	});
+
 	return {
 		todo: todoResponse.todo || defaults.todo,
 		in_progress: inProgressResponse.in_progress || defaults.in_progress,
 		done: doneResponse.done || defaults.done,
 		testing: testingResponse.testing,
+		blocked: blockedResponse.blocked,
 	};
 }
 
@@ -327,6 +374,154 @@ async function updateGitignore(tttDir: string, interactive: boolean) {
 	} catch (_error) {
 		// Silently ignore gitignore errors
 	}
+}
+
+async function installClaudeCommands(
+	interactive: boolean,
+): Promise<{ installed: boolean; prefix: string }> {
+	if (!interactive) {
+		return { installed: false, prefix: "" };
+	}
+
+	console.log("\n🤖 Claude Code Commands:");
+
+	// Ask if user wants to install commands
+	const { install } = await prompts({
+		type: "confirm",
+		name: "install",
+		message: "Install Claude Code commands? (work-on, done-job, sync-linear)",
+		initial: true,
+	});
+
+	if (!install) {
+		return { installed: false, prefix: "" };
+	}
+
+	// Ask for prefix
+	const { prefixChoice } = await prompts({
+		type: "select",
+		name: "prefixChoice",
+		message: "Command prefix style:",
+		choices: [
+			{
+				title: "No prefix (recommended)",
+				value: "",
+				description: "/work-on, /done-job, /sync-linear",
+			},
+			{
+				title: "ttt:",
+				value: "ttt:",
+				description: "/ttt:work-on, /ttt:done-job, /ttt:sync-linear",
+			},
+			{
+				title: "linear:",
+				value: "linear:",
+				description: "/linear:work-on, /linear:done-job, /linear:sync-linear",
+			},
+			{
+				title: "Custom...",
+				value: "custom",
+				description: "Enter your own prefix",
+			},
+		],
+		initial: 0,
+	});
+
+	let prefix = prefixChoice || "";
+
+	if (prefixChoice === "custom") {
+		const { customPrefix } = await prompts({
+			type: "text",
+			name: "customPrefix",
+			message: "Enter custom prefix (e.g., 'my:'):",
+			initial: "",
+		});
+		prefix = customPrefix || "";
+	}
+
+	// Find templates directory
+	// Try multiple locations: installed package, local dev
+	const possibleTemplatePaths = [
+		path.join(__dirname, "..", "templates", "claude-code-commands"),
+		path.join(__dirname, "..", "..", "templates", "claude-code-commands"),
+		path.join(process.cwd(), "templates", "claude-code-commands"),
+	];
+
+	let templateDir: string | null = null;
+	for (const p of possibleTemplatePaths) {
+		try {
+			await fs.access(p);
+			templateDir = p;
+			break;
+		} catch {
+			// Try next path
+		}
+	}
+
+	if (!templateDir) {
+		// Try to get repo URL from package.json
+		let repoUrl = "https://github.com/wayne930242/team-toon-tack";
+		try {
+			const pkgPaths = [
+				path.join(__dirname, "..", "package.json"),
+				path.join(__dirname, "..", "..", "package.json"),
+			];
+			for (const pkgPath of pkgPaths) {
+				try {
+					const pkgContent = await fs.readFile(pkgPath, "utf-8");
+					const pkg = JSON.parse(pkgContent);
+					if (pkg.repository?.url) {
+						// Parse git+https://github.com/user/repo.git format
+						repoUrl = pkg.repository.url
+							.replace(/^git\+/, "")
+							.replace(/\.git$/, "");
+					}
+					break;
+				} catch {
+					// Try next path
+				}
+			}
+		} catch {
+			// Use default URL
+		}
+
+		console.log(
+			"  ⚠ Could not find command templates. Please copy manually from:",
+		);
+		console.log(`    ${repoUrl}/tree/main/templates/claude-code-commands`);
+		return { installed: false, prefix };
+	}
+
+	// Create .claude/commands directory
+	const commandsDir = path.join(process.cwd(), ".claude", "commands");
+	await fs.mkdir(commandsDir, { recursive: true });
+
+	// Copy and rename template files
+	const templateFiles = await fs.readdir(templateDir);
+	const commandFiles = templateFiles.filter((f) => f.endsWith(".md"));
+
+	for (const file of commandFiles) {
+		const baseName = file.replace(".md", "");
+		const newFileName = prefix ? `${prefix}${baseName}.md` : file;
+		const srcPath = path.join(templateDir, file);
+		const destPath = path.join(commandsDir, newFileName);
+
+		// Read template content
+		let content = await fs.readFile(srcPath, "utf-8");
+
+		// Update the name in frontmatter if prefix is used
+		if (prefix) {
+			content = content.replace(
+				/^(---\s*\n[\s\S]*?name:\s*)(\S+)/m,
+				`$1${prefix}${baseName}`,
+			);
+		}
+
+		await fs.writeFile(destPath, content, "utf-8");
+		console.log(`  ✓ .claude/commands/${newFileName}`);
+	}
+
+	return { installed: true, prefix };
 }
 
 async function init() {
@@ -416,6 +611,7 @@ async function init() {
 	// User selections
 	const currentUser = await selectUser(users, options);
 	const defaultLabel = await selectLabelFilter(labels, options);
+	const statusSource = await selectStatusSource(options);
 	const statusTransitions = await selectStatusMappings(states, options);
 
 	// Build config
@@ -440,6 +636,8 @@ async function init() {
 		primaryTeamKey,
 		selectedTeamKeys,
 		defaultLabel,
+		undefined, // excludeLabels
+		statusSource,
 	);
 
 	// Write config files
@@ -483,6 +681,8 @@ async function init() {
 				if (existingLocal.label) localConfig.label = existingLocal.label;
 				if (existingLocal.exclude_labels)
 					localConfig.exclude_labels = existingLocal.exclude_labels;
+				if (existingLocal.status_source)
+					localConfig.status_source = existingLocal.status_source;
 			}
 		} catch {
 			// Ignore merge errors
@@ -496,6 +696,10 @@ async function init() {
 	const tttDir = paths.baseDir.replace(/^\.\//, "");
 	await updateGitignore(tttDir, options.interactive ?? true);
 
+	// Install Claude Code commands
+	const { installed: commandsInstalled, prefix: commandPrefix } =
+		await installClaudeCommands(options.interactive ?? true);
+
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
 	console.log("Configuration summary:");
@@ -507,6 +711,9 @@ async function init() {
 		`  User: ${currentUser.displayName || currentUser.name} (${currentUser.email})`,
 	);
 	console.log(`  Label filter: ${defaultLabel || "(none)"}`);
+	console.log(
+		`  Status source: ${statusSource === "local" ? "local (use 'sync --update' to push)" : "remote (immediate sync)"}`,
+	);
 	console.log(`  (Use 'ttt config filters' to set excluded labels/users)`);
 	if (currentCycle) {
 		console.log(
@@ -520,12 +727,27 @@ async function init() {
 	if (statusTransitions.testing) {
 		console.log(`    Testing: ${statusTransitions.testing}`);
 	}
+	if (statusTransitions.blocked) {
+		console.log(`    Blocked: ${statusTransitions.blocked}`);
+	}
+
+	if (commandsInstalled) {
+		const cmdPrefix = commandPrefix ? `${commandPrefix}` : "";
+		console.log(
+			`  Claude commands: /${cmdPrefix}work-on, /${cmdPrefix}done-job, /${cmdPrefix}sync-linear`,
+		);
+	}
 
 	console.log("\nNext steps:");
 	console.log("  1. Set LINEAR_API_KEY in your shell profile:");
 	console.log(`     export LINEAR_API_KEY="${apiKey}"`);
-	console.log("  2. Run sync: bun run sync");
-	console.log("  3. Start working: bun run work-on");
+	console.log("  2. Run sync: ttt sync");
+	if (commandsInstalled) {
+		const cmdPrefix = commandPrefix ? `${commandPrefix}` : "";
+		console.log(`  3. In Claude Code: /${cmdPrefix}work-on next`);
+	} else {
+		console.log("  3. Start working: ttt work-on");
+	}
 }
 
 init().catch(console.error);

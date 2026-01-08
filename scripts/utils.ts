@@ -23,6 +23,7 @@ const BASE_DIR = getBaseDir();
 const CONFIG_PATH = path.join(BASE_DIR, "config.toon");
 const CYCLE_PATH = path.join(BASE_DIR, "cycle.toon");
 const LOCAL_PATH = path.join(BASE_DIR, "local.toon");
+const OUTPUT_PATH = path.join(BASE_DIR, "output");
 
 export function getPaths() {
 	return {
@@ -30,6 +31,7 @@ export function getPaths() {
 		configPath: CONFIG_PATH,
 		cyclePath: CYCLE_PATH,
 		localPath: LOCAL_PATH,
+		outputPath: OUTPUT_PATH,
 	};
 }
 
@@ -64,6 +66,7 @@ export interface StatusTransitions {
 	in_progress: string; // Linear status name for "in progress" tasks (e.g., 'In Progress')
 	done: string; // Linear status name for "done" tasks (e.g., 'Done', 'Completed')
 	testing?: string; // Linear status name for "testing" tasks (optional, e.g., 'Testing', 'In Review')
+	blocked?: string; // Linear status name for "blocked" tasks (optional, e.g., 'Blocked', 'On Hold')
 }
 
 export interface Config {
@@ -110,6 +113,7 @@ export interface Attachment {
 	title: string;
 	url: string;
 	sourceType?: string;
+	localPath?: string; // Local path for downloaded Linear images
 }
 
 export interface Comment {
@@ -124,7 +128,7 @@ export interface Task {
 	linearId: string;
 	title: string;
 	status: string;
-	localStatus: "pending" | "in-progress" | "completed" | "blocked-backend";
+	localStatus: "pending" | "in-progress" | "completed" | "blocked";
 	assignee?: string;
 	priority: number;
 	labels: string[];
@@ -150,6 +154,7 @@ export interface LocalConfig {
 	teams?: string[]; // multiple team keys to sync from
 	exclude_labels?: string[];
 	label?: string; // include only this label (optional filter)
+	status_source?: "remote" | "local"; // 'remote' = update Linear immediately, 'local' = only update local until sync --update
 }
 
 export async function fileExists(filePath: string): Promise<boolean> {

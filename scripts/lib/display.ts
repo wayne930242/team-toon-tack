@@ -14,7 +14,7 @@ export function getStatusIcon(localStatus: Task["localStatus"]): string {
 			return "✅";
 		case "in-progress":
 			return "🔄";
-		case "blocked-backend":
+		case "blocked":
 			return "🚫";
 		default:
 			return "📋";
@@ -46,7 +46,18 @@ export function displayTaskStatus(task: Task): void {
 
 export function displayTaskDescription(task: Task): void {
 	if (task.description) {
-		console.log(`\n📝 Description:\n${task.description}`);
+		let description = task.description;
+
+		// Replace Linear URLs with local paths from attachments
+		if (task.attachments) {
+			for (const att of task.attachments) {
+				if (att.localPath && att.url) {
+					description = description.split(att.url).join(att.localPath);
+				}
+			}
+		}
+
+		console.log(`\n📝 Description:\n${description}`);
 	}
 }
 
@@ -54,7 +65,9 @@ export function displayTaskAttachments(task: Task): void {
 	if (task.attachments && task.attachments.length > 0) {
 		console.log(`\n📎 Attachments:`);
 		for (const att of task.attachments) {
-			console.log(`   - ${att.title}: ${att.url}`);
+			// Prefer local path for Linear images (Linear URLs are not accessible)
+			const displayPath = att.localPath || att.url;
+			console.log(`   - ${att.title}: ${displayPath}`);
 		}
 	}
 }
