@@ -161,16 +161,14 @@ Examples:
 			process.exit(1);
 		}
 
+		// Track if we need to save
+		let needsSave = false;
+		const oldLocalStatus = task.localStatus;
+
 		// Update local status
-		if (newLocalStatus) {
-			if (newLocalStatus !== task.localStatus) {
-				const oldStatus = task.localStatus;
-				task.localStatus = newLocalStatus;
-				await saveCycleData(data);
-				console.log(`Local: ${task.id} ${oldStatus} → ${newLocalStatus}`);
-			} else {
-				console.log(`Local: ${task.id} already ${newLocalStatus}`);
-			}
+		if (newLocalStatus && newLocalStatus !== task.localStatus) {
+			task.localStatus = newLocalStatus;
+			needsSave = true;
 		}
 
 		// Update Linear status
@@ -188,9 +186,21 @@ Examples:
 					localConfig.team,
 				);
 				if (success) {
+					task.status = targetStateName;
+					needsSave = true;
 					console.log(`Linear: ${task.id} → ${targetStateName}`);
 				}
 			}
+		}
+
+		// Save if anything changed
+		if (needsSave) {
+			await saveCycleData(data);
+			if (newLocalStatus && newLocalStatus !== oldLocalStatus) {
+				console.log(`Local: ${task.id} ${oldLocalStatus} → ${newLocalStatus}`);
+			}
+		} else if (newLocalStatus) {
+			console.log(`Local: ${task.id} already ${newLocalStatus}`);
 		}
 	}
 

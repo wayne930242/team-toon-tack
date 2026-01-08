@@ -107,8 +107,6 @@ Examples:
 	// Mark as In Progress
 	if (task.localStatus === "pending") {
 		task.localStatus = "in-progress";
-		await saveCycleData(data);
-		console.log(`Local: ${task.id} → in-progress`);
 
 		// Update Linear
 		if (task.linearId && process.env.LINEAR_API_KEY) {
@@ -120,9 +118,13 @@ Examples:
 				localConfig.team,
 			);
 			if (success) {
+				task.status = transitions.in_progress;
 				console.log(`Linear: ${task.id} → ${transitions.in_progress}`);
 			}
 		}
+
+		await saveCycleData(data);
+		console.log(`Local: ${task.id} → in-progress`);
 	}
 
 	// Display task info
