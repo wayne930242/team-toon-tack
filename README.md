@@ -5,13 +5,17 @@ CLI tool for syncing and managing Linear issues with local TOON format.
 ## Installation
 
 ```bash
-# Global install (recommended)
+# npm (recommended)
+npm install -g team-toon-tack
+
+# Or with bun
 bun add -g team-toon-tack
 
-# Or use npx
+# Or use npx/bunx without installing
+npx team-toon-tack <command>
 bunx team-toon-tack <command>
 
-# Short alias
+# Short alias after global install
 ttt <command>
 ```
 
