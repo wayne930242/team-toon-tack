@@ -185,7 +185,6 @@ Examples:
 		const assignee = await issue.assignee;
 		const assigneeEmail = assignee?.email;
 
-
 		const labels = await issue.labels();
 		const labelNames = labels.nodes.map((l: { name: string }) => l.name);
 

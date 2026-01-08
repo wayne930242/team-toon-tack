@@ -134,8 +134,7 @@ export function getDefaultStatusTransitions(
 		findStatusByKeyword(states, ["done", "complete"]) ||
 		"Done";
 	const defaultTesting =
-		findStatusByKeyword(states, ["testing", "review"]) ||
-		undefined;
+		findStatusByKeyword(states, ["testing", "review"]) || undefined;
 
 	return {
 		todo: defaultTodo,

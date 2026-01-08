@@ -6,12 +6,12 @@ import {
 	getWorkflowStates,
 	updateIssueStatus,
 } from "./lib/linear.js";
+import { syncSingleIssue } from "./lib/sync.js";
 import {
 	getLinearClient,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
-	saveCycleData,
 } from "./utils.js";
 
 function parseArgs(args: string[]): { issueId?: string; message?: string } {
@@ -193,10 +193,18 @@ Examples:
 		}
 	}
 
-	// Update local status
-	task.localStatus = "completed";
-	await saveCycleData(data);
-	console.log(`Local: ${task.id} → completed`);
+	// Sync full issue data from Linear (including new comment)
+	const syncedTask = await syncSingleIssue(task.id, {
+		config,
+		localConfig,
+		preserveLocalStatus: false, // Let remote status determine local status
+	});
+
+	if (syncedTask) {
+		console.log(
+			`Synced: ${syncedTask.id} → ${syncedTask.status} (local: ${syncedTask.localStatus})`,
+		);
+	}
 
 	// Summary
 	console.log(`\n${"═".repeat(50)}`);
