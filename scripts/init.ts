@@ -300,6 +300,9 @@ async function init() {
   // Write config files
   console.log('\n📝 Writing configuration files...');
 
+  // Ensure directory exists
+  await fs.mkdir(paths.baseDir, { recursive: true });
+
   // Merge with existing config if exists
   if (configExists && !options.force) {
     try {
