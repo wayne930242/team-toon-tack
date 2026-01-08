@@ -69,6 +69,19 @@ export interface StatusTransitions {
 	blocked?: string; // Linear status name for "blocked" tasks (optional, e.g., 'Blocked', 'On Hold')
 }
 
+// QA/PM Team configuration with its testing status
+export interface QaPmTeamConfig {
+	team: string; // team key from config.teams
+	testing_status: string; // testing status name for this team
+}
+
+// Completion mode determines how done-job handles task completion
+export type CompletionMode =
+	| "simple" // Mark task as done + parent as done (default when no QA/PM teams)
+	| "strict_review" // Mark task to dev testing + parent to QA testing
+	| "upstream_strict" // Mark task as done + parent to testing, fallback to dev testing if no parent (default when QA/PM teams set)
+	| "upstream_not_strict"; // Mark task as done + parent to testing, no fallback
+
 export interface Config {
 	teams: Record<string, TeamConfig>;
 	users: Record<string, UserConfig>;
@@ -150,12 +163,16 @@ export interface CycleData {
 
 export interface LocalConfig {
 	current_user: string;
-	team: string; // primary team key from config.teams (for backwards compatibility)
-	teams?: string[]; // multiple team keys to sync from
-	qa_pm_team?: string; // QA team key for cross-team parent issue updates
+	team: string; // dev team key from config.teams (single dev team)
+	dev_testing_status?: string; // dev team's testing/review status (optional)
+	qa_pm_teams?: QaPmTeamConfig[]; // multiple QA/PM teams with their testing statuses
+	completion_mode?: CompletionMode; // how done-job handles task completion
 	exclude_labels?: string[];
 	label?: string; // include only this label (optional filter)
 	status_source?: "remote" | "local"; // 'remote' = update Linear immediately, 'local' = only update local until sync --update
+	// Legacy fields (for backwards compatibility)
+	teams?: string[]; // deprecated: use team (single dev team)
+	qa_pm_team?: string; // deprecated: use qa_pm_teams
 }
 
 export async function fileExists(filePath: string): Promise<boolean> {

@@ -1,6 +1,8 @@
 import type {
+	CompletionMode,
 	Config,
 	LocalConfig,
+	QaPmTeamConfig,
 	StatusTransitions,
 	TeamConfig,
 	UserConfig,
@@ -201,18 +203,20 @@ export function findTeamKey(
 
 export function buildLocalConfig(
 	currentUserKey: string,
-	primaryTeamKey: string,
-	selectedTeamKeys: string[],
+	devTeamKey: string,
+	devTestingStatus?: string,
+	qaPmTeams?: QaPmTeamConfig[],
+	completionMode?: CompletionMode,
 	defaultLabel?: string,
 	excludeLabels?: string[],
 	statusSource?: "remote" | "local",
-	qaPmTeam?: string,
 ): LocalConfig {
 	return {
 		current_user: currentUserKey,
-		team: primaryTeamKey,
-		teams: selectedTeamKeys.length > 1 ? selectedTeamKeys : undefined,
-		qa_pm_team: qaPmTeam,
+		team: devTeamKey,
+		dev_testing_status: devTestingStatus,
+		qa_pm_teams: qaPmTeams && qaPmTeams.length > 0 ? qaPmTeams : undefined,
+		completion_mode: completionMode,
 		label: defaultLabel,
 		exclude_labels:
 			excludeLabels && excludeLabels.length > 0 ? excludeLabels : undefined,

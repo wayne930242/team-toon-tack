@@ -8,11 +8,133 @@ import {
 } from "./lib/linear.js";
 import { syncSingleIssue } from "./lib/sync.js";
 import {
+	type CompletionMode,
+	type Config,
 	getLinearClient,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
+	type QaPmTeamConfig,
 } from "./utils.js";
+
+// Helper function to update parent issue to a specific status
+async function updateParentStatus(
+	parentIssueId: string,
+	targetStatus: string,
+	_qaPmTeams: QaPmTeamConfig[] | undefined,
+	config: Config,
+): Promise<{ success: boolean; status?: string }> {
+	try {
+		const client = getLinearClient();
+		const searchResult = await client.searchIssues(parentIssueId);
+		const parentIssue = searchResult.nodes.find(
+			(issue) => issue.identifier === parentIssueId,
+		);
+
+		if (!parentIssue) {
+			return { success: false };
+		}
+
+		const parentTeam = await parentIssue.team;
+		if (!parentTeam) {
+			return { success: false };
+		}
+
+		// Find the matching team configuration
+		const teamEntries = Object.entries(config.teams);
+		const matchingTeamEntry = teamEntries.find(
+			([_, t]) => t.id === parentTeam.id,
+		);
+
+		if (!matchingTeamEntry) {
+			return { success: false };
+		}
+
+		const [parentTeamKey] = matchingTeamEntry;
+
+		// Get workflow states for the parent's team
+		const parentStates = await getWorkflowStates(config, parentTeamKey);
+		const targetState = parentStates.find((s) => s.name === targetStatus);
+
+		if (!targetState) {
+			return { success: false };
+		}
+
+		// Update the parent issue
+		await client.updateIssue(parentIssue.id, {
+			stateId: targetState.id,
+		});
+
+		return { success: true, status: targetStatus };
+	} catch (error) {
+		console.error("Failed to update parent issue:", error);
+		return { success: false };
+	}
+}
+
+// Helper function to update parent issue to testing status (uses QA team config)
+async function updateParentToTesting(
+	parentIssueId: string,
+	qaPmTeams: QaPmTeamConfig[],
+	config: Config,
+): Promise<{ success: boolean; testingStatus?: string }> {
+	try {
+		const client = getLinearClient();
+		const searchResult = await client.searchIssues(parentIssueId);
+		const parentIssue = searchResult.nodes.find(
+			(issue) => issue.identifier === parentIssueId,
+		);
+
+		if (!parentIssue) {
+			return { success: false };
+		}
+
+		const parentTeam = await parentIssue.team;
+		if (!parentTeam) {
+			return { success: false };
+		}
+
+		// Find the matching QA/PM team configuration
+		const teamEntries = Object.entries(config.teams);
+		const matchingTeamEntry = teamEntries.find(
+			([_, t]) => t.id === parentTeam.id,
+		);
+
+		if (!matchingTeamEntry) {
+			return { success: false };
+		}
+
+		const [parentTeamKey] = matchingTeamEntry;
+
+		// Find the QA/PM team config for this parent's team
+		const qaPmConfig = qaPmTeams.find((qp) => qp.team === parentTeamKey);
+
+		if (!qaPmConfig) {
+			// Parent's team is not in the configured QA/PM teams
+			return { success: false };
+		}
+
+		// Get workflow states for the parent's team
+		const parentStates = await getWorkflowStates(config, parentTeamKey);
+		const testingState = parentStates.find(
+			(s) => s.name === qaPmConfig.testing_status,
+		);
+
+		if (!testingState) {
+			return { success: false };
+		}
+
+		// Update the parent issue
+		await client.updateIssue(parentIssue.id, {
+			stateId: testingState.id,
+		});
+
+		return { success: true, testingStatus: qaPmConfig.testing_status };
+	} catch (error) {
+		console.error("Failed to update parent issue:", error);
+		return { success: false };
+	}
+}
 
 function parseArgs(args: string[]): { issueId?: string; message?: string } {
 	let issueId: string | undefined;
@@ -142,15 +264,139 @@ Examples:
 	) {
 		const transitions = getStatusTransitions(config);
 
-		// Update issue to Done
-		const success = await updateIssueStatus(
-			task.linearId,
-			transitions.done,
-			config,
-			localConfig.team,
-		);
-		if (success) {
-			console.log(`Linear: ${task.id} → ${transitions.done}`);
+		// Determine completion mode
+		const completionMode: CompletionMode =
+			localConfig.completion_mode ||
+			(localConfig.qa_pm_teams && localConfig.qa_pm_teams.length > 0
+				? "upstream_strict"
+				: "simple");
+
+		// Get the testing status to use (from dev team)
+		const devTestingStatus =
+			localConfig.dev_testing_status || transitions.testing;
+
+		// Execute based on completion mode
+		let parentUpdateSuccess = false;
+		let parentTestingStatus: string | undefined;
+
+		switch (completionMode) {
+			case "simple": {
+				// Mark task as done
+				const success = await updateIssueStatus(
+					task.linearId,
+					transitions.done,
+					config,
+					localConfig.team,
+				);
+				if (success) {
+					console.log(`Linear: ${task.id} → ${transitions.done}`);
+				}
+				// Also mark parent as done if exists
+				if (task.parentIssueId) {
+					const result = await updateParentStatus(
+						task.parentIssueId,
+						transitions.done,
+						localConfig.qa_pm_teams,
+						config,
+					);
+					if (result.success) {
+						console.log(`Linear: Parent ${task.parentIssueId} → ${transitions.done}`);
+					}
+				}
+				break;
+			}
+
+			case "strict_review": {
+				// Mark task to dev team's testing status
+				if (devTestingStatus) {
+					const success = await updateIssueStatus(
+						task.linearId,
+						devTestingStatus,
+						config,
+						localConfig.team,
+					);
+					if (success) {
+						console.log(`Linear: ${task.id} → ${devTestingStatus}`);
+					}
+					// Also mark parent to testing if exists
+					if (task.parentIssueId && localConfig.qa_pm_teams?.length) {
+						const result = await updateParentToTesting(
+							task.parentIssueId,
+							localConfig.qa_pm_teams,
+							config,
+						);
+						if (result.success) {
+							console.log(`Linear: Parent ${task.parentIssueId} → ${result.testingStatus}`);
+						}
+					}
+				} else {
+					console.warn(
+						"No dev testing status configured, falling back to done",
+					);
+					const success = await updateIssueStatus(
+						task.linearId,
+						transitions.done,
+						config,
+						localConfig.team,
+					);
+					if (success) {
+						console.log(`Linear: ${task.id} → ${transitions.done}`);
+					}
+				}
+				break;
+			}
+
+			case "upstream_strict":
+			case "upstream_not_strict": {
+				// First, mark as done
+				const doneSuccess = await updateIssueStatus(
+					task.linearId,
+					transitions.done,
+					config,
+					localConfig.team,
+				);
+				if (doneSuccess) {
+					console.log(`Linear: ${task.id} → ${transitions.done}`);
+				}
+
+				// Try to update parent to testing
+				if (task.parentIssueId && localConfig.qa_pm_teams?.length) {
+					const result = await updateParentToTesting(
+						task.parentIssueId,
+						localConfig.qa_pm_teams,
+						config,
+					);
+					parentUpdateSuccess = result.success;
+					parentTestingStatus = result.testingStatus;
+
+					if (parentUpdateSuccess) {
+						console.log(
+							`Linear: Parent ${task.parentIssueId} → ${parentTestingStatus}`,
+						);
+					}
+				}
+
+				// Fallback logic for upstream_strict
+				if (
+					completionMode === "upstream_strict" &&
+					!parentUpdateSuccess &&
+					devTestingStatus
+				) {
+					// No parent or parent update failed, fallback to testing
+					const fallbackSuccess = await updateIssueStatus(
+						task.linearId,
+						devTestingStatus,
+						config,
+						localConfig.team,
+					);
+					if (fallbackSuccess) {
+						console.log(
+							`Linear: ${task.id} → ${devTestingStatus} (fallback, no valid parent)`,
+						);
+					}
+				}
+				break;
+			}
 		}
 
 		// Add comment with commit info
@@ -159,53 +405,6 @@ Examples:
 			const commentSuccess = await addComment(task.linearId, commentBody);
 			if (commentSuccess) {
 				console.log(`Linear: 已新增 commit 留言`);
-			}
-		}
-
-		// Update parent to Testing if exists
-		if (task.parentIssueId && transitions.testing) {
-			try {
-				const client = getLinearClient();
-				const searchResult = await client.searchIssues(task.parentIssueId);
-				const parentIssue = searchResult.nodes.find(
-					(issue) => issue.identifier === task.parentIssueId,
-				);
-
-				if (parentIssue) {
-					const parentTeam = await parentIssue.team;
-					if (parentTeam) {
-						// Determine which team key to use for parent's workflow states
-						// If qa_pm_team is configured and matches parent's team, use it
-						// Otherwise, try to find the team key from config
-						let parentTeamKey = localConfig.team;
-						const teamEntries = Object.entries(config.teams);
-						const matchingTeam = teamEntries.find(
-							([_, t]) => t.id === parentTeam.id,
-						);
-						if (matchingTeam) {
-							parentTeamKey = matchingTeam[0];
-						} else if (localConfig.qa_pm_team) {
-							// Fallback to qa_pm_team if configured
-							parentTeamKey = localConfig.qa_pm_team;
-						}
-
-						const parentStates = await getWorkflowStates(config, parentTeamKey);
-						const testingState = parentStates.find(
-							(s) => s.name === transitions.testing,
-						);
-
-						if (testingState) {
-							await client.updateIssue(parentIssue.id, {
-								stateId: testingState.id,
-							});
-							console.log(
-								`Linear: Parent ${task.parentIssueId} → ${transitions.testing}`,
-							);
-						}
-					}
-				}
-			} catch (parentError) {
-				console.error("Failed to update parent issue:", parentError);
 			}
 		}
 	} else if (statusSource === "local") {
@@ -238,11 +437,6 @@ Examples:
 	}
 	if (aiMessage) {
 		console.log(`AI: ${aiMessage}`);
-	}
-	if (task.parentIssueId && config.status_transitions?.testing) {
-		console.log(
-			`Parent: ${task.parentIssueId} → ${config.status_transitions.testing}`,
-		);
 	}
 	console.log(`\n🎉 任務完成！`);
 }

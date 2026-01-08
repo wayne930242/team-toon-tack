@@ -10,6 +10,7 @@ import prompts from "prompts";
 import {
 	buildConfig,
 	buildLocalConfig,
+	buildTeamsConfig,
 	findTeamKey,
 	findUserKey,
 	getDefaultStatusTransitions,
@@ -20,11 +21,13 @@ import {
 	type LinearUser,
 } from "./lib/config-builder.js";
 import {
+	type CompletionMode,
 	type Config,
 	fileExists,
 	getLinearClient,
 	getPaths,
 	type LocalConfig,
+	type QaPmTeamConfig,
 	type StatusTransitions,
 } from "./utils.js";
 
@@ -119,93 +122,200 @@ async function promptForApiKey(
 	return apiKey;
 }
 
-async function selectTeams(
+async function selectDevTeam(
 	teams: LinearTeam[],
 	options: InitOptions,
-): Promise<{ selected: LinearTeam[]; primary: LinearTeam }> {
-	let selectedTeams = [teams[0]];
-	let primaryTeam = teams[0];
+): Promise<LinearTeam> {
+	let devTeam = teams[0];
 
 	if (options.team) {
 		const found = teams.find(
 			(t) => t.name.toLowerCase() === options.team?.toLowerCase(),
 		);
 		if (found) {
-			selectedTeams = [found];
-			primaryTeam = found;
+			devTeam = found;
 		}
 	} else if (options.interactive && teams.length > 1) {
+		console.log("\n👨‍💻 Dev Team Configuration:");
 		const response = await prompts({
-			type: "multiselect",
-			name: "teamIds",
-			message: "Select teams to sync (space to select, enter to confirm):",
+			type: "select",
+			name: "teamId",
+			message: "Select your dev team (for work-on/done commands):",
 			choices: teams.map((t) => ({ title: t.name, value: t.id })),
-			min: 1,
 		});
 
-		if (response.teamIds && response.teamIds.length > 0) {
-			selectedTeams = teams.filter((t) => response.teamIds.includes(t.id));
-
-			if (selectedTeams.length > 1) {
-				const primaryResponse = await prompts({
-					type: "select",
-					name: "primaryTeamId",
-					message: "Select your primary team (for work-on/done commands):",
-					choices: selectedTeams.map((t) => ({ title: t.name, value: t.id })),
-				});
-				primaryTeam =
-					selectedTeams.find((t) => t.id === primaryResponse.primaryTeamId) ||
-					selectedTeams[0];
-			} else {
-				primaryTeam = selectedTeams[0];
-			}
+		if (response.teamId) {
+			devTeam = teams.find((t) => t.id === response.teamId) || teams[0];
 		}
 	}
 
-	return { selected: selectedTeams, primary: primaryTeam };
+	return devTeam;
 }
 
-async function selectQaPmTeam(
-	teams: LinearTeam[],
-	primaryTeam: LinearTeam,
+async function selectDevTestingStatus(
+	devStates: LinearState[],
 	options: InitOptions,
-): Promise<LinearTeam | undefined> {
-	// Only ask if there are multiple teams and interactive mode
-	if (!options.interactive || teams.length <= 1) {
-		return undefined;
+): Promise<string | undefined> {
+	if (!options.interactive || devStates.length === 0) {
+		return getDefaultStatusTransitions(devStates).testing;
 	}
 
-	// Filter out primary team from choices
-	const otherTeams = teams.filter((t) => t.id !== primaryTeam.id);
-	if (otherTeams.length === 0) {
-		return undefined;
-	}
+	console.log("\n🔍 Dev Team Testing/Review Status:");
+	const stateChoices = devStates.map((s) => ({
+		title: `${s.name} (${s.type})`,
+		value: s.name,
+	}));
 
-	console.log("\n🔗 QA/PM Team Configuration:");
 	const response = await prompts({
 		type: "select",
-		name: "qaPmTeamId",
-		message: "Select QA/PM team (for cross-team parent issue updates):",
+		name: "testingStatus",
+		message:
+			"Select testing/review status for dev team (used when strict_review mode):",
 		choices: [
-			{
-				title: "(None - skip)",
-				value: undefined,
-				description: "No cross-team parent updates",
-			},
+			{ title: "(Skip - no testing status)", value: undefined },
+			...stateChoices,
+		],
+		initial: 0,
+	});
+
+	return response.testingStatus;
+}
+
+async function selectQaPmTeams(
+	teams: LinearTeam[],
+	devTeam: LinearTeam,
+	teamStatesMap: Map<string, LinearState[]>,
+	teamsConfig: Record<string, { id: string; name: string }>,
+	options: InitOptions,
+): Promise<QaPmTeamConfig[]> {
+	// Only ask if there are multiple teams and interactive mode
+	if (!options.interactive || teams.length <= 1) {
+		return [];
+	}
+
+	// Filter out dev team from choices
+	const otherTeams = teams.filter((t) => t.id !== devTeam.id);
+	if (otherTeams.length === 0) {
+		return [];
+	}
+
+	console.log("\n🔗 QA/PM Teams Configuration:");
+	const response = await prompts({
+		type: "multiselect",
+		name: "qaPmTeamIds",
+		message:
+			"Select QA/PM teams for cross-team parent updates (space to select, enter to confirm):",
+		choices: [
 			...otherTeams.map((t) => ({
 				title: t.name,
 				value: t.id,
 				description: "Parent issues in this team will be updated to Testing",
 			})),
 		],
-		initial: 0,
+		hint: "- Press space to select, enter to confirm. Leave empty to skip.",
 	});
 
-	if (!response.qaPmTeamId) {
-		return undefined;
+	if (!response.qaPmTeamIds || response.qaPmTeamIds.length === 0) {
+		return [];
 	}
 
-	return teams.find((t) => t.id === response.qaPmTeamId);
+	// For each selected QA/PM team, select its testing status
+	const qaPmTeams: QaPmTeamConfig[] = [];
+
+	for (const teamId of response.qaPmTeamIds) {
+		const team = teams.find((t) => t.id === teamId);
+		if (!team) continue;
+
+		const teamStates = teamStatesMap.get(teamId) || [];
+		const defaults = getDefaultStatusTransitions(teamStates);
+
+		// Find team key
+		const teamKey =
+			Object.entries(teamsConfig).find(([_, t]) => t.id === teamId)?.[0] ||
+			team.name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+		if (teamStates.length === 0) {
+			// No states available, use default
+			if (defaults.testing) {
+				qaPmTeams.push({
+					team: teamKey,
+					testing_status: defaults.testing,
+				});
+			}
+			continue;
+		}
+
+		const stateChoices = teamStates.map((s) => ({
+			title: `${s.name} (${s.type})`,
+			value: s.name,
+		}));
+
+		const statusResponse = await prompts({
+			type: "select",
+			name: "testingStatus",
+			message: `Select testing status for ${team.name}:`,
+			choices: [
+				{ title: "(Skip this team)", value: undefined },
+				...stateChoices,
+			],
+			initial: defaults.testing
+				? stateChoices.findIndex((c) => c.value === defaults.testing) + 1
+				: 0,
+		});
+
+		if (statusResponse.testingStatus) {
+			qaPmTeams.push({
+				team: teamKey,
+				testing_status: statusResponse.testingStatus,
+			});
+		}
+	}
+
+	return qaPmTeams;
+}
+
+async function selectCompletionMode(
+	hasQaPmTeams: boolean,
+	options: InitOptions,
+): Promise<CompletionMode> {
+	if (!options.interactive) {
+		return hasQaPmTeams ? "upstream_strict" : "simple";
+	}
+
+	console.log("\n✅ Completion Mode Configuration:");
+	const defaultMode = hasQaPmTeams ? 2 : 0; // upstream_strict if has QA/PM teams, else simple
+
+	const response = await prompts({
+		type: "select",
+		name: "mode",
+		message: "How should tasks be completed?",
+		choices: [
+			{
+				title: "Simple",
+				value: "simple",
+				description: "Mark task as done directly",
+			},
+			{
+				title: "Strict Review",
+				value: "strict_review",
+				description: "Mark task to dev team's testing status",
+			},
+			{
+				title: "Upstream Strict (recommended with QA/PM)",
+				value: "upstream_strict",
+				description:
+					"Done + parent to testing, fallback to testing if no parent",
+			},
+			{
+				title: "Upstream Not Strict",
+				value: "upstream_not_strict",
+				description: "Done + parent to testing, no fallback",
+			},
+		],
+		initial: defaultMode,
+	});
+
+	return response.mode || (hasQaPmTeams ? "upstream_strict" : "simple");
 }
 
 async function selectUser(
@@ -293,23 +403,17 @@ async function selectStatusSource(
 
 async function selectStatusMappings(
 	devStates: LinearState[],
-	qaStates: LinearState[] | undefined,
 	options: InitOptions,
 ): Promise<StatusTransitions> {
 	// Use dev team states for todo, in_progress, done, blocked
-	// Use qa team states for testing (fallback to dev team if not set)
+	// Testing status is now configured separately (dev_testing_status and qa_pm_teams)
 	const devDefaults = getDefaultStatusTransitions(devStates);
-	const testingStates = qaStates && qaStates.length > 0 ? qaStates : devStates;
-	const testingDefaults = getDefaultStatusTransitions(testingStates);
 
 	if (!options.interactive || devStates.length === 0) {
-		return {
-			...devDefaults,
-			testing: testingDefaults.testing,
-		};
+		return devDefaults;
 	}
 
-	console.log("\n📊 Configure status mappings:");
+	console.log("\n📊 Configure status mappings (dev team):");
 
 	const devStateChoices = devStates.map((s) => ({
 		title: `${s.name} (${s.type})`,
@@ -342,31 +446,8 @@ async function selectStatusMappings(
 		initial: devStateChoices.findIndex((c) => c.value === devDefaults.done),
 	});
 
-	// Testing uses qa team states (or dev team if qa not set)
-	const testingStateChoices = testingStates.map((s) => ({
-		title: `${s.name} (${s.type})`,
-		value: s.name,
-	}));
-	const testingChoices = [
-		{ title: "(None)", value: undefined },
-		...testingStateChoices,
-	];
-	const testingMessage =
-		qaStates && qaStates.length > 0
-			? 'Select status for "Testing" (from QA team, for parent tasks):'
-			: 'Select status for "Testing" (optional, for parent tasks):';
-	const testingResponse = await prompts({
-		type: "select",
-		name: "testing",
-		message: testingMessage,
-		choices: testingChoices,
-		initial: testingDefaults.testing
-			? testingChoices.findIndex((c) => c.value === testingDefaults.testing)
-			: 0,
-	});
-
 	const blockedChoices = [
-		{ title: "(None)", value: undefined },
+		{ title: "(Skip - no blocked status)", value: undefined },
 		...devStateChoices,
 	];
 	const blockedResponse = await prompts({
@@ -383,7 +464,7 @@ async function selectStatusMappings(
 		todo: todoResponse.todo || devDefaults.todo,
 		in_progress: inProgressResponse.in_progress || devDefaults.in_progress,
 		done: doneResponse.done || devDefaults.done,
-		testing: testingResponse.testing,
+		testing: devDefaults.testing, // Will be overridden by dev_testing_status in LocalConfig
 		blocked: blockedResponse.blocked,
 	};
 }
@@ -675,15 +756,9 @@ async function init() {
 		process.exit(1);
 	}
 
-	// Select teams
-	const { selected: selectedTeams, primary: primaryTeam } = await selectTeams(
-		teams,
-		options,
-	);
-	console.log(`  Teams: ${selectedTeams.map((t) => t.name).join(", ")}`);
-	if (selectedTeams.length > 1) {
-		console.log(`  Primary: ${primaryTeam.name}`);
-	}
+	// Select dev team (single selection)
+	const devTeam = await selectDevTeam(teams, options);
+	console.log(`  Dev Team: ${devTeam.name}`);
 
 	// Fetch data from ALL teams (not just primary) to support cross-team operations
 	console.log(`  Fetching data from ${teams.length} teams...`);
@@ -709,8 +784,8 @@ async function init() {
 				}
 			}
 
-			// Labels: only from primary team (dev team)
-			if (team.id === primaryTeam.id) {
+			// Labels: only from dev team
+			if (team.id === devTeam.id) {
 				const labelsData = await client.issueLabels({
 					filter: { team: { id: { eq: team.id } } },
 				});
@@ -735,7 +810,7 @@ async function init() {
 				}
 			}
 			teamStatesMap.set(team.id, teamStates);
-		} catch (error) {
+		} catch {
 			console.warn(
 				`  ⚠ Could not fetch data for team ${team.name}, skipping...`,
 			);
@@ -747,27 +822,42 @@ async function init() {
 	const states = allStates;
 
 	// Get team-specific states for status mapping
-	const primaryTeamStates = teamStatesMap.get(primaryTeam.id) || [];
+	const devTeamStates = teamStatesMap.get(devTeam.id) || [];
 
 	console.log(`  Users: ${users.length}`);
-	console.log(`  Labels: ${labels.length} (from ${primaryTeam.name})`);
+	console.log(`  Labels: ${labels.length} (from ${devTeam.name})`);
 	console.log(`  Workflow states: ${states.length}`);
 
-	// Get cycle from primary team (for current work tracking)
-	const selectedTeam = await client.team(primaryTeam.id);
+	// Get cycle from dev team (for current work tracking)
+	const selectedTeam = await client.team(devTeam.id);
 	const currentCycle = (await selectedTeam.activeCycle) as LinearCycle | null;
 
 	// User selections
 	const currentUser = await selectUser(users, options);
 	const defaultLabel = await selectLabelFilter(labels, options);
 	const statusSource = await selectStatusSource(options);
-	const qaPmTeam = await selectQaPmTeam(teams, primaryTeam, options);
 
-	// Get qa team states for testing status mapping (fallback to primary team if not set)
-	const qaTeamStates = qaPmTeam ? teamStatesMap.get(qaPmTeam.id) : undefined;
-	const statusTransitions = await selectStatusMappings(
-		primaryTeamStates,
-		qaTeamStates,
+	// Status transitions for dev team (todo, in_progress, done, blocked)
+	const statusTransitions = await selectStatusMappings(devTeamStates, options);
+
+	// Dev team testing status (for strict_review mode)
+	const devTestingStatus = await selectDevTestingStatus(devTeamStates, options);
+
+	// Build preliminary teams config for selectQaPmTeams
+	const teamsConfig = buildTeamsConfig(teams);
+
+	// QA/PM teams selection (multiple, each with its own testing status)
+	const qaPmTeams = await selectQaPmTeams(
+		teams,
+		devTeam,
+		teamStatesMap,
+		teamsConfig,
+		options,
+	);
+
+	// Completion mode selection
+	const completionMode = await selectCompletionMode(
+		qaPmTeams.length > 0,
 		options,
 	);
 
@@ -783,22 +873,17 @@ async function init() {
 
 	// Find keys
 	const currentUserKey = findUserKey(config.users, currentUser.id);
-	const primaryTeamKey = findTeamKey(config.teams, primaryTeam.id);
-	const selectedTeamKeys = selectedTeams
-		.map((team) => findTeamKey(config.teams, team.id))
-		.filter((key): key is string => key !== undefined);
-	const qaPmTeamKey = qaPmTeam
-		? findTeamKey(config.teams, qaPmTeam.id)
-		: undefined;
+	const devTeamKey = findTeamKey(config.teams, devTeam.id);
 
 	const localConfig = buildLocalConfig(
 		currentUserKey,
-		primaryTeamKey,
-		selectedTeamKeys,
+		devTeamKey,
+		devTestingStatus,
+		qaPmTeams,
+		completionMode,
 		defaultLabel,
 		undefined, // excludeLabels
 		statusSource,
-		qaPmTeamKey,
 	);
 
 	// Write config files
@@ -838,9 +923,12 @@ async function init() {
 				if (existingLocal.current_user)
 					localConfig.current_user = existingLocal.current_user;
 				if (existingLocal.team) localConfig.team = existingLocal.team;
-				if (existingLocal.teams) localConfig.teams = existingLocal.teams;
-				if (existingLocal.qa_pm_team)
-					localConfig.qa_pm_team = existingLocal.qa_pm_team;
+				if (existingLocal.dev_testing_status)
+					localConfig.dev_testing_status = existingLocal.dev_testing_status;
+				if (existingLocal.qa_pm_teams)
+					localConfig.qa_pm_teams = existingLocal.qa_pm_teams;
+				if (existingLocal.completion_mode)
+					localConfig.completion_mode = existingLocal.completion_mode;
 				if (existingLocal.label) localConfig.label = existingLocal.label;
 				if (existingLocal.exclude_labels)
 					localConfig.exclude_labels = existingLocal.exclude_labels;
@@ -865,10 +953,7 @@ async function init() {
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
 	console.log("Configuration summary:");
-	console.log(`  Teams: ${selectedTeams.map((t) => t.name).join(", ")}`);
-	if (selectedTeams.length > 1) {
-		console.log(`  Primary team: ${primaryTeam.name}`);
-	}
+	console.log(`  Dev Team: ${devTeam.name}`);
 	console.log(
 		`  User: ${currentUser.displayName || currentUser.name} (${currentUser.email})`,
 	);
@@ -876,8 +961,15 @@ async function init() {
 	console.log(
 		`  Status source: ${statusSource === "local" ? "local (use 'sync --update' to push)" : "remote (immediate sync)"}`,
 	);
-	if (qaPmTeam) {
-		console.log(`  QA/PM team: ${qaPmTeam.name}`);
+	console.log(`  Completion mode: ${completionMode}`);
+	if (devTestingStatus) {
+		console.log(`  Dev testing status: ${devTestingStatus}`);
+	}
+	if (qaPmTeams.length > 0) {
+		console.log(`  QA/PM teams:`);
+		for (const qaPmTeam of qaPmTeams) {
+			console.log(`    - ${qaPmTeam.team}: ${qaPmTeam.testing_status}`);
+		}
 	}
 	console.log(`  (Use 'ttt config filters' to set excluded labels/users)`);
 	if (currentCycle) {
@@ -889,9 +981,6 @@ async function init() {
 	console.log(`    Todo: ${statusTransitions.todo}`);
 	console.log(`    In Progress: ${statusTransitions.in_progress}`);
 	console.log(`    Done: ${statusTransitions.done}`);
-	if (statusTransitions.testing) {
-		console.log(`    Testing: ${statusTransitions.testing}`);
-	}
 	if (statusTransitions.blocked) {
 		console.log(`    Blocked: ${statusTransitions.blocked}`);
 	}

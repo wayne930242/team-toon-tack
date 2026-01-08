@@ -10,7 +10,8 @@ Optimized Linear workflow for Claude Code — saves significant tokens compared 
 - **Smart Task Selection** — Auto-pick highest priority unassigned work with `/work-on next`
 - **Multi-team Support** — Sync and filter issues across multiple teams
 - **Flexible Sync Modes** — Choose between remote (immediate Linear sync) or local (offline-first, sync later with `--update`)
-- **QA/PM Team Support** — Auto-update parent issues in QA/PM team to "Testing" when completing dev tasks
+- **Completion Modes** — Four modes for task completion: simple, strict review, upstream strict, upstream not strict
+- **QA Team Support** — Auto-update parent issues in QA team to "Testing" when completing dev tasks
 - **Attachment Download** — Auto-download Linear images and files to local `.ttt/output/` for AI vision analysis
 - **Blocked Status** — Set tasks as blocked when waiting on external dependencies
 - **Auto Command Setup** — `ttt init` can install Claude Code commands with custom prefix
@@ -30,9 +31,21 @@ ttt init
 ```
 
 During init, you'll configure:
+- **Dev team**: Your development team (single selection)
+- **Dev testing status**: Testing/review status for your dev team (optional)
+- **QA team(s)**: For cross-team parent issue updates, each with its own testing status (optional)
+- **Completion mode**: How task completion is handled (see below)
 - **Status source**: `remote` (update Linear immediately) or `local` (work offline, sync with `ttt sync --update`)
-- **QA/PM team**: For cross-team parent issue updates (parent must be set in Linear)
 - **Claude Code commands**: Auto-install with optional prefix (e.g., `/ttt:work-on`)
+
+### Completion Modes
+
+| Mode | Behavior |
+|------|----------|
+| `simple` | Mark task as Done + parent as Done. Default when no QA team configured. |
+| `strict_review` | Mark task to dev testing + parent to QA testing. |
+| `upstream_strict` | Mark task as Done + parent to Testing. Falls back to dev testing if no parent. Default when QA team configured. |
+| `upstream_not_strict` | Mark task as Done + parent to Testing. No fallback if no parent. |
 
 ### 2. Daily Workflow
 

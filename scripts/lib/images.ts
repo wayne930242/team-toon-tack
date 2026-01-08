@@ -27,12 +27,13 @@ export function extractLinearImageUrls(text: string): string[] {
 	];
 
 	for (const pattern of patterns) {
-		let match;
-		while ((match = pattern.exec(text)) !== null) {
+		let match: RegExpExecArray | null = pattern.exec(text);
+		while (match) {
 			const url = match[1];
 			if (isLinearImageUrl(url) && !urls.includes(url)) {
 				urls.push(url);
 			}
+			match = pattern.exec(text);
 		}
 	}
 
@@ -80,7 +81,7 @@ export async function downloadLinearFile(
 		// Linear files require authentication
 		const headers: Record<string, string> = {};
 		if (process.env.LINEAR_API_KEY) {
-			headers["Authorization"] = process.env.LINEAR_API_KEY;
+			headers.Authorization = process.env.LINEAR_API_KEY;
 		}
 
 		const response = await fetch(url, { headers });

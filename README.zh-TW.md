@@ -10,7 +10,8 @@
 - **智慧任務挑選** — `/work-on next` 自動選擇最高優先級的未指派工作
 - **多團隊支援** — 跨多個團隊同步與過濾 issue
 - **彈性同步模式** — 選擇 remote（即時同步 Linear）或 local（離線優先，稍後用 `--update` 同步）
-- **QA/PM 團隊支援** — 完成開發任務時自動將 QA/PM 團隊的 parent issue 更新為「Testing」
+- **完成模式** — 四種任務完成模式：簡單、嚴格審查、上下游嚴格、上下游非嚴格
+- **QA 團隊支援** — 完成開發任務時自動將 QA 團隊的 parent issue 更新為「Testing」
 - **附件下載** — 自動下載 Linear 圖片和檔案到本地 `.ttt/output/`，供 AI 視覺分析
 - **阻塞狀態** — 等待外部依賴時可設定任務為 blocked
 - **自動安裝指令** — `ttt init` 可自動安裝 Claude Code commands，支援自訂前綴
@@ -30,9 +31,21 @@ ttt init
 ```
 
 初始化時會設定：
+- **開發團隊**：你的開發團隊（單選）
+- **開發團隊測試狀態**：開發團隊的 testing/review 狀態（可選）
+- **QA 團隊**：跨團隊 parent issue 更新，各自設定 testing 狀態（可選）
+- **完成模式**：任務完成時的處理方式（見下方說明）
 - **狀態來源**：`remote`（即時更新 Linear）或 `local`（離線工作，用 `ttt sync --update` 同步）
-- **QA/PM 團隊**：跨團隊 parent issue 更新（需在 Linear 設定 parent）
 - **Claude Code commands**：自動安裝，可選前綴（如 `/ttt:work-on`）
+
+### 完成模式
+
+| 模式 | 行為 |
+|------|------|
+| `simple` | 任務標記為 Done，parent 也標記為 Done。未設定 QA 團隊時的預設值。 |
+| `strict_review` | 任務標記到開發團隊的 testing 狀態，parent 標記到 QA 團隊的 testing 狀態。 |
+| `upstream_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent，fallback 到開發團隊的 testing 狀態。設定 QA 團隊時的預設值。 |
+| `upstream_not_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent 不做 fallback。 |
 
 ### 2. 每日工作流
 
