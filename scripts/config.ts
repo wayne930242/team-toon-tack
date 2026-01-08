@@ -14,7 +14,7 @@ async function config() {
 Subcommands:
   show      Show current configuration
   status    Configure status mappings (todo, in_progress, done, testing)
-  filters   Configure filters (label, exclude_labels, exclude_assignees)
+  filters   Configure filters (label, exclude_labels)
   teams     Configure team selection
 
 Examples:

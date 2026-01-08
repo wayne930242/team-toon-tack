@@ -148,7 +148,6 @@ export interface LocalConfig {
 	current_user: string;
 	team: string; // primary team key from config.teams (for backwards compatibility)
 	teams?: string[]; // multiple team keys to sync from
-	exclude_assignees?: string[];
 	exclude_labels?: string[];
 	label?: string; // include only this label (optional filter)
 }

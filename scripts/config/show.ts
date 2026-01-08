@@ -21,9 +21,6 @@ export function showConfig(config: Config, localConfig: LocalConfig): void {
 	console.log(
 		`  Exclude labels: ${localConfig.exclude_labels?.join(", ") || "(none)"}`,
 	);
-	console.log(
-		`  Exclude users: ${localConfig.exclude_assignees?.join(", ") || "(none)"}`,
-	);
 
 	// Status Mappings
 	console.log("\nStatus Mappings:");

@@ -106,25 +106,36 @@ export function buildStatusesConfig(
 	return config;
 }
 
+// Helper to find status by keyword (case insensitive)
+function findStatusByKeyword(
+	states: LinearState[],
+	keywords: string[],
+): string | undefined {
+	const lowerKeywords = keywords.map((k) => k.toLowerCase());
+	return states.find((s) =>
+		lowerKeywords.some((k) => s.name.toLowerCase().includes(k)),
+	)?.name;
+}
+
 export function getDefaultStatusTransitions(
 	states: LinearState[],
 ): StatusTransitions {
 	const defaultTodo =
 		states.find((s) => s.type === "unstarted")?.name ||
-		states.find((s) => s.name === "Todo")?.name ||
+		findStatusByKeyword(states, ["todo", "pending"]) ||
 		states[0]?.name ||
 		"Todo";
 	const defaultInProgress =
 		states.find((s) => s.type === "started")?.name ||
-		states.find((s) => s.name === "In Progress")?.name ||
+		findStatusByKeyword(states, ["in progress", "progress"]) ||
 		"In Progress";
 	const defaultDone =
 		states.find((s) => s.type === "completed")?.name ||
-		states.find((s) => s.name === "Done")?.name ||
+		findStatusByKeyword(states, ["done", "complete"]) ||
 		"Done";
 	const defaultTesting =
-		states.find((s) => s.name === "Testing")?.name ||
-		states.find((s) => s.name === "In Review")?.name;
+		findStatusByKeyword(states, ["testing", "review"]) ||
+		undefined;
 
 	return {
 		todo: defaultTodo,
@@ -192,7 +203,6 @@ export function buildLocalConfig(
 	selectedTeamKeys: string[],
 	defaultLabel?: string,
 	excludeLabels?: string[],
-	excludeAssignees?: string[],
 ): LocalConfig {
 	return {
 		current_user: currentUserKey,
@@ -201,9 +211,5 @@ export function buildLocalConfig(
 		label: defaultLabel,
 		exclude_labels:
 			excludeLabels && excludeLabels.length > 0 ? excludeLabels : undefined,
-		exclude_assignees:
-			excludeAssignees && excludeAssignees.length > 0
-				? excludeAssignees
-				: undefined,
 	};
 }

@@ -49,13 +49,6 @@ Examples:
 	const client = getLinearClient();
 	const teamId = getTeamId(config, localConfig.team);
 
-	// Build excluded emails from local config
-	const excludedEmails = new Set(
-		(localConfig.exclude_assignees ?? [])
-			.map((key) => config.users[key]?.email)
-			.filter(Boolean),
-	);
-
 	// Build excluded labels set
 	const excludedLabels = new Set(localConfig.exclude_labels ?? []);
 
@@ -192,10 +185,6 @@ Examples:
 		const assignee = await issue.assignee;
 		const assigneeEmail = assignee?.email;
 
-		// Skip excluded assignees
-		if (assigneeEmail && excludedEmails.has(assigneeEmail)) {
-			continue;
-		}
 
 		const labels = await issue.labels();
 		const labelNames = labels.nodes.map((l: { name: string }) => l.name);

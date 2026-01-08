@@ -427,8 +427,6 @@ async function init() {
 				if (existingLocal.team) localConfig.team = existingLocal.team;
 				if (existingLocal.teams) localConfig.teams = existingLocal.teams;
 				if (existingLocal.label) localConfig.label = existingLocal.label;
-				if (existingLocal.exclude_assignees)
-					localConfig.exclude_assignees = existingLocal.exclude_assignees;
 				if (existingLocal.exclude_labels)
 					localConfig.exclude_labels = existingLocal.exclude_labels;
 			}

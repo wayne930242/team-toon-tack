@@ -162,11 +162,15 @@ Examples:
 		}
 
 		// Update local status
-		if (newLocalStatus && newLocalStatus !== task.localStatus) {
-			const oldStatus = task.localStatus;
-			task.localStatus = newLocalStatus;
-			await saveCycleData(data);
-			console.log(`Local: ${task.id} ${oldStatus} → ${newLocalStatus}`);
+		if (newLocalStatus) {
+			if (newLocalStatus !== task.localStatus) {
+				const oldStatus = task.localStatus;
+				task.localStatus = newLocalStatus;
+				await saveCycleData(data);
+				console.log(`Local: ${task.id} ${oldStatus} → ${newLocalStatus}`);
+			} else {
+				console.log(`Local: ${task.id} already ${newLocalStatus}`);
+			}
 		}
 
 		// Update Linear status

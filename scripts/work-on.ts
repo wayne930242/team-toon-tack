@@ -38,17 +38,14 @@ Examples:
 
 	const localConfig = await loadLocalConfig();
 
-	// Build excluded emails list from user keys
-	const excludedEmails = new Set(
-		(localConfig.exclude_assignees ?? [])
-			.map((key) => config.users[key]?.email)
-			.filter(Boolean),
-	);
+	// Get current user email for filtering
+	const currentUserEmail = config.users[localConfig.current_user]?.email;
 
 	const pendingTasks = data.tasks
 		.filter(
 			(t) =>
-				t.localStatus === "pending" && !excludedEmails.has(t.assignee ?? ""),
+				t.localStatus === "pending" &&
+				(!currentUserEmail || t.assignee === currentUserEmail),
 		)
 		.sort((a, b) => {
 			const pa = getPrioritySortIndex(a.priority, config.priority_order);
