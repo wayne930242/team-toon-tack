@@ -1,6 +1,6 @@
 {
   "name": "team-toon-tack",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Linear task sync & management CLI with TOON format",
   "type": "module",
   "bin": {
@@ -14,7 +14,8 @@
   "files": [
     "bin",
     "scripts",
-    "templates"
+    "templates",
+    "package.json"
   ],
   "scripts": {
     "start": "bun bin/cli.ts",

@@ -1,15 +1,9 @@
 #!/usr/bin/env bun
-import { resolve } from 'node:path';
-import { readFileSync } from 'node:fs';
+// @bun
 
-// Read version from package.json
-const pkgPath = new URL('../package.json', import.meta.url).pathname;
-const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-const VERSION = pkg.version;
-
-const COMMANDS = ['init', 'sync', 'work-on', 'done', 'help', 'version'] as const;
-type Command = typeof COMMANDS[number];
-
+// bin/cli.ts
+import { resolve } from "path";
+var COMMANDS = ["init", "sync", "work-on", "done", "help", "version"];
 function printHelp() {
   console.log(`
 team-toon-tack (ttt) - Linear task sync & management CLI
@@ -46,71 +40,57 @@ ENVIRONMENT:
 More info: https://github.com/wayne930242/team-toon-tack
 `);
 }
-
 function printVersion() {
-  console.log(`team-toon-tack v${VERSION}`);
+  console.log("team-toon-tack v1.0.0");
 }
-
-function parseGlobalArgs(args: string[]): { dir: string; commandArgs: string[] } {
+function parseGlobalArgs(args) {
   let dir = process.env.TOON_DIR || process.cwd();
-  const commandArgs: string[] = [];
-
-  for (let i = 0; i < args.length; i++) {
+  const commandArgs = [];
+  for (let i = 0;i < args.length; i++) {
     const arg = args[i];
-    if (arg === '-d' || arg === '--dir') {
-      dir = resolve(args[++i] || '.');
+    if (arg === "-d" || arg === "--dir") {
+      dir = resolve(args[++i] || ".");
     } else {
       commandArgs.push(arg);
     }
   }
-
   return { dir, commandArgs };
 }
-
 async function main() {
   const args = process.argv.slice(2);
-
-  if (args.length === 0 || args[0] === 'help' || args[0] === '-h' || args[0] === '--help') {
+  if (args.length === 0 || args[0] === "help" || args[0] === "-h" || args[0] === "--help") {
     printHelp();
     process.exit(0);
   }
-
-  if (args[0] === 'version' || args[0] === '-v' || args[0] === '--version') {
+  if (args[0] === "version" || args[0] === "-v" || args[0] === "--version") {
     printVersion();
     process.exit(0);
   }
-
-  const command = args[0] as Command;
+  const command = args[0];
   const restArgs = args.slice(1);
   const { dir, commandArgs } = parseGlobalArgs(restArgs);
-
-  // Set TOON_DIR for scripts to use
   process.env.TOON_DIR = dir;
-
   if (!COMMANDS.includes(command)) {
     console.error(`Unknown command: ${command}`);
     console.error(`Run 'ttt help' for usage.`);
     process.exit(1);
   }
-
-  // Import and run the appropriate script
-  const scriptDir = new URL('../scripts/', import.meta.url).pathname;
-
+  const scriptDir = new URL("../scripts/", import.meta.url).pathname;
   try {
     switch (command) {
-      case 'init':
-        process.argv = ['bun', 'init.ts', ...commandArgs];
+      case "init":
+        process.argv = ["bun", "init.ts", ...commandArgs];
         await import(`${scriptDir}init.ts`);
         break;
-      case 'sync':
+      case "sync":
         await import(`${scriptDir}sync.ts`);
         break;
-      case 'work-on':
-        process.argv = ['bun', 'work-on.ts', ...commandArgs];
+      case "work-on":
+        process.argv = ["bun", "work-on.ts", ...commandArgs];
         await import(`${scriptDir}work-on.ts`);
         break;
-      case 'done':
-        process.argv = ['bun', 'done-job.ts', ...commandArgs];
+      case "done":
+        process.argv = ["bun", "done-job.ts", ...commandArgs];
         await import(`${scriptDir}done-job.ts`);
         break;
     }
@@ -121,5 +101,4 @@ async function main() {
     process.exit(1);
   }
 }
-
 main();
