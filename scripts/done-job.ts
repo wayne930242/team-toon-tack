@@ -133,8 +133,13 @@ Examples:
 		aiMessage = aiMsgResponse.aiMessage || "";
 	}
 
-	// Update Linear
-	if (task.linearId && process.env.LINEAR_API_KEY) {
+	// Update Linear (only if status_source is 'remote' or not set)
+	const statusSource = localConfig.status_source || "remote";
+	if (
+		task.linearId &&
+		process.env.LINEAR_API_KEY &&
+		statusSource === "remote"
+	) {
 		const transitions = getStatusTransitions(config);
 
 		// Update issue to Done
@@ -169,10 +174,22 @@ Examples:
 				if (parentIssue) {
 					const parentTeam = await parentIssue.team;
 					if (parentTeam) {
-						const parentStates = await getWorkflowStates(
-							config,
-							localConfig.team,
+						// Determine which team key to use for parent's workflow states
+						// If qa_pm_team is configured and matches parent's team, use it
+						// Otherwise, try to find the team key from config
+						let parentTeamKey = localConfig.team;
+						const teamEntries = Object.entries(config.teams);
+						const matchingTeam = teamEntries.find(
+							([_, t]) => t.id === parentTeam.id,
 						);
+						if (matchingTeam) {
+							parentTeamKey = matchingTeam[0];
+						} else if (localConfig.qa_pm_team) {
+							// Fallback to qa_pm_team if configured
+							parentTeamKey = localConfig.qa_pm_team;
+						}
+
+						const parentStates = await getWorkflowStates(config, parentTeamKey);
 						const testingState = parentStates.find(
 							(s) => s.name === transitions.testing,
 						);
@@ -191,6 +208,9 @@ Examples:
 				console.error("Failed to update parent issue:", parentError);
 			}
 		}
+	} else if (statusSource === "local") {
+		console.log(`Local: ${task.id} marked as completed`);
+		console.log(`(Linear status not updated - use 'sync --update' to push)`);
 	}
 
 	// Sync full issue data from Linear (including new comment)

@@ -9,6 +9,9 @@ Optimized Linear workflow for Claude Code — saves significant tokens compared 
 - **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs Linear MCP
 - **Smart Task Selection** — Auto-pick highest priority unassigned work with `/work-on next`
 - **Multi-team Support** — Sync and filter issues across multiple teams
+- **Flexible Sync Modes** — Choose between remote (immediate Linear sync) or local (offline-first, sync later with `--update`)
+- **QA/PM Team Support** — Auto-update parent issues in QA/PM team to "Testing" when completing dev tasks
+- **Auto Command Setup** — `ttt init` can install Claude Code commands with custom prefix
 - **Cycle History** — Local `.toon` files preserve cycle data for AI context
 - **User Filtering** — Only see issues assigned to you or unassigned
 
@@ -24,20 +27,12 @@ cd your-project
 ttt init
 ```
 
-### 2. Setup Claude Code Commands
+During init, you'll configure:
+- **Status source**: `remote` (update Linear immediately) or `local` (work offline, sync with `ttt sync --update`)
+- **QA/PM team**: For cross-team parent issue updates (parent must be set in Linear)
+- **Claude Code commands**: Auto-install with optional prefix (e.g., `/ttt:work-on`)
 
-Copy the command templates from [`templates/claude-code-commands/`](https://github.com/niclin/team-toon-tack/tree/main/templates/claude-code-commands) to your project's `.claude/commands/` directory.
-
-Edit `.claude/commands/work-on.md` lines 37-40 to add your project's verification steps:
-
-```bash
-# Example: Add your checks here
-bun run typecheck
-bun run lint
-bun run test
-```
-
-### 3. Daily Workflow
+### 2. Daily Workflow
 
 In Claude Code:
 
@@ -71,6 +66,7 @@ Sync current cycle issues from Linear.
 ```bash
 ttt sync              # Sync all matching issues
 ttt sync MP-123       # Sync specific issue only
+ttt sync --update     # Push local status changes to Linear (for local mode)
 ```
 
 ### `ttt work-on`

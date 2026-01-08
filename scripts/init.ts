@@ -161,6 +161,49 @@ async function selectTeams(
 	return { selected: selectedTeams, primary: primaryTeam };
 }
 
+async function selectQaPmTeam(
+	teams: LinearTeam[],
+	primaryTeam: LinearTeam,
+	options: InitOptions,
+): Promise<LinearTeam | undefined> {
+	// Only ask if there are multiple teams and interactive mode
+	if (!options.interactive || teams.length <= 1) {
+		return undefined;
+	}
+
+	// Filter out primary team from choices
+	const otherTeams = teams.filter((t) => t.id !== primaryTeam.id);
+	if (otherTeams.length === 0) {
+		return undefined;
+	}
+
+	console.log("\n🔗 QA/PM Team Configuration:");
+	const response = await prompts({
+		type: "select",
+		name: "qaPmTeamId",
+		message: "Select QA/PM team (for cross-team parent issue updates):",
+		choices: [
+			{
+				title: "(None - skip)",
+				value: undefined,
+				description: "No cross-team parent updates",
+			},
+			...otherTeams.map((t) => ({
+				title: t.name,
+				value: t.id,
+				description: "Parent issues in this team will be updated to Testing",
+			})),
+		],
+		initial: 0,
+	});
+
+	if (!response.qaPmTeamId) {
+		return undefined;
+	}
+
+	return teams.find((t) => t.id === response.qaPmTeamId);
+}
+
 async function selectUser(
 	users: LinearUser[],
 	options: InitOptions,
@@ -642,6 +685,7 @@ async function init() {
 	const currentUser = await selectUser(users, options);
 	const defaultLabel = await selectLabelFilter(labels, options);
 	const statusSource = await selectStatusSource(options);
+	const qaPmTeam = await selectQaPmTeam(teams, primaryTeam, options);
 	const statusTransitions = await selectStatusMappings(states, options);
 
 	// Build config
@@ -660,6 +704,9 @@ async function init() {
 	const selectedTeamKeys = selectedTeams
 		.map((team) => findTeamKey(config.teams, team.id))
 		.filter((key): key is string => key !== undefined);
+	const qaPmTeamKey = qaPmTeam
+		? findTeamKey(config.teams, qaPmTeam.id)
+		: undefined;
 
 	const localConfig = buildLocalConfig(
 		currentUserKey,
@@ -668,6 +715,7 @@ async function init() {
 		defaultLabel,
 		undefined, // excludeLabels
 		statusSource,
+		qaPmTeamKey,
 	);
 
 	// Write config files
@@ -708,6 +756,8 @@ async function init() {
 					localConfig.current_user = existingLocal.current_user;
 				if (existingLocal.team) localConfig.team = existingLocal.team;
 				if (existingLocal.teams) localConfig.teams = existingLocal.teams;
+				if (existingLocal.qa_pm_team)
+					localConfig.qa_pm_team = existingLocal.qa_pm_team;
 				if (existingLocal.label) localConfig.label = existingLocal.label;
 				if (existingLocal.exclude_labels)
 					localConfig.exclude_labels = existingLocal.exclude_labels;
@@ -744,6 +794,9 @@ async function init() {
 	console.log(
 		`  Status source: ${statusSource === "local" ? "local (use 'sync --update' to push)" : "remote (immediate sync)"}`,
 	);
+	if (qaPmTeam) {
+		console.log(`  QA/PM team: ${qaPmTeam.name}`);
+	}
 	console.log(`  (Use 'ttt config filters' to set excluded labels/users)`);
 	if (currentCycle) {
 		console.log(

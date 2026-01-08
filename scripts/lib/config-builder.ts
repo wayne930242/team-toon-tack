@@ -206,11 +206,13 @@ export function buildLocalConfig(
 	defaultLabel?: string,
 	excludeLabels?: string[],
 	statusSource?: "remote" | "local",
+	qaPmTeam?: string,
 ): LocalConfig {
 	return {
 		current_user: currentUserKey,
 		team: primaryTeamKey,
 		teams: selectedTeamKeys.length > 1 ? selectedTeamKeys : undefined,
+		qa_pm_team: qaPmTeam,
 		label: defaultLabel,
 		exclude_labels:
 			excludeLabels && excludeLabels.length > 0 ? excludeLabels : undefined,

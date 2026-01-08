@@ -152,6 +152,7 @@ export interface LocalConfig {
 	current_user: string;
 	team: string; // primary team key from config.teams (for backwards compatibility)
 	teams?: string[]; // multiple team keys to sync from
+	qa_pm_team?: string; // QA team key for cross-team parent issue updates
 	exclude_labels?: string[];
 	label?: string; // include only this label (optional filter)
 	status_source?: "remote" | "local"; // 'remote' = update Linear immediately, 'local' = only update local until sync --update

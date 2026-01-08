@@ -9,6 +9,9 @@
 - **節省 Token** — 本地 cycle 快取避免重複 API 呼叫，比 Linear MCP 省下大量 token
 - **智慧任務挑選** — `/work-on next` 自動選擇最高優先級的未指派工作
 - **多團隊支援** — 跨多個團隊同步與過濾 issue
+- **彈性同步模式** — 選擇 remote（即時同步 Linear）或 local（離線優先，稍後用 `--update` 同步）
+- **QA/PM 團隊支援** — 完成開發任務時自動將 QA/PM 團隊的 parent issue 更新為「Testing」
+- **自動安裝指令** — `ttt init` 可自動安裝 Claude Code commands，支援自訂前綴
 - **Cycle 歷史保存** — 本地 `.toon` 檔案保留 cycle 資料，方便 AI 檢閱
 - **使用者過濾** — 只顯示指派給你或未指派的工作
 
@@ -24,20 +27,12 @@ cd your-project
 ttt init
 ```
 
-### 2. 設定 Claude Code Commands
+初始化時會設定：
+- **狀態來源**：`remote`（即時更新 Linear）或 `local`（離線工作，用 `ttt sync --update` 同步）
+- **QA/PM 團隊**：跨團隊 parent issue 更新（需在 Linear 設定 parent）
+- **Claude Code commands**：自動安裝，可選前綴（如 `/ttt:work-on`）
 
-從 [`templates/claude-code-commands/`](https://github.com/niclin/team-toon-tack/tree/main/templates/claude-code-commands) 複製 command 範本到你專案的 `.claude/commands/` 目錄。
-
-編輯 `.claude/commands/work-on.md` 第 37-40 行，加入你專案的驗證步驟：
-
-```bash
-# 範例：加入你的檢查
-bun run typecheck
-bun run lint
-bun run test
-```
-
-### 3. 每日工作流
+### 2. 每日工作流
 
 在 Claude Code 中：
 
@@ -71,6 +66,7 @@ ttt init --force                   # 覆蓋現有配置
 ```bash
 ttt sync              # 同步所有符合條件的 issue
 ttt sync MP-123       # 只同步特定 issue
+ttt sync --update     # 將本地狀態推送到 Linear（local 模式用）
 ```
 
 ### `ttt work-on`
