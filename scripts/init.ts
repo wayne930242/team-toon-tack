@@ -277,7 +277,14 @@ async function init() {
       complete: 'Done',
       need_review: 'In Review'
     },
-    priority_order: ['urgent', 'high', 'medium', 'low', 'none']
+    priority_order: ['urgent', 'high', 'medium', 'low', 'none'],
+    current_cycle: currentCycle ? {
+      id: currentCycle.id,
+      name: currentCycle.name || 'Cycle',
+      start_date: currentCycle.startsAt?.toISOString().split('T')[0] || '',
+      end_date: currentCycle.endsAt?.toISOString().split('T')[0] || ''
+    } : undefined,
+    cycle_history: []
   };
 
   // Find current user key
@@ -299,11 +306,23 @@ async function init() {
       const existingContent = await fs.readFile(paths.configPath, 'utf-8');
       const existingConfig = decode(existingContent) as unknown as Config;
 
-      // Merge: new data takes precedence but preserve existing custom fields
+      // Merge: preserve existing custom fields
       config.status_transitions = {
         ...existingConfig.status_transitions,
         ...config.status_transitions
       };
+      // Preserve cycle history
+      if (existingConfig.cycle_history) {
+        config.cycle_history = existingConfig.cycle_history;
+      }
+      // Preserve current_cycle if not fetched fresh
+      if (!currentCycle && existingConfig.current_cycle) {
+        config.current_cycle = existingConfig.current_cycle;
+      }
+      // Preserve priority_order if exists
+      if (existingConfig.priority_order) {
+        config.priority_order = existingConfig.priority_order;
+      }
     } catch {
       // Ignore merge errors
     }

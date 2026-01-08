@@ -1,4 +1,4 @@
-import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getTeamId, getPrioritySortIndex, CycleData, Task, Attachment, Comment } from './utils';
+import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, saveConfig, getTeamId, getPrioritySortIndex, CycleData, Task, Attachment, Comment, CycleInfo } from './utils';
 
 async function sync() {
   const args = process.argv.slice(2);
@@ -49,12 +49,41 @@ Examples:
   const activeCycle = cycles.nodes[0];
   const cycleId = activeCycle.id;
   const cycleName = activeCycle.name ?? 'Cycle';
+  const newCycleInfo: CycleInfo = {
+    id: cycleId,
+    name: cycleName,
+    start_date: activeCycle.startsAt?.toISOString().split('T')[0] ?? '',
+    end_date: activeCycle.endsAt?.toISOString().split('T')[0] ?? ''
+  };
 
-  // Check if cycle changed by comparing with existing cycle.toon
+  // Check if cycle changed and update config with history
   const existingData = await loadCycleData();
-  if (existingData && existingData.cycleId !== cycleId) {
-    console.log(`Cycle changed: ${existingData.cycleName} → ${cycleName}`);
+  const oldCycleId = config.current_cycle?.id ?? existingData?.cycleId;
+
+  if (oldCycleId && oldCycleId !== cycleId) {
+    const oldCycleName = config.current_cycle?.name ?? existingData?.cycleName ?? 'Unknown';
+    console.log(`Cycle changed: ${oldCycleName} → ${cycleName}`);
+
+    // Move old cycle to history
+    if (config.current_cycle) {
+      config.cycle_history = config.cycle_history ?? [];
+      config.cycle_history.unshift(config.current_cycle);
+      // Keep only last 10 cycles
+      if (config.cycle_history.length > 10) {
+        config.cycle_history = config.cycle_history.slice(0, 10);
+      }
+    }
+
+    // Update current cycle
+    config.current_cycle = newCycleInfo;
+    await saveConfig(config);
+    console.log('Config updated with new cycle (old cycle saved to history).');
   } else {
+    // Update current cycle info even if ID unchanged (dates might change)
+    if (!config.current_cycle || config.current_cycle.id !== cycleId) {
+      config.current_cycle = newCycleInfo;
+      await saveConfig(config);
+    }
     console.log(`Current cycle: ${cycleName}`);
   }
 

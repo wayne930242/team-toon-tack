@@ -52,6 +52,13 @@ export interface LabelConfig {
   color?: string;
 }
 
+export interface CycleInfo {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
 export interface Config {
   teams: Record<string, TeamConfig>;
   users: Record<string, UserConfig>;
@@ -60,6 +67,8 @@ export interface Config {
   statuses?: Record<string, { name: string; type: string }>;
   status_transitions?: Record<string, string>;
   priority_order?: string[];  // e.g., ['urgent', 'high', 'medium', 'low', 'none']
+  current_cycle?: CycleInfo;
+  cycle_history?: CycleInfo[];
 }
 
 // Linear priority value to name mapping (fixed by Linear API)
