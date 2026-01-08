@@ -1,0 +1,82 @@
+# Linear Team Configuration
+# Copy this file to config.toon and fill in your team's data
+# Run `bun run init` to generate this interactively
+
+teams:
+  main:
+    id: YOUR_TEAM_UUID
+    name: Your Team Name
+    icon: Terminal
+
+users:
+  user1:
+    id: USER1_UUID
+    email: user1@example.com
+    displayName: user1
+    role: Developer
+
+labels:
+  frontend:
+    id: LABEL_UUID
+    name: Frontend
+    color: "#f2c94c"
+  backend:
+    id: LABEL_UUID
+    name: Backend
+    color: "#5e6ad2"
+  bug:
+    id: LABEL_UUID
+    name: Bug
+    color: "#EB5757"
+  feature:
+    id: LABEL_UUID
+    name: Feature
+    color: "#BB87FC"
+
+priorities:
+  urgent:
+    value: 1
+    name: Urgent
+  high:
+    value: 2
+    name: High
+  medium:
+    value: 3
+    name: Medium
+  low:
+    value: 4
+    name: Low
+
+statuses:
+  backlog:
+    name: Backlog
+    type: backlog
+  todo:
+    name: Todo
+    type: unstarted
+  in_progress:
+    name: In Progress
+    type: started
+  in_review:
+    name: In Review
+    type: started
+  testing:
+    name: Testing
+    type: started
+  done:
+    name: Done
+    type: completed
+  canceled:
+    name: Canceled
+    type: canceled
+
+status_transitions:
+  start_work: In Progress
+  complete: Done
+  need_review: In Review
+
+current_cycle:
+  id: CYCLE_UUID
+  name: Cycle #1
+  start_date: 2026-01-01
+  end_date: 2026-01-07

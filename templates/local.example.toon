@@ -1,0 +1,13 @@
+# Local Configuration
+# Copy this file to local.toon and customize for your setup
+# This file is gitignored and contains personal settings
+
+# Your user key (must match a key in config.toon users section)
+current_user: user1
+
+# Filter issues by label (optional, defaults to first label in config)
+label: Frontend
+
+# Exclude issues assigned to these users (optional)
+# Use user keys from config.toon
+# exclude_assignees[1]: backend_dev

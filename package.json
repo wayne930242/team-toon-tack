@@ -1,0 +1,51 @@
+{
+  "name": "team-toon-tack",
+  "version": "1.0.0",
+  "description": "Linear task sync & management CLI with TOON format",
+  "type": "module",
+  "bin": {
+    "ttt": "./bin/cli.ts",
+    "team-toon-tack": "./bin/cli.ts"
+  },
+  "exports": {
+    ".": "./scripts/utils.ts",
+    "./utils": "./scripts/utils.ts"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "templates"
+  ],
+  "scripts": {
+    "start": "bun bin/cli.ts",
+    "build": "bun build bin/cli.ts --outdir dist --target node",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@linear/sdk": "^29.0.0",
+    "@toon-format/toon": "^2.0.0",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "@types/prompts": "^2.4.9"
+  },
+  "keywords": [
+    "linear",
+    "task-management",
+    "cli",
+    "toon",
+    "sync",
+    "project-management"
+  ],
+  "author": "wayne930242",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wayne930242/team-toon-tack.git"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  }
+}

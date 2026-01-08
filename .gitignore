@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Team configuration (contains team IDs and user data)
+# Use config.example.toon as template
+config.toon
+
+# Local configuration (contains personal settings)
+local.toon
+
+# Cycle data (synced from Linear, regenerated on each sync)
+cycle.toon
+
+# Bun lockfile (optional, remove if you want to lock versions)
+# bun.lockb
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
