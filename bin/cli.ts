@@ -1,11 +1,8 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { resolve } from 'node:path';
-import { readFileSync } from 'node:fs';
 
-// Read version from package.json
-const pkgPath = new URL('../package.json', import.meta.url).pathname;
-const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-const VERSION = pkg.version;
+// Version is injected at build time
+const VERSION = '1.0.11';
 
 const COMMANDS = ['init', 'sync', 'work-on', 'done', 'help', 'version'] as const;
 type Command = typeof COMMANDS[number];
@@ -94,24 +91,22 @@ async function main() {
   }
 
   // Import and run the appropriate script
-  const scriptDir = new URL('../scripts/', import.meta.url).pathname;
-
   try {
     switch (command) {
       case 'init':
-        process.argv = ['bun', 'init.ts', ...commandArgs];
-        await import(`${scriptDir}init.ts`);
+        process.argv = ['node', 'init.js', ...commandArgs];
+        await import('../scripts/init.js');
         break;
       case 'sync':
-        await import(`${scriptDir}sync.ts`);
+        await import('../scripts/sync.js');
         break;
       case 'work-on':
-        process.argv = ['bun', 'work-on.ts', ...commandArgs];
-        await import(`${scriptDir}work-on.ts`);
+        process.argv = ['node', 'work-on.js', ...commandArgs];
+        await import('../scripts/work-on.js');
         break;
       case 'done':
-        process.argv = ['bun', 'done-job.ts', ...commandArgs];
-        await import(`${scriptDir}done-job.ts`);
+        process.argv = ['node', 'done-job.js', ...commandArgs];
+        await import('../scripts/done-job.js');
         break;
     }
   } catch (error) {

@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Build output
+dist/
+
 # Team configuration (contains team IDs and user data)
 # Use config.example.toon as template
 config.toon
