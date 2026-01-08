@@ -288,8 +288,14 @@ async function init() {
     ([_, u]) => u.id === currentUser.id
   )?.[0] || 'user';
 
+  // Find selected team key
+  const selectedTeamKey = Object.entries(teamsConfig).find(
+    ([_, t]) => t.id === selectedTeam.id
+  )?.[0] || Object.keys(teamsConfig)[0];
+
   const localConfig: LocalConfig = {
     current_user: currentUserKey,
+    team: selectedTeamKey,
     label: defaultLabel
   };
 
@@ -338,6 +344,7 @@ async function init() {
 
       // Preserve existing values
       if (existingLocal.current_user) localConfig.current_user = existingLocal.current_user;
+      if (existingLocal.team) localConfig.team = existingLocal.team;
       if (existingLocal.label) localConfig.label = existingLocal.label;
       if (existingLocal.exclude_assignees) localConfig.exclude_assignees = existingLocal.exclude_assignees;
     } catch {

@@ -1,6 +1,6 @@
 import prompts from 'prompts';
 import { execSync } from 'node:child_process';
-import { getLinearClient, loadConfig, loadCycleData, saveCycleData, getTeamId, getDefaultTeamKey } from './utils';
+import { getLinearClient, loadConfig, loadLocalConfig, loadCycleData, saveCycleData, getTeamId, getDefaultTeamKey } from './utils';
 
 interface CommitInfo {
   shortHash: string;
@@ -86,6 +86,7 @@ Examples:
   let issueId = argIssueId;
 
   const config = await loadConfig();
+  const localConfig = await loadLocalConfig();
   const data = await loadCycleData();
 
   if (!data) {
@@ -163,7 +164,7 @@ Examples:
     try {
       const client = getLinearClient();
       const workflowStates = await client.workflowStates({
-        filter: { team: { id: { eq: getTeamId(config) } } }
+        filter: { team: { id: { eq: getTeamId(config, localConfig.team) } } }
       });
       const doneState = workflowStates.nodes.find(s => s.name === 'Done');
 

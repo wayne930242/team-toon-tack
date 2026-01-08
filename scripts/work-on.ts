@@ -120,7 +120,7 @@ Examples:
       try {
         const client = getLinearClient();
         const workflowStates = await client.workflowStates({
-          filter: { team: { id: { eq: getTeamId(config) } } }
+          filter: { team: { id: { eq: getTeamId(config, localConfig.team) } } }
         });
         const inProgressState = workflowStates.nodes.find(s => s.name === 'In Progress');
 

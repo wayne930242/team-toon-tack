@@ -130,6 +130,7 @@ export interface CycleData {
 
 export interface LocalConfig {
   current_user: string;
+  team: string;  // team key from config.teams
   exclude_assignees?: string[];
   label?: string;
 }

@@ -24,7 +24,7 @@ Examples:
   const config = await loadConfig();
   const localConfig = await loadLocalConfig();
   const client = getLinearClient();
-  const teamId = getTeamId(config);
+  const teamId = getTeamId(config, localConfig.team);
 
   // Build excluded emails from local config
   const excludedEmails = new Set(
@@ -60,9 +60,11 @@ Examples:
     const oldCycleName = config.current_cycle?.name ?? existingData?.cycleName ?? 'Unknown';
     console.log(`Cycle changed: ${oldCycleName} → ${cycleName}`);
 
-    // Move old cycle to history
+    // Move old cycle to history (avoid duplicates)
     if (config.current_cycle) {
       config.cycle_history = config.cycle_history ?? [];
+      // Remove if already exists in history
+      config.cycle_history = config.cycle_history.filter(c => c.id !== config.current_cycle!.id);
       config.cycle_history.unshift(config.current_cycle);
       // Keep only last 10 cycles
       if (config.cycle_history.length > 10) {
