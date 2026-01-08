@@ -288,18 +288,26 @@ async function selectStatusSource(
 }
 
 async function selectStatusMappings(
-	states: LinearState[],
+	devStates: LinearState[],
+	qaStates: LinearState[] | undefined,
 	options: InitOptions,
 ): Promise<StatusTransitions> {
-	const defaults = getDefaultStatusTransitions(states);
+	// Use dev team states for todo, in_progress, done, blocked
+	// Use qa team states for testing (fallback to dev team if not set)
+	const devDefaults = getDefaultStatusTransitions(devStates);
+	const testingStates = qaStates && qaStates.length > 0 ? qaStates : devStates;
+	const testingDefaults = getDefaultStatusTransitions(testingStates);
 
-	if (!options.interactive || states.length === 0) {
-		return defaults;
+	if (!options.interactive || devStates.length === 0) {
+		return {
+			...devDefaults,
+			testing: testingDefaults.testing,
+		};
 	}
 
 	console.log("\n📊 Configure status mappings:");
 
-	const stateChoices = states.map((s) => ({
+	const devStateChoices = devStates.map((s) => ({
 		title: `${s.name} (${s.type})`,
 		value: s.name,
 	}));
@@ -308,58 +316,69 @@ async function selectStatusMappings(
 		type: "select",
 		name: "todo",
 		message: 'Select status for "Todo" (pending tasks):',
-		choices: stateChoices,
-		initial: stateChoices.findIndex((c) => c.value === defaults.todo),
+		choices: devStateChoices,
+		initial: devStateChoices.findIndex((c) => c.value === devDefaults.todo),
 	});
 
 	const inProgressResponse = await prompts({
 		type: "select",
 		name: "in_progress",
 		message: 'Select status for "In Progress" (working tasks):',
-		choices: stateChoices,
-		initial: stateChoices.findIndex((c) => c.value === defaults.in_progress),
+		choices: devStateChoices,
+		initial: devStateChoices.findIndex(
+			(c) => c.value === devDefaults.in_progress,
+		),
 	});
 
 	const doneResponse = await prompts({
 		type: "select",
 		name: "done",
 		message: 'Select status for "Done" (completed tasks):',
-		choices: stateChoices,
-		initial: stateChoices.findIndex((c) => c.value === defaults.done),
+		choices: devStateChoices,
+		initial: devStateChoices.findIndex((c) => c.value === devDefaults.done),
 	});
 
+	// Testing uses qa team states (or dev team if qa not set)
+	const testingStateChoices = testingStates.map((s) => ({
+		title: `${s.name} (${s.type})`,
+		value: s.name,
+	}));
 	const testingChoices = [
 		{ title: "(None)", value: undefined },
-		...stateChoices,
+		...testingStateChoices,
 	];
+	const testingMessage =
+		qaStates && qaStates.length > 0
+			? 'Select status for "Testing" (from QA team, for parent tasks):'
+			: 'Select status for "Testing" (optional, for parent tasks):';
 	const testingResponse = await prompts({
 		type: "select",
 		name: "testing",
-		message: 'Select status for "Testing" (optional, for parent tasks):',
+		message: testingMessage,
 		choices: testingChoices,
-		initial: defaults.testing
-			? testingChoices.findIndex((c) => c.value === defaults.testing)
+		initial: testingDefaults.testing
+			? testingChoices.findIndex((c) => c.value === testingDefaults.testing)
 			: 0,
 	});
 
 	const blockedChoices = [
 		{ title: "(None)", value: undefined },
-		...stateChoices,
+		...devStateChoices,
 	];
 	const blockedResponse = await prompts({
 		type: "select",
 		name: "blocked",
 		message: 'Select status for "Blocked" (optional, for blocked tasks):',
 		choices: blockedChoices,
-		initial: defaults.blocked
-			? blockedChoices.findIndex((c) => c.value === defaults.blocked)
+		initial: devDefaults.blocked
+			? blockedChoices.findIndex((c) => c.value === devDefaults.blocked)
 			: 0,
 	});
 
 	return {
-		todo: todoResponse.todo || defaults.todo,
-		in_progress: inProgressResponse.in_progress || defaults.in_progress,
-		done: doneResponse.done || defaults.done,
+		todo: todoResponse.todo || devDefaults.todo,
+		in_progress: inProgressResponse.in_progress || devDefaults.in_progress,
+		done: doneResponse.done || devDefaults.done,
 		testing: testingResponse.testing,
 		blocked: blockedResponse.blocked,
 	};
@@ -665,10 +684,12 @@ async function init() {
 	// Fetch data from ALL teams (not just primary) to support cross-team operations
 	console.log(`  Fetching data from ${teams.length} teams...`);
 
-	// Collect users, labels, states from all teams
+	// Collect users from all teams, but labels only from primary team
+	// States are stored per-team for status mapping selection
 	const allUsers: LinearUser[] = [];
 	const allLabels: LinearLabel[] = [];
 	const allStates: LinearState[] = [];
+	const teamStatesMap = new Map<string, LinearState[]>(); // team.id -> states
 	const seenUserIds = new Set<string>();
 	const seenLabelIds = new Set<string>();
 	const seenStateIds = new Set<string>();
@@ -684,27 +705,36 @@ async function init() {
 				}
 			}
 
-			const labelsData = await client.issueLabels({
-				filter: { team: { id: { eq: team.id } } },
-			});
-			for (const label of labelsData.nodes as LinearLabel[]) {
-				if (!seenLabelIds.has(label.id)) {
-					seenLabelIds.add(label.id);
-					allLabels.push(label);
+			// Labels: only from primary team (dev team)
+			if (team.id === primaryTeam.id) {
+				const labelsData = await client.issueLabels({
+					filter: { team: { id: { eq: team.id } } },
+				});
+				for (const label of labelsData.nodes as LinearLabel[]) {
+					if (!seenLabelIds.has(label.id)) {
+						seenLabelIds.add(label.id);
+						allLabels.push(label);
+					}
 				}
 			}
 
+			// States: store per-team and also collect all
 			const statesData = await client.workflowStates({
 				filter: { team: { id: { eq: team.id } } },
 			});
+			const teamStates: LinearState[] = [];
 			for (const state of statesData.nodes as LinearState[]) {
+				teamStates.push(state);
 				if (!seenStateIds.has(state.id)) {
 					seenStateIds.add(state.id);
 					allStates.push(state);
 				}
 			}
+			teamStatesMap.set(team.id, teamStates);
 		} catch (error) {
-			console.warn(`  ⚠ Could not fetch data for team ${team.name}, skipping...`);
+			console.warn(
+				`  ⚠ Could not fetch data for team ${team.name}, skipping...`,
+			);
 		}
 	}
 
@@ -712,8 +742,11 @@ async function init() {
 	const labels = allLabels;
 	const states = allStates;
 
+	// Get team-specific states for status mapping
+	const primaryTeamStates = teamStatesMap.get(primaryTeam.id) || [];
+
 	console.log(`  Users: ${users.length}`);
-	console.log(`  Labels: ${labels.length}`);
+	console.log(`  Labels: ${labels.length} (from ${primaryTeam.name})`);
 	console.log(`  Workflow states: ${states.length}`);
 
 	// Get cycle from primary team (for current work tracking)
@@ -725,7 +758,14 @@ async function init() {
 	const defaultLabel = await selectLabelFilter(labels, options);
 	const statusSource = await selectStatusSource(options);
 	const qaPmTeam = await selectQaPmTeam(teams, primaryTeam, options);
-	const statusTransitions = await selectStatusMappings(states, options);
+
+	// Get qa team states for testing status mapping (fallback to primary team if not set)
+	const qaTeamStates = qaPmTeam ? teamStatesMap.get(qaPmTeam.id) : undefined;
+	const statusTransitions = await selectStatusMappings(
+		primaryTeamStates,
+		qaTeamStates,
+		options,
+	);
 
 	// Build config
 	const config = buildConfig(
