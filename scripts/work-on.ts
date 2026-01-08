@@ -11,6 +11,22 @@ const PRIORITY_LABELS: Record<number, string> = {
 
 async function workOn() {
   const args = process.argv.slice(2);
+
+  // Handle help flag
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage: ttt work-on [issue-id]
+
+Arguments:
+  issue-id    Issue ID (e.g., MP-624) or 'next' for auto-select
+              If omitted, shows interactive selection
+
+Examples:
+  ttt work-on           # Interactive selection
+  ttt work-on MP-624    # Work on specific issue
+  ttt work-on next      # Auto-select highest priority`);
+    process.exit(0);
+  }
+
   let issueId = args[0];
 
   const config = await loadConfig();

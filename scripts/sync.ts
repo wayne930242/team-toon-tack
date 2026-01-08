@@ -1,6 +1,26 @@
 import { getLinearClient, loadConfig, loadLocalConfig, saveConfig, loadCycleData, saveCycleData, getTeamId, CycleData, Task, Attachment, Comment } from './utils';
 
 async function sync() {
+  const args = process.argv.slice(2);
+
+  // Handle help flag
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage: ttt sync
+
+Sync issues from Linear to local cycle.toon file.
+
+What it does:
+  - Fetches active cycle from Linear
+  - Downloads all issues matching configured label
+  - Preserves local status for existing tasks
+  - Updates config with new cycle info
+
+Examples:
+  ttt sync              # Sync in current directory
+  ttt sync -d .toon     # Sync using .toon directory`);
+    process.exit(0);
+  }
+
   const config = await loadConfig();
   const localConfig = await loadLocalConfig();
   const client = getLinearClient();

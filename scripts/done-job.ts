@@ -62,7 +62,27 @@ function parseArgs(args: string[]): { issueId?: string; message?: string } {
 }
 
 async function doneJob() {
-  const { issueId: argIssueId, message: argMessage } = parseArgs(process.argv.slice(2));
+  const args = process.argv.slice(2);
+
+  // Handle help flag
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage: ttt done [issue-id] [-m message]
+
+Arguments:
+  issue-id          Issue ID (e.g., MP-624). Optional if only one task is in-progress
+
+Options:
+  -m, --message     AI summary message describing the fix
+
+Examples:
+  ttt done                         # Complete current in-progress task
+  ttt done MP-624                  # Complete specific task
+  ttt done -m "Fixed null check"   # With completion message
+  ttt done MP-624 -m "Refactored"  # Specific task with message`);
+    process.exit(0);
+  }
+
+  const { issueId: argIssueId, message: argMessage } = parseArgs(args);
   let issueId = argIssueId;
 
   const config = await loadConfig();
