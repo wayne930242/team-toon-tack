@@ -1,6 +1,6 @@
 {
 	"name": "team-toon-tack",
-	"version": "2.0.1",
+	"version": "2.0.2",
 	"description": "Linear task sync & management CLI with TOON format",
 	"type": "module",
 	"bin": {
@@ -26,7 +26,8 @@
 	"dependencies": {
 		"@linear/sdk": "^69.0.0",
 		"@toon-format/toon": "^2.1.0",
-		"prompts": "^2.4.2"
+		"prompts": "^2.4.2",
+		"team-toon-tack": "^2.0.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.11",
