@@ -177,12 +177,8 @@ async function init() {
   });
   const states = statesData.nodes;
 
-  // Fetch current cycle
-  const cyclesData = await selectedTeam.cycles({
-    filter: { isActive: { eq: true } },
-    first: 1
-  });
-  const currentCycle = cyclesData.nodes[0];
+  // Fetch current cycle using activeCycle (direct and accurate)
+  const currentCycle = await selectedTeam.activeCycle;
 
   // Select current user
   let currentUser = users[0];
@@ -280,7 +276,7 @@ async function init() {
     priority_order: ['urgent', 'high', 'medium', 'low', 'none'],
     current_cycle: currentCycle ? {
       id: currentCycle.id,
-      name: currentCycle.name || 'Cycle',
+      name: currentCycle.name || `Cycle #${currentCycle.number}`,
       start_date: currentCycle.startsAt?.toISOString().split('T')[0] || '',
       end_date: currentCycle.endsAt?.toISOString().split('T')[0] || ''
     } : undefined,
@@ -359,7 +355,7 @@ async function init() {
   console.log(`  User: ${currentUser.displayName || currentUser.name} (${currentUser.email})`);
   console.log(`  Label: ${defaultLabel}`);
   if (currentCycle) {
-    console.log(`  Cycle: ${currentCycle.name}`);
+    console.log(`  Cycle: ${currentCycle.name || `Cycle #${currentCycle.number}`}`);
   }
 
   console.log('\nNext steps:');

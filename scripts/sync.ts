@@ -33,22 +33,18 @@ Examples:
       .filter(Boolean)
   );
 
-  // Phase 1: Fetch and update latest active cycle
+  // Phase 1: Fetch active cycle directly from team
   console.log('Fetching latest cycle...');
   const team = await client.team(teamId);
-  const cycles = await team.cycles({
-    filter: { isActive: { eq: true } },
-    first: 1
-  });
+  const activeCycle = await team.activeCycle;
 
-  if (cycles.nodes.length === 0) {
+  if (!activeCycle) {
     console.error('No active cycle found.');
     process.exit(1);
   }
 
-  const activeCycle = cycles.nodes[0];
   const cycleId = activeCycle.id;
-  const cycleName = activeCycle.name ?? 'Cycle';
+  const cycleName = activeCycle.name ?? `Cycle #${activeCycle.number}`;
   const newCycleInfo: CycleInfo = {
     id: cycleId,
     name: cycleName,

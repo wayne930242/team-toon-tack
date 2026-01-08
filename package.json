@@ -1,6 +1,6 @@
 {
   "name": "team-toon-tack",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Linear task sync & management CLI with TOON format",
   "type": "module",
   "bin": {
