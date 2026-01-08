@@ -3,6 +3,10 @@
 
 // bin/cli.ts
 import { resolve } from "path";
+import { readFileSync } from "fs";
+var pkgPath = new URL("../package.json", import.meta.url).pathname;
+var pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+var VERSION = pkg.version;
 var COMMANDS = ["init", "sync", "work-on", "done", "help", "version"];
 function printHelp() {
   console.log(`
@@ -41,7 +45,7 @@ More info: https://github.com/wayne930242/team-toon-tack
 `);
 }
 function printVersion() {
-  console.log("team-toon-tack v1.0.0");
+  console.log(`team-toon-tack v${VERSION}`);
 }
 function parseGlobalArgs(args) {
   let dir = process.env.TOON_DIR || process.cwd();

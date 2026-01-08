@@ -88,9 +88,9 @@ After `ttt init`, your project will have:
 
 ```
 your-project/
-├── config.toon    # Team configuration (gitignore recommended)
-├── local.toon     # Personal settings (gitignore)
-└── cycle.toon     # Current cycle data (gitignore, auto-generated)
+├── config.ttt    # Team configuration (gitignore recommended)
+├── local.ttt     # Personal settings (gitignore)
+└── cycle.ttt     # Current cycle data (gitignore, auto-generated)
 ```
 
 ### Custom Config Directory
@@ -104,7 +104,7 @@ export TOON_DIR=./team
 ttt sync
 ```
 
-### config.toon
+### config.ttt
 
 Team-wide configuration (fetched from Linear):
 
@@ -130,7 +130,7 @@ current_cycle:
   name: Cycle #1
 ```
 
-### local.toon
+### local.ttt
 
 Personal settings:
 
@@ -142,7 +142,7 @@ exclude_assignees[1]: bob
 
 | Field | Description |
 |-------|-------------|
-| `current_user` | Your user key from config.toon |
+| `current_user` | Your user key from config.ttt |
 | `label` | Filter issues by label (optional) |
 | `exclude_assignees` | Hide issues from these users (optional) |
 

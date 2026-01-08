@@ -19,19 +19,19 @@ USAGE:
 
 COMMANDS:
   init      Initialize config files in current directory
-  sync      Sync issues from Linear to local cycle.toon
+  sync      Sync issues from Linear to local cycle.ttt
   work-on   Start working on a task (interactive or by ID)
   done      Mark current task as completed
   help      Show this help message
   version   Show version
 
 GLOBAL OPTIONS:
-  -d, --dir <path>    Config directory (default: current directory)
+  -d, --dir <path>    Config directory (default: .ttt)
                       Can also set via TOON_DIR environment variable
 
 EXAMPLES:
-  ttt init                      # Initialize in current directory
-  ttt init -d ./team            # Initialize in ./team directory
+  ttt init                      # Initialize .ttt directory
+  ttt init -d ./custom          # Initialize in custom directory
   ttt sync                      # Sync from Linear
   ttt work-on                   # Interactive task selection
   ttt work-on MP-123            # Work on specific issue

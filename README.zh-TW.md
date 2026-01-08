@@ -18,7 +18,7 @@
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Linear    │────▶│  ttt sync    │────▶│ cycle.toon  │
+│   Linear    │────▶│  ttt sync    │────▶│ cycle.ttt  │
 │   (雲端)    │     │               │    │  (本地)      │
 └─────────────┘     └──────────────┘     └─────────────┘
                                                 │
@@ -33,11 +33,11 @@
 
 1. **同步 (sync)**
    - 從 Linear API 抓取當前 Cycle 的任務
-   - 根據 `local.toon` 設定過濾（標籤、排除指派人）
-   - 寫入 `cycle.toon`，包含完整任務資訊
+   - 根據 `local.ttt` 設定過濾（標籤、排除指派人）
+   - 寫入 `cycle.ttt`，包含完整任務資訊
 
 2. **開始任務 (work-on)**
-   - 讀取 `cycle.toon` 中的待處理任務
+   - 讀取 `cycle.ttt` 中的待處理任務
    - 更新本地狀態為 `in-progress`
    - 同步更新 Linear 狀態為 "In Progress"
 
@@ -50,20 +50,20 @@
 ### 檔案結構與用途
 
 ```
-.toon/                    # 配置目錄（建議 gitignore）
-├── config.toon          # 團隊配置
+.ttt/                    # 配置目錄（建議 gitignore）
+├── config.ttt          # 團隊配置
 │   ├── teams            # Linear 團隊 ID 映射
 │   ├── users            # 成員 ID/email 映射
 │   ├── labels           # 標籤 ID 映射
 │   ├── statuses         # 狀態定義
 │   └── current_cycle    # 當前 Cycle 資訊
 │
-├── local.toon           # 個人設定（必須 gitignore）
+├── local.ttt           # 個人設定（必須 gitignore）
 │   ├── current_user     # 你的 user key
 │   ├── label            # 過濾標籤
 │   └── exclude_assignees # 排除的指派人
 │
-└── cycle.toon           # 任務資料（自動產生）
+└── cycle.ttt           # 任務資料（自動產生）
     ├── cycleId          # Cycle UUID
     ├── cycleName        # Cycle 名稱
     ├── updatedAt        # 最後同步時間
@@ -98,7 +98,7 @@ bun add -g team-toon-tack
 export LINEAR_API_KEY="lin_api_xxxxx"
 
 # 2. 初始化（會從 Linear 抓取團隊資料）
-mkdir .toon && cd .toon
+mkdir .ttt && cd .ttt
 ttt init
 
 # 3. 同步任務
@@ -114,13 +114,13 @@ ttt work-on
 
 ```bash
 # 早上開始工作前，同步最新任務
-ttt sync -d .toon
+ttt sync -d .ttt
 
 # 查看待處理任務並選擇一個開始
-ttt work-on -d .toon
+ttt work-on -d .ttt
 
 # Claude Code 現在可以讀取任務內容
-# 在 .toon/cycle.toon 中找到任務描述、附件等
+# 在 .ttt/cycle.ttt 中找到任務描述、附件等
 ```
 
 ### 情境 2：搭配 Claude Code 自動化
@@ -137,14 +137,14 @@ description: Sync Linear issues to local TOON file
 
 # Sync Linear Issues
 
-Fetch current cycle's issues from Linear to `.toon/cycle.toon`.
+Fetch current cycle's issues from Linear to `.ttt/cycle.ttt`.
 
 ## Process
 
 ### 1. Run Sync
 
 \`\`\`bash
-ttt sync -d .toon
+ttt sync -d .ttt
 \`\`\`
 
 ### 2. Review Output
@@ -179,7 +179,7 @@ Select a task and update status to "In Progress" on both local and Linear.
 ### 1. Run Command
 
 \`\`\`bash
-ttt work-on -d .toon $ARGUMENTS
+ttt work-on -d .ttt $ARGUMENTS
 \`\`\`
 
 ### 2. Review Issue Details
@@ -216,7 +216,7 @@ Mark a task as done and update Linear with commit details.
 
 ### 1. Determine Issue ID
 
-Check `.toon/cycle.toon` for tasks with `localStatus: in-progress`.
+Check `.ttt/cycle.ttt` for tasks with `localStatus: in-progress`.
 
 ### 2. Write Fix Summary
 
@@ -228,7 +228,7 @@ Prepare a concise summary (1-3 sentences) covering:
 ### 3. Run Command
 
 \`\`\`bash
-ttt done -d .toon $ARGUMENTS -m "修復說明"
+ttt done -d .ttt $ARGUMENTS -m "修復說明"
 \`\`\`
 
 ## What It Does
@@ -236,7 +236,7 @@ ttt done -d .toon $ARGUMENTS -m "修復說明"
 - Linear issue status → "Done"
 - Adds comment with commit hash, message, and diff summary
 - Parent issue (if exists) → "Testing"
-- Local status → `completed` in `.toon/cycle.toon`
+- Local status → `completed` in `.ttt/cycle.ttt`
 ```
 
 #### 使用方式
@@ -263,7 +263,7 @@ Claude Code 會自動：
 git add . && git commit -m "feat: implement feature X"
 
 # 標記任務完成，會自動在 Linear 新增留言
-ttt done -d .toon -m "實作了 X 功能，修改了 Y 元件"
+ttt done -d .ttt -m "實作了 X 功能，修改了 Y 元件"
 ```
 
 Linear 上會自動新增留言：
@@ -287,7 +287,7 @@ Linear 上會自動新增留言：
 
 前端工程師只想看前端任務：
 ```toon
-# local.toon
+# local.ttt
 current_user: alice
 label: Frontend
 exclude_assignees[1]: bob    # 排除後端同事的任務
@@ -296,7 +296,7 @@ exclude_assignees[2]: charlie
 
 後端工程師的設定：
 ```toon
-# local.toon
+# local.ttt
 current_user: bob
 label: Backend
 ```
@@ -306,12 +306,12 @@ label: Backend
 ```bash
 # 專案 A
 cd project-a
-ttt sync -d .toon
+ttt sync -d .ttt
 
 # 專案 B（不同 Linear 團隊）
 cd ../project-b
-ttt init -d .toon  # 初始化不同的配置
-ttt sync -d .toon
+ttt init -d .ttt  # 初始化不同的配置
+ttt sync -d .ttt
 ```
 
 ### 情境 6：CI/CD 整合
@@ -328,11 +328,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm install -g team-toon-tack
-      - run: ttt sync -d .toon
+      - run: ttt sync -d .ttt
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
       - run: |
-          git add .toon/cycle.toon
+          git add .ttt/cycle.ttt
           git commit -m "chore: sync linear tasks" || true
           git push
 ```
@@ -411,7 +411,7 @@ TOON 是一種人類可讀的資料格式，類似 YAML 但更簡潔。相比 JS
 - 支援註解
 - AI 助手更容易理解
 
-### Q: config.toon 可以提交到 Git 嗎？
+### Q: config.ttt 可以提交到 Git 嗎？
 
 可以，但建議 gitignore。因為包含：
 - 團隊成員的 email
@@ -421,7 +421,7 @@ TOON 是一種人類可讀的資料格式，類似 YAML 但更簡潔。相比 JS
 
 ### Q: 如何處理衝突？
 
-`cycle.toon` 是自動產生的，直接用 `ttt sync` 重新同步即可。
+`cycle.ttt` 是自動產生的，直接用 `ttt sync` 重新同步即可。
 
 ### Q: 支援哪些 Linear 功能？
 

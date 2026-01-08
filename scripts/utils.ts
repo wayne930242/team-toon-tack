@@ -15,8 +15,8 @@ function getBaseDir(): string {
     return path.resolve(process.env.LINEAR_TOON_DIR);
   }
 
-  // 3. Default: current working directory
-  return process.cwd();
+  // 3. Default: .ttt directory in current working directory
+  return path.join(process.cwd(), '.ttt');
 }
 
 const BASE_DIR = getBaseDir();

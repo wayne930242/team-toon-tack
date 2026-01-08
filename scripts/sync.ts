@@ -7,7 +7,7 @@ async function sync() {
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`Usage: ttt sync
 
-Sync issues from Linear to local cycle.toon file.
+Sync issues from Linear to local cycle.ttt file.
 
 What it does:
   - Fetches active cycle from Linear
@@ -17,7 +17,7 @@ What it does:
 
 Examples:
   ttt sync              # Sync in current directory
-  ttt sync -d .toon     # Sync using .toon directory`);
+  ttt sync -d .ttt     # Sync using .ttt directory`);
     process.exit(0);
   }
 
