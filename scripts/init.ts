@@ -378,6 +378,7 @@ async function updateGitignore(tttDir: string, interactive: boolean) {
 
 async function installClaudeCommands(
 	interactive: boolean,
+	statusSource: "remote" | "local",
 ): Promise<{ installed: boolean; prefix: string }> {
 	if (!interactive) {
 		return { installed: false, prefix: "" };
@@ -515,6 +516,35 @@ async function installClaudeCommands(
 				/^(---\s*\n[\s\S]*?name:\s*)(\S+)/m,
 				`$1${prefix}${baseName}`,
 			);
+		}
+
+		// Modify content based on statusSource for work-on and done-job
+		if (statusSource === "local") {
+			if (baseName === "work-on" || baseName.endsWith("work-on")) {
+				// Update description for local mode
+				content = content.replace(
+					/Select a task and update status to "In Progress" on both local and Linear\./,
+					'Select a task and update local status to "In Progress". (Linear will be updated when you run `sync --update`)',
+				);
+				// Add reminder after Complete section
+				content = content.replace(
+					/Use `?\/done-job`? to mark task as completed/,
+					"Use `/done-job` to mark task as completed\n\n### 7. Sync to Linear\n\nWhen ready to update Linear with all your changes:\n\n```bash\nttt sync --update\n```",
+				);
+			}
+			if (baseName === "done-job" || baseName.endsWith("done-job")) {
+				// Update description for local mode
+				content = content.replace(
+					/Mark a task as done and update Linear with commit details\./,
+					"Mark a task as done locally. (Run `ttt sync --update` to push changes to Linear)",
+				);
+				// Add reminder at the end
+				content = content.replace(
+					/## What It Does\n\n- Linear issue status → "Done"/,
+					"## What It Does\n\n- Local status → `completed`",
+				);
+				content += `\n## Sync to Linear\n\nAfter completing tasks, push all changes to Linear:\n\n\`\`\`bash\nttt sync --update\n\`\`\`\n`;
+			}
 		}
 
 		await fs.writeFile(destPath, content, "utf-8");
@@ -698,7 +728,7 @@ async function init() {
 
 	// Install Claude Code commands
 	const { installed: commandsInstalled, prefix: commandPrefix } =
-		await installClaudeCommands(options.interactive ?? true);
+		await installClaudeCommands(options.interactive ?? true, statusSource);
 
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
