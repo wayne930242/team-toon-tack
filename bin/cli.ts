@@ -52,7 +52,7 @@ function printVersion() {
 }
 
 function parseGlobalArgs(args: string[]): { dir: string; commandArgs: string[] } {
-  let dir = process.env.TOON_DIR || process.cwd();
+  let dir = process.env.TOON_DIR || resolve(process.cwd(), '.ttt');
   const commandArgs: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
