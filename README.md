@@ -1,5 +1,7 @@
 # team-toon-tack (ttt)
 
+[繁體中文](./README.zh-TW.md) | English
+
 CLI tool for syncing and managing Linear issues with local TOON format.
 
 ## Installation
