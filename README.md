@@ -48,7 +48,7 @@ During init, you'll be prompted to select your task source (Linear or Trello) an
 **For Trello:**
 - **Board**: The Trello board to sync
 - **User**: Your Trello username
-- **Status mappings**: Map Trello lists to Todo/In Progress/Done
+- **Status mappings**: Map Trello lists to Todo (supports multiple lists)/In Progress/Done
 - **Label filter**: Optional label to filter cards
 
 ### Completion Modes (Linear only)

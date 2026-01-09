@@ -48,7 +48,7 @@ ttt init
 **Trello：**
 - **看板**：要同步的 Trello 看板
 - **使用者**：你的 Trello 使用者名稱
-- **狀態映射**：將 Trello 列表映射到 Todo/In Progress/Done
+- **狀態映射**：將 Trello 列表映射到 Todo（支援多個列表）/In Progress/Done
 - **標籤過濾**：可選的卡片過濾標籤
 
 ### 完成模式（僅 Linear）
