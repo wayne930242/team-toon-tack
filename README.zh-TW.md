@@ -112,10 +112,13 @@ ttt work-on next         # 自動選擇最高優先級
 標記任務完成。
 
 ```bash
-ttt done                    # 若只有一個進行中，自動選擇
-ttt done MP-123             # 指定 issue
-ttt done -m "修復了錯誤"      # 附上完成說明
+ttt done                         # 若只有一個進行中，自動選擇
+ttt done MP-123                  # 指定 issue
+ttt done -m "修復了錯誤"           # 附上完成說明
+ttt done MP-123 --from-remote    # 從 Linear 取得（略過本地資料檢查）
 ```
+
+當 issue 存在於 Linear 但未同步到本地資料時，使用 `--from-remote`（或 `-r`）。
 
 ### `ttt status`
 

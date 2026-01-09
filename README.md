@@ -112,10 +112,13 @@ ttt work-on next         # Auto-select highest priority
 Mark task as completed.
 
 ```bash
-ttt done                    # Auto-select if only one in-progress
-ttt done MP-123             # Specific issue
-ttt done -m "Fixed the bug" # With completion message
+ttt done                         # Auto-select if only one in-progress
+ttt done MP-123                  # Specific issue
+ttt done -m "Fixed the bug"      # With completion message
+ttt done MP-123 --from-remote    # Fetch from Linear (bypasses local data check)
 ```
+
+Use `--from-remote` (or `-r`) when the issue exists in Linear but not in local sync data.
 
 ### `ttt status`
 

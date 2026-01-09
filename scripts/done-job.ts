@@ -6,7 +6,7 @@ import {
 	getWorkflowStates,
 	updateIssueStatus,
 } from "./lib/linear.js";
-import { syncSingleIssue } from "./lib/sync.js";
+import { fetchIssueDetail, syncSingleIssue } from "./lib/sync.js";
 import {
 	type CompletionMode,
 	type Config,
@@ -15,6 +15,7 @@ import {
 	loadCycleData,
 	loadLocalConfig,
 	type QaPmTeamConfig,
+	type Task,
 } from "./utils.js";
 
 // Helper function to update parent issue to a specific status
@@ -136,109 +137,152 @@ async function updateParentToTesting(
 	}
 }
 
-function parseArgs(args: string[]): { issueId?: string; message?: string } {
+function parseArgs(args: string[]): {
+	issueId?: string;
+	message?: string;
+	fromRemote: boolean;
+} {
 	let issueId: string | undefined;
 	let message: string | undefined;
+	let fromRemote = false;
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 		if (arg === "-m" || arg === "--message") {
 			message = args[++i];
+		} else if (arg === "--from-remote" || arg === "-r") {
+			fromRemote = true;
 		} else if (!arg.startsWith("-")) {
 			issueId = arg;
 		}
 	}
 
-	return { issueId, message };
+	return { issueId, message, fromRemote };
 }
 
 async function doneJob() {
 	const args = process.argv.slice(2);
 
 	if (args.includes("--help") || args.includes("-h")) {
-		console.log(`Usage: ttt done [issue-id] [-m message]
+		console.log(`Usage: ttt done [issue-id] [-m message] [--from-remote]
 
 Arguments:
   issue-id          Issue ID (e.g., MP-624). Optional if only one task is in-progress
 
 Options:
   -m, --message     AI summary message describing the fix
+  -r, --from-remote Fetch issue directly from Linear (bypasses local data check)
+                    Use when issue exists in Linear but not in local sync data
 
 Examples:
   ttt done                         # Complete current in-progress task
   ttt done MP-624                  # Complete specific task
   ttt done -m "Fixed null check"   # With completion message
-  ttt done MP-624 -m "Refactored"  # Specific task with message`);
+  ttt done MP-624 -m "Refactored"  # Specific task with message
+  ttt done MP-624 --from-remote    # Complete issue fetched directly from Linear`);
 		process.exit(0);
 	}
 
-	const { issueId: argIssueId, message: argMessage } = parseArgs(args);
+	const {
+		issueId: argIssueId,
+		message: argMessage,
+		fromRemote,
+	} = parseArgs(args);
 	let issueId = argIssueId;
 
 	const config = await loadConfig();
 	const localConfig = await loadLocalConfig();
 	const data = await loadCycleData();
 
-	if (!data) {
-		console.error("No cycle data found. Run /sync-linear first.");
-		process.exit(1);
-	}
+	let task: Task;
 
-	// Find in-progress tasks
-	const inProgressTasks = data.tasks.filter(
-		(t) => t.localStatus === "in-progress",
-	);
-
-	if (inProgressTasks.length === 0) {
-		console.log("沒有進行中的任務");
-		process.exit(0);
-	}
-
-	// Issue Resolution
-	if (!issueId) {
-		if (inProgressTasks.length === 1) {
-			issueId = inProgressTasks[0].id;
-			console.log(`Auto-selected: ${issueId}`);
-		} else if (process.stdin.isTTY) {
-			const choices = inProgressTasks.map((task) => ({
-				title: `${task.id}: ${task.title}`,
-				value: task.id,
-				description: task.labels.join(", "),
-			}));
-
-			const response = await prompts({
-				type: "select",
-				name: "issueId",
-				message: "選擇要完成的任務:",
-				choices: choices,
-			});
-
-			if (!response.issueId) {
-				console.log("已取消");
-				process.exit(0);
-			}
-			issueId = response.issueId;
-		} else {
-			console.error("多個進行中任務，請指定 issue ID:");
-			for (const t of inProgressTasks) {
-				console.log(`  - ${t.id}: ${t.title}`);
-			}
+	// --from-remote mode: fetch directly from Linear
+	if (fromRemote) {
+		if (!issueId) {
+			console.error("--from-remote requires an issue ID.");
 			process.exit(1);
 		}
-	}
 
-	// Find task
-	const task = data.tasks.find(
-		(t) => t.id === issueId || t.id === `MP-${issueId}`,
-	);
-	if (!task) {
-		console.error(`Issue ${issueId} not found in current cycle.`);
-		process.exit(1);
-	}
+		console.log(`Fetching ${issueId} from Linear...`);
+		const remoteTask = await fetchIssueDetail(issueId);
 
-	if (task.localStatus !== "in-progress") {
-		console.log(`⚠️ 任務 ${task.id} 不在進行中狀態 (目前: ${task.localStatus})`);
-		process.exit(1);
+		if (!remoteTask) {
+			console.error(`Issue ${issueId} not found in Linear.`);
+			process.exit(1);
+		}
+
+		// Set localStatus to in-progress for --from-remote mode
+		remoteTask.localStatus = "in-progress";
+		task = remoteTask;
+		console.log(`Fetched: ${task.id} - ${task.title}`);
+	} else {
+		// Normal mode: use local data
+		if (!data) {
+			console.error("No cycle data found. Run 'ttt sync' first.");
+			process.exit(1);
+		}
+
+		// Find in-progress tasks
+		const inProgressTasks = data.tasks.filter(
+			(t) => t.localStatus === "in-progress",
+		);
+
+		if (inProgressTasks.length === 0) {
+			console.log("沒有進行中的任務");
+			process.exit(0);
+		}
+
+		// Issue Resolution
+		if (!issueId) {
+			if (inProgressTasks.length === 1) {
+				issueId = inProgressTasks[0].id;
+				console.log(`Auto-selected: ${issueId}`);
+			} else if (process.stdin.isTTY) {
+				const choices = inProgressTasks.map((t) => ({
+					title: `${t.id}: ${t.title}`,
+					value: t.id,
+					description: t.labels.join(", "),
+				}));
+
+				const response = await prompts({
+					type: "select",
+					name: "issueId",
+					message: "選擇要完成的任務:",
+					choices: choices,
+				});
+
+				if (!response.issueId) {
+					console.log("已取消");
+					process.exit(0);
+				}
+				issueId = response.issueId;
+			} else {
+				console.error("多個進行中任務，請指定 issue ID:");
+				for (const t of inProgressTasks) {
+					console.log(`  - ${t.id}: ${t.title}`);
+				}
+				process.exit(1);
+			}
+		}
+
+		// Find task in local data
+		const localTask = data.tasks.find(
+			(t) => t.id === issueId || t.id === `MP-${issueId}`,
+		);
+		if (!localTask) {
+			console.error(`Issue ${issueId} not found in local data.`);
+			console.error(`Hint: Run 'ttt sync ${issueId}' or use '--from-remote' flag.`);
+			process.exit(1);
+		}
+
+		if (localTask.localStatus !== "in-progress") {
+			console.log(
+				`⚠️ 任務 ${localTask.id} 不在進行中狀態 (目前: ${localTask.localStatus})`,
+			);
+			process.exit(1);
+		}
+
+		task = localTask;
 	}
 
 	// Get latest commit

@@ -80,10 +80,13 @@ ttt work-on MP-624    # Start working on specific issue
 Mark task as completed.
 
 ```bash
-ttt done              # Complete current in-progress task (if only one)
-ttt done MP-624       # Complete specific issue
-ttt done -m "message" # Complete with a completion message
+ttt done                         # Complete current in-progress task (if only one)
+ttt done MP-624                  # Complete specific issue
+ttt done -m "message"            # Complete with a completion message
+ttt done MP-624 --from-remote    # Fetch from Linear (bypasses local data check)
 ```
+
+Use `--from-remote` (or `-r`) when the issue exists in Linear but not in local sync data.
 
 ### `ttt status`
 
@@ -224,6 +227,8 @@ Run `ttt sync` to fetch issues from Linear.
 
 ### "Issue not found in local data"
 The issue may not be synced. Try:
+- Use `ttt done MP-624 --from-remote` to complete directly from Linear
+- Run `ttt sync MP-624` to sync the specific issue
 - Run `ttt sync --all` to fetch all issues including completed
 - Use `ttt show MP-624 --remote` to fetch directly from Linear
 - Check if issue is in active cycle
