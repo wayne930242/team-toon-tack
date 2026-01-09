@@ -14,7 +14,7 @@
 - **QA 團隊支援** — 完成開發任務時自動將 QA 團隊的 parent issue 更新為「Testing」
 - **附件下載** — 自動下載 Linear 圖片和檔案到本地 `.ttt/output/`，供 AI 視覺分析
 - **阻塞狀態** — 等待外部依賴時可設定任務為 blocked
-- **自動安裝指令** — `ttt init` 可自動安裝 Claude Code commands，支援自訂前綴
+- **Claude Code Plugin** — 安裝 plugin 即可使用 `/ttt-*` 指令和自動啟用的技能
 - **Cycle 歷史保存** — 本地 `.toon` 檔案保留 cycle 資料，方便 AI 檢閱
 - **使用者過濾** — 只顯示指派給你或未指派的工作
 
@@ -36,7 +36,6 @@ ttt init
 - **QA 團隊**：跨團隊 parent issue 更新，各自設定 testing 狀態（可選）
 - **完成模式**：任務完成時的處理方式（見下方說明）
 - **狀態來源**：`remote`（即時更新 Linear）或 `local`（離線工作，用 `ttt sync --update` 同步）
-- **Claude Code commands**：自動安裝，可選前綴（如 `/ttt:work-on`）
 
 ### 完成模式
 
@@ -47,17 +46,30 @@ ttt init
 | `upstream_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent，fallback 到開發團隊的 testing 狀態。設定 QA 團隊時的預設值。 |
 | `upstream_not_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent 不做 fallback。 |
 
-### 2. 每日工作流
-
-在 Claude Code 中：
+### 2. 安裝 Claude Code Plugin（選擇性）
 
 ```
-/sync              # 從 Linear 取得當前 cycle 所有 issue
-/work-on next      # 挑選最高優先級任務並開始工作
-/done-job          # 完成任務，附上 AI 生成的摘要
+/plugin marketplace add wayne930242/team-toon-tack
+/plugin install team-toon-tack@wayne930242
 ```
 
-就這樣。
+### 3. 每日工作流
+
+在 Claude Code 中（安裝 plugin 後）：
+
+```
+/ttt-sync              # 從 Linear 取得當前 cycle 所有 issue
+/ttt-work-on next      # 挑選最高優先級任務並開始工作
+/ttt-done              # 完成任務，附上 AI 生成的摘要
+```
+
+或直接使用 CLI：
+
+```bash
+ttt sync
+ttt work-on next
+ttt done -m "完成任務"
+```
 
 ---
 
@@ -116,6 +128,15 @@ ttt status MP-123 --set done    # 標記為完成
 ttt status MP-123 --set blocked # 設為阻塞（等待外部依賴）
 ```
 
+### `ttt get-issue`
+
+從 Linear 取得並顯示 issue 詳細資訊。
+
+```bash
+ttt get-issue MP-123           # 從 Linear 取得並顯示
+ttt get-issue MP-123 --local   # 只從本地資料顯示
+```
+
 ### `ttt config`
 
 配置設定。
@@ -146,6 +167,29 @@ your-project/
 |------|------|
 | `LINEAR_API_KEY` | **必填**。你的 Linear API 金鑰 |
 | `TOON_DIR` | 配置目錄（預設：`.ttt`） |
+
+## Claude Code Plugin
+
+安裝 plugin 以整合 Claude Code：
+
+```
+/plugin marketplace add wayne930242/team-toon-tack
+/plugin install team-toon-tack@wayne930242
+```
+
+### 可用指令
+
+| 指令 | 說明 |
+|------|------|
+| `/ttt-sync` | 同步 Linear issue 到本地 |
+| `/ttt-work-on` | 開始處理任務 |
+| `/ttt-done` | 標記當前任務完成 |
+| `/ttt-status` | 顯示或修改任務狀態 |
+| `/ttt-get-issue` | 取得並顯示 issue 詳情 |
+
+### 自動啟用技能
+
+Plugin 包含 `linear-task-manager` 技能，在處理 Linear 任務時會自動啟用，提供工作流程指導和最佳實踐。
 
 ## 授權
 

@@ -1,0 +1,18 @@
+{
+	"name": "team-toon-tack",
+	"description": "Linear task sync & management CLI for Claude Code - saves tokens vs MCP",
+	"version": "2.3.0",
+	"author": {
+		"name": "wayne930242",
+		"email": "wayne930242@gmail.com"
+	},
+	"repository": "https://github.com/wayne930242/team-toon-tack",
+	"license": "MIT",
+	"keywords": [
+		"claude-code",
+		"linear",
+		"task-management",
+		"workflow",
+		"productivity"
+	]
+}

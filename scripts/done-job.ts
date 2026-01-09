@@ -300,7 +300,9 @@ Examples:
 						config,
 					);
 					if (result.success) {
-						console.log(`Linear: Parent ${task.parentIssueId} → ${transitions.done}`);
+						console.log(
+							`Linear: Parent ${task.parentIssueId} → ${transitions.done}`,
+						);
 					}
 				}
 				break;
@@ -326,7 +328,9 @@ Examples:
 							config,
 						);
 						if (result.success) {
-							console.log(`Linear: Parent ${task.parentIssueId} → ${result.testingStatus}`);
+							console.log(
+								`Linear: Parent ${task.parentIssueId} → ${result.testingStatus}`,
+							);
 						}
 					}
 				} else {

@@ -16,6 +16,7 @@ const COMMANDS = [
 	"work-on",
 	"done",
 	"status",
+	"get-issue",
 	"config",
 	"help",
 	"version",
@@ -30,14 +31,15 @@ USAGE:
   ttt <command> [options]
 
 COMMANDS:
-  init      Initialize config files in current directory
-  sync      Sync issues from Linear to local cycle.ttt
-  work-on   Start working on a task (interactive or by ID)
-  done      Mark current task as completed
-  status    Show or modify task status
-  config    Configure settings (status mappings, filters)
-  help      Show this help message
-  version   Show version
+  init       Initialize config files in current directory
+  sync       Sync issues from Linear to local cycle.ttt
+  work-on    Start working on a task (interactive or by ID)
+  done       Mark current task as completed
+  status     Show or modify task status
+  get-issue  Fetch and display issue details from Linear
+  config     Configure settings (status mappings, filters)
+  help       Show this help message
+  version    Show version
 
 GLOBAL OPTIONS:
   -d, --dir <path>    Config directory (default: .ttt)
@@ -52,6 +54,7 @@ EXAMPLES:
   ttt work-on next              # Auto-select highest priority
   ttt done                      # Complete current task
   ttt done -m "Fixed the bug"   # With completion message
+  ttt get-issue MP-123          # Fetch issue details from Linear
 
 ENVIRONMENT:
   LINEAR_API_KEY    Required. Your Linear API key
@@ -137,6 +140,10 @@ async function main() {
 			case "status":
 				process.argv = ["node", "status.js", ...commandArgs];
 				await import(`${scriptDir}status.js`);
+				break;
+			case "get-issue":
+				process.argv = ["node", "get-issue.js", ...commandArgs];
+				await import(`${scriptDir}get-issue.js`);
 				break;
 			case "config":
 				process.argv = ["node", "config.js", ...commandArgs];

@@ -1,12 +1,12 @@
 import type {
 	CompletionMode,
 	Config,
+	LabelConfig,
 	LocalConfig,
 	QaPmTeamConfig,
 	StatusTransitions,
 	TeamConfig,
 	UserConfig,
-	LabelConfig,
 } from "../utils.js";
 
 export interface LinearTeam {

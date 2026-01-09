@@ -14,7 +14,7 @@ Optimized Linear workflow for Claude Code — saves significant tokens compared 
 - **QA Team Support** — Auto-update parent issues in QA team to "Testing" when completing dev tasks
 - **Attachment Download** — Auto-download Linear images and files to local `.ttt/output/` for AI vision analysis
 - **Blocked Status** — Set tasks as blocked when waiting on external dependencies
-- **Auto Command Setup** — `ttt init` can install Claude Code commands with custom prefix
+- **Claude Code Plugin** — Install plugin for `/ttt-*` commands and auto-activated skills
 - **Cycle History** — Local `.toon` files preserve cycle data for AI context
 - **User Filtering** — Only see issues assigned to you or unassigned
 
@@ -36,7 +36,6 @@ During init, you'll configure:
 - **QA team(s)**: For cross-team parent issue updates, each with its own testing status (optional)
 - **Completion mode**: How task completion is handled (see below)
 - **Status source**: `remote` (update Linear immediately) or `local` (work offline, sync with `ttt sync --update`)
-- **Claude Code commands**: Auto-install with optional prefix (e.g., `/ttt:work-on`)
 
 ### Completion Modes
 
@@ -47,17 +46,30 @@ During init, you'll configure:
 | `upstream_strict` | Mark task as Done + parent to Testing. Falls back to dev testing if no parent. Default when QA team configured. |
 | `upstream_not_strict` | Mark task as Done + parent to Testing. No fallback if no parent. |
 
-### 2. Daily Workflow
-
-In Claude Code:
+### 2. Install Claude Code Plugin (Optional)
 
 ```
-/sync              # Fetch all Linear issues for current cycle
-/work-on next      # Pick highest priority task & start working
-/done-job          # Complete task with AI-generated summary
+/plugin marketplace add wayne930242/team-toon-tack
+/plugin install team-toon-tack@wayne930242
 ```
 
-That's it.
+### 3. Daily Workflow
+
+In Claude Code (with plugin installed):
+
+```
+/ttt-sync              # Fetch all Linear issues for current cycle
+/ttt-work-on next      # Pick highest priority task & start working
+/ttt-done              # Complete task with AI-generated summary
+```
+
+Or using CLI directly:
+
+```bash
+ttt sync
+ttt work-on next
+ttt done -m "Completed the task"
+```
 
 ---
 
@@ -116,6 +128,15 @@ ttt status MP-123 --set done    # Mark as done
 ttt status MP-123 --set blocked # Set as blocked (waiting on dependency)
 ```
 
+### `ttt get-issue`
+
+Fetch and display issue details from Linear.
+
+```bash
+ttt get-issue MP-123           # Fetch from Linear and display
+ttt get-issue MP-123 --local   # Show from local data only
+```
+
 ### `ttt config`
 
 Configure settings.
@@ -146,6 +167,29 @@ your-project/
 |----------|-------------|
 | `LINEAR_API_KEY` | **Required.** Your Linear API key |
 | `TOON_DIR` | Config directory (default: `.ttt`) |
+
+## Claude Code Plugin
+
+Install the plugin for Claude Code integration:
+
+```
+/plugin marketplace add wayne930242/team-toon-tack
+/plugin install team-toon-tack@wayne930242
+```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/ttt-sync` | Sync Linear issues to local cycle data |
+| `/ttt-work-on` | Start working on a task |
+| `/ttt-done` | Mark current task as completed |
+| `/ttt-status` | Show or modify task status |
+| `/ttt-get-issue` | Fetch and display issue details |
+
+### Auto-Activated Skill
+
+The plugin includes a `linear-task-manager` skill that automatically activates when working with Linear tasks, providing workflow guidance and best practices.
 
 ## License
 

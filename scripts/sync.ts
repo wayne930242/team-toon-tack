@@ -1,4 +1,11 @@
 import {
+	clearIssueImages,
+	downloadLinearImage,
+	ensureOutputDir,
+	extractLinearImageUrls,
+	isLinearImageUrl,
+} from "./lib/images.js";
+import {
 	type Attachment,
 	type Comment,
 	type CycleData,
@@ -14,13 +21,6 @@ import {
 	saveCycleData,
 	type Task,
 } from "./utils.js";
-import {
-	clearIssueImages,
-	downloadLinearImage,
-	ensureOutputDir,
-	extractLinearImageUrls,
-	isLinearImageUrl,
-} from "./lib/images.js";
 
 async function sync() {
 	const args = process.argv.slice(2);

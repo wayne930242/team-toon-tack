@@ -3,14 +3,18 @@ import {
 	type Attachment,
 	type Comment,
 	type Config,
-	type LocalConfig,
-	type Task,
 	getLinearClient,
+	getPrioritySortIndex,
+	type LocalConfig,
 	loadCycleData,
 	saveCycleData,
-	getPrioritySortIndex,
+	type Task,
 } from "../utils.js";
 import { getStatusTransitions } from "./linear.js";
+
+export interface FetchIssueOptions {
+	client?: LinearClient;
+}
 
 export interface SyncIssueOptions {
 	config: Config;
@@ -20,18 +24,13 @@ export interface SyncIssueOptions {
 }
 
 /**
- * Sync a single issue from Linear and update local cycle data
- * Returns the updated task or null if issue not found
+ * Fetch issue details from Linear without saving to local data
+ * Returns Task object or null if issue not found
  */
-export async function syncSingleIssue(
+export async function fetchIssueDetail(
 	issueId: string,
-	options: SyncIssueOptions,
+	options: FetchIssueOptions = {},
 ): Promise<Task | null> {
-	const {
-		config,
-		localConfig: _localConfig,
-		preserveLocalStatus = true,
-	} = options;
 	const client = options.client ?? getLinearClient();
 
 	// Search for the issue
@@ -41,7 +40,6 @@ export async function syncSingleIssue(
 	);
 
 	if (!matchingIssue) {
-		console.error(`Issue ${issueId} not found in Linear.`);
 		return null;
 	}
 
@@ -87,35 +85,12 @@ export async function syncSingleIssue(
 		}),
 	);
 
-	// Determine local status
-	let localStatus: Task["localStatus"] = "pending";
-	const existingData = await loadCycleData();
-
-	if (preserveLocalStatus && existingData) {
-		const existingTask = existingData.tasks.find((t) => t.id === issueId);
-		if (existingTask) {
-			localStatus = existingTask.localStatus;
-		}
-	}
-
-	// Map remote status to local status if not preserving
-	if (!preserveLocalStatus && state) {
-		const transitions = getStatusTransitions(config);
-		if (state.name === transitions.done) {
-			localStatus = "completed";
-		} else if (state.name === transitions.in_progress) {
-			localStatus = "in-progress";
-		} else {
-			localStatus = "pending";
-		}
-	}
-
 	const task: Task = {
 		id: issue.identifier,
 		linearId: issue.id,
 		title: issue.title,
 		status: state ? state.name : "Unknown",
-		localStatus: localStatus,
+		localStatus: "pending", // Default, will be overridden by sync if needed
 		assignee: assigneeEmail,
 		priority: issue.priority,
 		labels: labelNames,
@@ -126,6 +101,54 @@ export async function syncSingleIssue(
 		attachments: attachments.length > 0 ? attachments : undefined,
 		comments: comments.length > 0 ? comments : undefined,
 	};
+
+	return task;
+}
+
+/**
+ * Sync a single issue from Linear and update local cycle data
+ * Returns the updated task or null if issue not found
+ */
+export async function syncSingleIssue(
+	issueId: string,
+	options: SyncIssueOptions,
+): Promise<Task | null> {
+	const {
+		config,
+		localConfig: _localConfig,
+		preserveLocalStatus = true,
+	} = options;
+	const client = options.client ?? getLinearClient();
+
+	// Fetch issue details using shared function
+	const task = await fetchIssueDetail(issueId, { client });
+
+	if (!task) {
+		console.error(`Issue ${issueId} not found in Linear.`);
+		return null;
+	}
+
+	// Determine local status
+	const existingData = await loadCycleData();
+
+	if (preserveLocalStatus && existingData) {
+		const existingTask = existingData.tasks.find((t) => t.id === issueId);
+		if (existingTask) {
+			task.localStatus = existingTask.localStatus;
+		}
+	}
+
+	// Map remote status to local status if not preserving
+	if (!preserveLocalStatus) {
+		const transitions = getStatusTransitions(config);
+		if (task.status === transitions.done) {
+			task.localStatus = "completed";
+		} else if (task.status === transitions.in_progress) {
+			task.localStatus = "in-progress";
+		} else {
+			task.localStatus = "pending";
+		}
+	}
 
 	// Update cycle data
 	if (existingData) {

@@ -1,4 +1,5 @@
 import prompts from "prompts";
+import { getDefaultStatusTransitions } from "../lib/config-builder.js";
 import {
 	type CompletionMode,
 	type Config,
@@ -7,7 +8,6 @@ import {
 	type QaPmTeamConfig,
 	saveLocalConfig,
 } from "../utils.js";
-import { getDefaultStatusTransitions } from "../lib/config-builder.js";
 
 interface LinearState {
 	id: string;

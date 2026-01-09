@@ -1,5 +1,5 @@
 import prompts from "prompts";
-import { PRIORITY_LABELS, displayTaskFull } from "./lib/display.js";
+import { displayTaskFull, PRIORITY_LABELS } from "./lib/display.js";
 import { getStatusTransitions, updateIssueStatus } from "./lib/linear.js";
 import {
 	getPrioritySortIndex,

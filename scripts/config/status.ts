@@ -3,8 +3,8 @@ import { getWorkflowStates } from "../lib/linear.js";
 import {
 	type Config,
 	type LocalConfig,
-	saveConfig,
 	type StatusTransitions,
+	saveConfig,
 } from "../utils.js";
 
 export async function configureStatus(

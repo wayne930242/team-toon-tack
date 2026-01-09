@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 import { decode, encode } from "@toon-format/toon";
 import prompts from "prompts";
 import {
@@ -523,182 +524,81 @@ async function updateGitignore(tttDir: string, interactive: boolean) {
 	}
 }
 
-async function installClaudeCommands(
+async function showPluginInstallInstructions(
 	interactive: boolean,
-	statusSource: "remote" | "local",
-): Promise<{ installed: boolean; prefix: string }> {
+): Promise<boolean> {
 	if (!interactive) {
-		return { installed: false, prefix: "" };
+		return false;
 	}
 
-	console.log("\n🤖 Claude Code Commands:");
+	console.log("\n🤖 Claude Code Plugin:");
 
-	// Ask if user wants to install commands
-	const { install } = await prompts({
+	const { showInstructions } = await prompts({
 		type: "confirm",
-		name: "install",
-		message: "Install Claude Code commands? (work-on, done-job, sync-linear)",
+		name: "showInstructions",
+		message:
+			"Show Claude Code plugin installation instructions? (provides /ttt-* commands)",
 		initial: true,
 	});
 
-	if (!install) {
-		return { installed: false, prefix: "" };
+	if (!showInstructions) {
+		return false;
 	}
 
-	// Ask for prefix
-	const { prefixChoice } = await prompts({
-		type: "select",
-		name: "prefixChoice",
-		message: "Command prefix style:",
-		choices: [
-			{
-				title: "No prefix (recommended)",
-				value: "",
-				description: "/work-on, /done-job, /sync-linear",
-			},
-			{
-				title: "ttt:",
-				value: "ttt:",
-				description: "/ttt:work-on, /ttt:done-job, /ttt:sync-linear",
-			},
-			{
-				title: "linear:",
-				value: "linear:",
-				description: "/linear:work-on, /linear:done-job, /linear:sync-linear",
-			},
-			{
-				title: "Custom...",
-				value: "custom",
-				description: "Enter your own prefix",
-			},
-		],
-		initial: 0,
-	});
+	console.log(
+		"\n┌─────────────────────────────────────────────────────────────┐",
+	);
+	console.log("│  Install team-toon-tack plugin in Claude Code:             │");
+	console.log(
+		"├─────────────────────────────────────────────────────────────┤",
+	);
+	console.log(
+		"│                                                             │",
+	);
+	console.log(
+		"│  1. Add marketplace:                                        │",
+	);
+	console.log(
+		"│     /plugin marketplace add wayne930242/team-toon-tack      │",
+	);
+	console.log(
+		"│                                                             │",
+	);
+	console.log(
+		"│  2. Install plugin:                                         │",
+	);
+	console.log(
+		"│     /plugin install team-toon-tack@wayne930242              │",
+	);
+	console.log(
+		"│                                                             │",
+	);
+	console.log(
+		"│  Available commands after install:                          │",
+	);
+	console.log(
+		"│     /ttt-sync        - Sync Linear issues                   │",
+	);
+	console.log(
+		"│     /ttt-work-on     - Start working on a task              │",
+	);
+	console.log(
+		"│     /ttt-done        - Complete current task                │",
+	);
+	console.log(
+		"│     /ttt-status      - Show/modify task status              │",
+	);
+	console.log(
+		"│     /ttt-get-issue   - Fetch issue details                  │",
+	);
+	console.log(
+		"│                                                             │",
+	);
+	console.log(
+		"└─────────────────────────────────────────────────────────────┘",
+	);
 
-	let prefix = prefixChoice || "";
-
-	if (prefixChoice === "custom") {
-		const { customPrefix } = await prompts({
-			type: "text",
-			name: "customPrefix",
-			message: "Enter custom prefix (e.g., 'my:'):",
-			initial: "",
-		});
-		prefix = customPrefix || "";
-	}
-
-	// Find templates directory
-	// Try multiple locations: installed package, local dev
-	const possibleTemplatePaths = [
-		path.join(__dirname, "..", "templates", "claude-code-commands"),
-		path.join(__dirname, "..", "..", "templates", "claude-code-commands"),
-		path.join(process.cwd(), "templates", "claude-code-commands"),
-	];
-
-	let templateDir: string | null = null;
-	for (const p of possibleTemplatePaths) {
-		try {
-			await fs.access(p);
-			templateDir = p;
-			break;
-		} catch {
-			// Try next path
-		}
-	}
-
-	if (!templateDir) {
-		// Try to get repo URL from package.json
-		let repoUrl = "https://github.com/wayne930242/team-toon-tack";
-		try {
-			const pkgPaths = [
-				path.join(__dirname, "..", "package.json"),
-				path.join(__dirname, "..", "..", "package.json"),
-			];
-			for (const pkgPath of pkgPaths) {
-				try {
-					const pkgContent = await fs.readFile(pkgPath, "utf-8");
-					const pkg = JSON.parse(pkgContent);
-					if (pkg.repository?.url) {
-						// Parse git+https://github.com/user/repo.git format
-						repoUrl = pkg.repository.url
-							.replace(/^git\+/, "")
-							.replace(/\.git$/, "");
-					}
-					break;
-				} catch {
-					// Try next path
-				}
-			}
-		} catch {
-			// Use default URL
-		}
-
-		console.log(
-			"  ⚠ Could not find command templates. Please copy manually from:",
-		);
-		console.log(`    ${repoUrl}/tree/main/templates/claude-code-commands`);
-		return { installed: false, prefix };
-	}
-
-	// Create .claude/commands directory
-	const commandsDir = path.join(process.cwd(), ".claude", "commands");
-	await fs.mkdir(commandsDir, { recursive: true });
-
-	// Copy and rename template files
-	const templateFiles = await fs.readdir(templateDir);
-	const commandFiles = templateFiles.filter((f) => f.endsWith(".md"));
-
-	for (const file of commandFiles) {
-		const baseName = file.replace(".md", "");
-		const newFileName = prefix ? `${prefix}${baseName}.md` : file;
-		const srcPath = path.join(templateDir, file);
-		const destPath = path.join(commandsDir, newFileName);
-
-		// Read template content
-		let content = await fs.readFile(srcPath, "utf-8");
-
-		// Update the name in frontmatter if prefix is used
-		if (prefix) {
-			content = content.replace(
-				/^(---\s*\n[\s\S]*?name:\s*)(\S+)/m,
-				`$1${prefix}${baseName}`,
-			);
-		}
-
-		// Modify content based on statusSource for work-on and done-job
-		if (statusSource === "local") {
-			if (baseName === "work-on" || baseName.endsWith("work-on")) {
-				// Update description for local mode
-				content = content.replace(
-					/Select a task and update status to "In Progress" on both local and Linear\./,
-					'Select a task and update local status to "In Progress". (Linear will be updated when you run `sync --update`)',
-				);
-				// Add reminder after Complete section
-				content = content.replace(
-					/Use `?\/done-job`? to mark task as completed/,
-					"Use `/done-job` to mark task as completed\n\n### 7. Sync to Linear\n\nWhen ready to update Linear with all your changes:\n\n```bash\nttt sync --update\n```",
-				);
-			}
-			if (baseName === "done-job" || baseName.endsWith("done-job")) {
-				// Update description for local mode
-				content = content.replace(
-					/Mark a task as done and update Linear with commit details\./,
-					"Mark a task as done locally. (Run `ttt sync --update` to push changes to Linear)",
-				);
-				// Add reminder at the end
-				content = content.replace(
-					/## What It Does\n\n- Linear issue status → "Done"/,
-					"## What It Does\n\n- Local status → `completed`",
-				);
-				content += `\n## Sync to Linear\n\nAfter completing tasks, push all changes to Linear:\n\n\`\`\`bash\nttt sync --update\n\`\`\`\n`;
-			}
-		}
-
-		await fs.writeFile(destPath, content, "utf-8");
-		console.log(`  ✓ .claude/commands/${newFileName}`);
-	}
-
-	return { installed: true, prefix };
+	return true;
 }
 
 async function init() {
@@ -946,9 +846,10 @@ async function init() {
 	// Update .gitignore (always use relative path .ttt)
 	await updateGitignore(".ttt", options.interactive ?? true);
 
-	// Install Claude Code commands
-	const { installed: commandsInstalled, prefix: commandPrefix } =
-		await installClaudeCommands(options.interactive ?? true, statusSource);
+	// Show Claude Code plugin installation instructions
+	const pluginInstructionsShown = await showPluginInstallInstructions(
+		options.interactive ?? true,
+	);
 
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
@@ -985,25 +886,15 @@ async function init() {
 		console.log(`    Blocked: ${statusTransitions.blocked}`);
 	}
 
-	if (commandsInstalled) {
-		const cmdPrefix = commandPrefix ? `${commandPrefix}` : "";
-		console.log(
-			`  Claude commands: /${cmdPrefix}work-on, /${cmdPrefix}done-job, /${cmdPrefix}sync-linear`,
-		);
-	}
-
 	console.log("\nNext steps:");
 	console.log("  1. Set LINEAR_API_KEY in your shell profile:");
 	console.log(`     export LINEAR_API_KEY="${apiKey}"`);
 	console.log("  2. Run sync: ttt sync");
-	if (commandsInstalled) {
-		const cmdPrefix = commandPrefix ? `${commandPrefix}` : "";
-		console.log(`  3. In Claude Code: /${cmdPrefix}work-on next`);
+	console.log("  3. Start working: ttt work-on");
+	if (pluginInstructionsShown) {
 		console.log(
-			`\n💡 Tip: Edit .claude/commands/${cmdPrefix}work-on.md to customize the "Verify" section for your project.`,
+			"\n💡 Tip: Install the Claude Code plugin for /ttt-* commands.",
 		);
-	} else {
-		console.log("  3. Start working: ttt work-on");
 	}
 }
 
