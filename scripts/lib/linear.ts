@@ -4,6 +4,7 @@ import {
 	getTeamId,
 	type StatusTransitions,
 } from "../utils.js";
+import { getFirstTodoStatus } from "./status-helpers.js";
 
 export interface WorkflowStateInfo {
 	id: string;
@@ -86,7 +87,7 @@ export function mapLocalStatusToLinear(
 	const transitions = getStatusTransitions(config);
 	switch (localStatus) {
 		case "pending":
-			return transitions.todo;
+			return getFirstTodoStatus(transitions.todo);
 		case "in-progress":
 			return transitions.in_progress;
 		case "in-review":

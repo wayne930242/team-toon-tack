@@ -22,6 +22,7 @@ import {
 	type LinearTeam,
 	type LinearUser,
 } from "../config-builder.js";
+import { formatTodoStatus } from "../status-helpers.js";
 import { showPluginInstallInstructions, updateGitignore } from "./file-ops.js";
 import {
 	promptForApiKey,
@@ -291,7 +292,7 @@ export async function initLinear(
 		);
 	}
 	console.log(`  Status mappings:`);
-	console.log(`    Todo: ${statusTransitions.todo}`);
+	console.log(`    Todo: ${formatTodoStatus(statusTransitions.todo)}`);
 	console.log(`    In Progress: ${statusTransitions.in_progress}`);
 	console.log(`    Done: ${statusTransitions.done}`);
 	if (statusTransitions.blocked) {

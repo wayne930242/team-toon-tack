@@ -3,7 +3,7 @@
  */
 
 import fs from "node:fs/promises";
-import { select } from "@inquirer/prompts";
+import { checkbox, select } from "@inquirer/prompts";
 import { encode } from "@toon-format/toon";
 import type {
 	CompletionMode,
@@ -13,6 +13,7 @@ import type {
 	StatusTransitions,
 } from "../../utils.js";
 import type { LinearLabel } from "../config-builder.js";
+import { formatTodoStatus } from "../status-helpers.js";
 import { TrelloClient } from "../trello.js";
 import { updateGitignore } from "./file-ops.js";
 import { selectLabelFilter, selectStatusSource } from "./prompts.js";
@@ -97,20 +98,28 @@ export async function initTrello(
 	if (options.interactive && lists.length > 0) {
 		console.log("\n📊 Configure status mappings (lists):");
 
-		const defaultTodo =
-			lists.find((l) => /todo|backlog|to do/i.test(l.name))?.name ||
-			lists[0]?.name;
+		// Smart defaults for checkbox - pre-check matching lists
+		const todoPattern = /todo|backlog|to do|proposed/i;
+		const inProgressPattern = /progress|doing|working|active/i;
+		const donePattern = /done|complete|finished|closed/i;
+
 		const defaultInProgress =
-			lists.find((l) => /progress|doing|working/i.test(l.name))?.name ||
-			lists[1]?.name;
+			lists.find((l) => inProgressPattern.test(l.name))?.name || lists[1]?.name;
 		const defaultDone =
-			lists.find((l) => /done|complete|finished/i.test(l.name))?.name ||
+			lists.find((l) => donePattern.test(l.name))?.name ||
 			lists[lists.length - 1]?.name;
 
-		const todo = await select({
-			message: 'Select list for "Todo" (pending tasks):',
-			choices: listChoices,
-			default: defaultTodo,
+		// Todo uses checkbox for multi-select
+		const todoChoices = lists.map((l) => ({
+			name: l.name,
+			value: l.name,
+			checked: todoPattern.test(l.name),
+		}));
+
+		const todo = await checkbox({
+			message: 'Select list(s) for "Todo" (pending tasks - multi-select):',
+			choices: todoChoices,
+			required: true,
 		});
 
 		const in_progress = await select({
@@ -126,7 +135,7 @@ export async function initTrello(
 		});
 
 		statusTransitions = {
-			todo: todo || lists[0]?.name || "Todo",
+			todo: todo.length === 1 ? todo[0] : todo,
 			in_progress: in_progress || lists[1]?.name || "In Progress",
 			done: done || lists[lists.length - 1]?.name || "Done",
 		};
@@ -262,7 +271,7 @@ export async function initTrello(
 		`  Status source: ${statusSource === "local" ? "local" : "remote"}`,
 	);
 	console.log(`  Status mappings:`);
-	console.log(`    Todo: ${statusTransitions.todo}`);
+	console.log(`    Todo: ${formatTodoStatus(statusTransitions.todo)}`);
 	console.log(`    In Progress: ${statusTransitions.in_progress}`);
 	console.log(`    Done: ${statusTransitions.done}`);
 

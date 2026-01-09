@@ -2,6 +2,7 @@
 import { createAdapter } from "./lib/adapters/index.js";
 import { displayTaskWithStatus, getStatusIcon } from "./lib/display.js";
 import { getStatusTransitions, mapLocalStatusToLinear } from "./lib/linear.js";
+import { getFirstTodoStatus } from "./lib/status-helpers.js";
 import {
 	getSourceType,
 	loadConfig,
@@ -135,15 +136,17 @@ Examples:
 			newLocalStatus = setStatus as Task["localStatus"];
 		} else if (["todo", "in_progress", "done", "testing"].includes(setStatus)) {
 			const transitions = getStatusTransitions(config);
-			newLinearStatus =
-				transitions[setStatus as keyof typeof transitions] ?? undefined;
-
 			if (setStatus === "todo") {
+				newLinearStatus = getFirstTodoStatus(transitions.todo);
 				newLocalStatus = "pending";
 			} else if (setStatus === "in_progress") {
+				newLinearStatus = transitions.in_progress;
 				newLocalStatus = "in-progress";
 			} else if (setStatus === "done") {
+				newLinearStatus = transitions.done;
 				newLocalStatus = "completed";
+			} else if (setStatus === "testing") {
+				newLinearStatus = transitions.testing;
 			}
 		} else {
 			console.error(`Unknown status: ${setStatus}`);

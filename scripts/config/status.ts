@@ -1,5 +1,6 @@
 import { select } from "@inquirer/prompts";
 import { getWorkflowStates } from "../lib/linear.js";
+import { getFirstTodoStatus } from "../lib/status-helpers.js";
 import {
 	type Config,
 	type LocalConfig,
@@ -28,7 +29,9 @@ export async function configureStatus(
 	// Get current values or defaults
 	const current = config.status_transitions || ({} as StatusTransitions);
 	const defaultTodo =
-		current.todo || states.find((s) => s.type === "unstarted")?.name || "Todo";
+		getFirstTodoStatus(current.todo) ||
+		states.find((s) => s.type === "unstarted")?.name ||
+		"Todo";
 	const defaultInProgress =
 		current.in_progress ||
 		states.find((s) => s.type === "started")?.name ||

@@ -13,6 +13,7 @@ import {
 	type LinearState,
 	type LinearTeam,
 } from "../config-builder.js";
+import { getFirstTodoStatus } from "../status-helpers.js";
 import type { InitOptions } from "./types.js";
 
 export async function promptForApiKey(
@@ -232,7 +233,7 @@ export async function selectStatusMappings(
 	const todo = await select({
 		message: 'Select status for "Todo" (pending tasks):',
 		choices: devStateChoices,
-		default: devDefaults.todo,
+		default: getFirstTodoStatus(devDefaults.todo),
 	});
 
 	const in_progress = await select({
