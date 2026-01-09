@@ -1,27 +1,22 @@
 {
-  "projectTitle": "team-toon-tack",
-  "description": "Linear task sync & management CLI for Claude Code with TOON format. Token-efficient workflow with local cycle cache, smart task selection, multi-team support, and Claude Code plugin integration.",
-  "excludeFolders": [
-    "node_modules",
-    "dist",
-    ".git",
-    ".github",
-    "templates"
-  ],
-  "excludeFiles": [
-    "bun.lock",
-    "package-lock.json",
-    "biome.json",
-    "tsconfig.json",
-    ".gitignore"
-  ],
-  "rules": [
-    "Use TypeScript with ES modules (type: module)",
-    "CLI commands are defined in bin/ and scripts/ directories",
-    "Claude Code plugin commands are in commands/ directory as .md files",
-    "Skills for Claude Code are in skills/ directory",
-    "TOON format files (.toon) are used for configuration and cycle data",
-    "Requires LINEAR_API_KEY environment variable",
-    "Supports both remote (immediate sync) and local (offline-first) modes"
-  ]
+	"projectTitle": "team-toon-tack",
+	"description": "Task sync & management CLI for Claude Code with TOON format. Supports Linear and Trello. Token-efficient workflow with local cycle cache, smart task selection, multi-team support, and Claude Code plugin integration.",
+	"excludeFolders": ["node_modules", "dist", ".git", ".github", "templates"],
+	"excludeFiles": [
+		"bun.lock",
+		"package-lock.json",
+		"biome.json",
+		"tsconfig.json",
+		".gitignore"
+	],
+	"rules": [
+		"Use TypeScript with ES modules (type: module)",
+		"CLI commands are defined in bin/ and scripts/ directories",
+		"Claude Code plugin commands are in commands/ directory as .md files",
+		"Skills for Claude Code are in skills/ directory",
+		"TOON format files (.toon) are used for configuration and cycle data",
+		"Supports Linear (LINEAR_API_KEY) and Trello (TRELLO_API_KEY + TRELLO_TOKEN)",
+		"Supports both remote (immediate sync) and local (offline-first) modes",
+		"Adapter pattern in lib/adapters/ abstracts Linear vs Trello differences"
+	]
 }

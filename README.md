@@ -2,21 +2,21 @@
 
 [繁體中文](./README.zh-TW.md) | English
 
-Optimized Linear workflow for Claude Code — saves significant tokens compared to MCP.
+Optimized task workflow for Claude Code — supports Linear and Trello, saves significant tokens compared to MCP.
 
 ## Features
 
-- **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs Linear MCP
+- **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs MCP
+- **Multi-source Support** — Works with both Linear and Trello
 - **Smart Task Selection** — Auto-pick highest priority unassigned work with `/work-on next`
-- **Multi-team Support** — Sync and filter issues across multiple teams
-- **Flexible Sync Modes** — Choose between remote (immediate Linear sync) or local (offline-first, sync later with `--update`)
-- **Completion Modes** — Four modes for task completion: simple, strict review, upstream strict, upstream not strict
-- **QA Team Support** — Auto-update parent issues in QA team to "Testing" when completing dev tasks
-- **Attachment Download** — Auto-download Linear images and files to local `.ttt/output/` for AI vision analysis
+- **Multi-team Support** — Sync and filter issues across multiple teams/boards
+- **Flexible Sync Modes** — Choose between remote (immediate sync) or local (offline-first, sync later with `--update`)
+- **Completion Modes** — Four modes for task completion (Linear): simple, strict review, upstream strict, upstream not strict
+- **QA Team Support** — Auto-update parent issues in QA team to "Testing" when completing dev tasks (Linear)
+- **Attachment Download** — Auto-download images and files to local `.ttt/output/` for AI vision analysis
 - **Blocked Status** — Set tasks as blocked when waiting on external dependencies
 - **Claude Code Plugin** — Install plugin for `/ttt:*` commands and auto-activated skills
 - **Cycle History** — Local `.toon` files preserve cycle data for AI context
-- **User Filtering** — Only see issues assigned to you or unassigned
 
 ## Quick Start
 
@@ -24,20 +24,34 @@ Optimized Linear workflow for Claude Code — saves significant tokens compared 
 
 ```bash
 npm install -g team-toon-tack
+
+# For Linear
 export LINEAR_API_KEY="lin_api_xxxxx"
+
+# For Trello
+export TRELLO_API_KEY="your-api-key"
+export TRELLO_TOKEN="your-token"
 
 cd your-project
 ttt init
 ```
 
-During init, you'll configure:
+During init, you'll be prompted to select your task source (Linear or Trello) and configure:
+
+**For Linear:**
 - **Dev team**: Your development team (single selection)
 - **Dev testing status**: Testing/review status for your dev team (optional)
 - **QA team(s)**: For cross-team parent issue updates, each with its own testing status (optional)
 - **Completion mode**: How task completion is handled (see below)
 - **Status source**: `remote` (update Linear immediately) or `local` (work offline, sync with `ttt sync --update`)
 
-### Completion Modes
+**For Trello:**
+- **Board**: The Trello board to sync
+- **User**: Your Trello username
+- **Status mappings**: Map Trello lists to Todo/In Progress/Done
+- **Label filter**: Optional label to filter cards
+
+### Completion Modes (Linear only)
 
 | Mode | Behavior |
 |------|----------|
@@ -45,6 +59,8 @@ During init, you'll configure:
 | `strict_review` | Mark task to dev testing + parent to QA testing. |
 | `upstream_strict` | Mark task as Done + parent to Testing. Falls back to dev testing if no parent. Default when QA team configured. |
 | `upstream_not_strict` | Mark task as Done + parent to Testing. No fallback if no parent. |
+
+> **Note:** Trello always uses simple completion mode as it doesn't support parent issues.
 
 ### 2. Install Claude Code Plugin (Optional)
 
@@ -58,7 +74,7 @@ During init, you'll configure:
 In Claude Code (with plugin installed):
 
 ```
-/ttt:sync              # Fetch all Linear issues for current cycle
+/ttt:sync              # Fetch all issues/cards for current cycle
 /ttt:work-on next      # Pick highest priority task & start working
 /ttt:done              # Complete task with AI-generated summary
 ```
@@ -80,7 +96,9 @@ ttt done -m "Completed the task"
 Initialize configuration in current directory.
 
 ```bash
-ttt init                           # Interactive mode
+ttt init                           # Interactive mode (select source)
+ttt init --source=linear           # Initialize for Linear
+ttt init --source=trello           # Initialize for Trello
 ttt init --user alice@example.com  # Pre-select user
 ttt init --label Frontend          # Set default label
 ttt init --force                   # Overwrite existing config
@@ -88,13 +106,13 @@ ttt init --force                   # Overwrite existing config
 
 ### `ttt sync`
 
-Sync current cycle issues from Linear.
+Sync current cycle issues from Linear/Trello.
 
 ```bash
 ttt sync              # Sync Todo/In Progress issues (fast)
 ttt sync --all        # Sync all issues regardless of status
 ttt sync MP-123       # Sync specific issue only
-ttt sync --update     # Push local status changes to Linear (for local mode)
+ttt sync --update     # Push local status changes to remote (for local mode)
 ```
 
 ### `ttt work-on`
@@ -115,10 +133,10 @@ Mark task as completed.
 ttt done                         # Auto-select if only one in-progress
 ttt done MP-123                  # Specific issue
 ttt done -m "Fixed the bug"      # With completion message
-ttt done MP-123 --from-remote    # Fetch from Linear (bypasses local data check)
+ttt done MP-123 --from-remote    # Fetch from remote (bypasses local data check)
 ```
 
-Use `--from-remote` (or `-r`) when the issue exists in Linear but not in local sync data.
+Use `--from-remote` (or `-r`) when the issue exists in remote but not in local sync data.
 
 ### `ttt status`
 
@@ -139,7 +157,7 @@ Show issue details or search issues from local cycle data.
 ```bash
 ttt show                       # Show all issues in local cycle data
 ttt show MP-123                # Show specific issue from local data
-ttt show MP-123 --remote       # Fetch specific issue from Linear
+ttt show MP-123 --remote       # Fetch specific issue from remote
 ttt show --label frontend      # Filter by label
 ttt show --status "In Progress" --user me   # My in-progress issues
 ttt show --priority 1          # Show urgent issues
@@ -174,8 +192,27 @@ your-project/
 
 | Variable | Description |
 |----------|-------------|
-| `LINEAR_API_KEY` | **Required.** Your Linear API key |
+| `LINEAR_API_KEY` | **Required for Linear.** Your Linear API key |
+| `TRELLO_API_KEY` | **Required for Trello.** Your Trello API key |
+| `TRELLO_TOKEN` | **Required for Trello.** Your Trello authorization token |
 | `TOON_DIR` | Config directory (default: `.ttt`) |
+
+### Trello Setup
+
+1. Get your API key from: https://trello.com/power-ups/admin
+2. Generate a token by visiting the authorization URL shown during `ttt init`
+3. Set both `TRELLO_API_KEY` and `TRELLO_TOKEN` in your environment
+
+### Concept Mapping: Linear vs Trello
+
+| Concept | Linear | Trello |
+|---------|--------|--------|
+| Container | Team | Board |
+| Task | Issue | Card |
+| Status | Workflow State | List |
+| Tag | Label | Label |
+| Sprint | Cycle | - (not supported) |
+| Parent | Parent Issue | - (not supported) |
 
 ## Claude Code Plugin
 
@@ -190,7 +227,7 @@ Install the plugin for Claude Code integration:
 
 | Command | Description |
 |---------|-------------|
-| `/ttt:sync` | Sync Linear issues to local cycle data |
+| `/ttt:sync` | Sync issues to local cycle data |
 | `/ttt:work-on` | Start working on a task |
 | `/ttt:done` | Mark current task as completed |
 | `/ttt:status` | Show or modify task status |
@@ -198,7 +235,7 @@ Install the plugin for Claude Code integration:
 
 ### Auto-Activated Skill
 
-The plugin includes a `linear-task-manager` skill that automatically activates when working with Linear tasks, providing workflow guidance and best practices.
+The plugin includes a `linear-task-manager` skill that automatically activates when working with tasks, providing workflow guidance and best practices.
 
 ## License
 
