@@ -91,7 +91,8 @@ ttt init --force                   # 覆蓋現有配置
 從 Linear 同步當前 cycle 的 issue。
 
 ```bash
-ttt sync              # 同步所有符合條件的 issue
+ttt sync              # 同步 Todo/In Progress 狀態的 issue（較快）
+ttt sync --all        # 同步所有狀態的 issue
 ttt sync MP-123       # 只同步特定 issue
 ttt sync --update     # 將本地狀態推送到 Linear（local 模式用）
 ```

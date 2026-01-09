@@ -27,7 +27,7 @@ async function sync() {
 
 	// Handle help flag
 	if (args.includes("--help") || args.includes("-h")) {
-		console.log(`Usage: ttt sync [issue-id] [--update]
+		console.log(`Usage: ttt sync [issue-id] [--all] [--update]
 
 Sync issues from Linear to local cycle.ttt file.
 
@@ -35,26 +35,28 @@ Arguments:
   issue-id    Optional. Sync only this specific issue (e.g., MP-624)
 
 Options:
+  --all       Sync all issues regardless of status (default: only Todo/In Progress)
   --update    Push local status changes to Linear (for local mode users)
               This updates Linear with your local in-progress/completed statuses
 
 What it does:
   - Fetches active cycle from Linear
-  - Downloads all issues in the cycle (regardless of status)
+  - Downloads issues with Todo/In Progress status (or all with --all)
   - Filters by label if configured
   - Preserves local status for existing tasks
   - Updates config with new cycle info
 
 Examples:
-  ttt sync              # Sync all issues in current cycle
+  ttt sync              # Sync Todo/In Progress issues
+  ttt sync --all        # Sync all issues regardless of status
   ttt sync MP-624       # Sync only this specific issue
-  ttt sync --update     # Push local changes to Linear, then sync
-  ttt sync -d .ttt     # Sync using .ttt directory`);
+  ttt sync --update     # Push local changes to Linear, then sync`);
 		process.exit(0);
 	}
 
-	// Check for --update flag
+	// Check for flags
 	const shouldUpdate = args.includes("--update");
+	const syncAll = args.includes("--all");
 
 	// Parse issue ID argument (if provided)
 	const singleIssueId = args.find(
@@ -197,6 +199,7 @@ Examples:
 
 	// Phase 4: Fetch current issues with full content
 	const filterLabel = localConfig.label;
+	const syncStatuses = [statusTransitions.todo, statusTransitions.in_progress];
 
 	let issues: { nodes: Array<{ id: string; identifier: string }> };
 
@@ -215,16 +218,23 @@ Examples:
 
 		issues = { nodes: [matchingIssue] };
 	} else {
-		// Sync all matching issues
+		// Build status filter description
+		const statusDesc = syncAll
+			? "all statuses"
+			: `${syncStatuses.join("/")} status`;
 		console.log(
-			`Fetching all issues in current cycle${filterLabel ? ` with label: ${filterLabel}` : ""}...`,
+			`Fetching issues (${statusDesc})${filterLabel ? ` with label: ${filterLabel}` : ""}...`,
 		);
 
-		// Build filter - label is optional, no status filter
+		// Build filter - label is optional
 		const issueFilter: Record<string, unknown> = {
 			team: { id: { eq: teamId } },
 			cycle: { id: { eq: cycleId } },
 		};
+		// Only filter by status if not syncing all
+		if (!syncAll) {
+			issueFilter.state = { name: { in: syncStatuses } };
+		}
 		if (filterLabel) {
 			issueFilter.labels = { name: { eq: filterLabel } };
 		}
@@ -239,12 +249,19 @@ Examples:
 		console.log(
 			`No issues found in current cycle${filterLabel ? ` with label: ${filterLabel}` : ""}.`,
 		);
+	} else {
+		console.log(`Found ${issues.nodes.length} issues. Processing...`);
 	}
 
 	const tasks: Task[] = [];
 	let updatedCount = 0;
+	const totalIssues = issues.nodes.length;
+	let processedCount = 0;
 
 	for (const issueNode of issues.nodes) {
+		processedCount++;
+		process.stdout.write(`\r  Processing ${processedCount}/${totalIssues}...`);
+
 		// Fetch full issue to get all relations (searchIssues returns IssueSearchResult which lacks some methods)
 		const issue = await client.issue(issueNode.id);
 

@@ -91,7 +91,8 @@ ttt init --force                   # Overwrite existing config
 Sync current cycle issues from Linear.
 
 ```bash
-ttt sync              # Sync all matching issues
+ttt sync              # Sync Todo/In Progress issues (fast)
+ttt sync --all        # Sync all issues regardless of status
 ttt sync MP-123       # Sync specific issue only
 ttt sync --update     # Push local status changes to Linear (for local mode)
 ```
