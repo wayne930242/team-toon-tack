@@ -40,12 +40,13 @@ Options:
 
 What it does:
   - Fetches active cycle from Linear
-  - Downloads all issues matching configured filters
+  - Downloads all issues in the cycle (regardless of status)
+  - Filters by label if configured
   - Preserves local status for existing tasks
   - Updates config with new cycle info
 
 Examples:
-  ttt sync              # Sync all matching issues
+  ttt sync              # Sync all issues in current cycle
   ttt sync MP-624       # Sync only this specific issue
   ttt sync --update     # Push local changes to Linear, then sync
   ttt sync -d .ttt     # Sync using .ttt directory`);
@@ -196,7 +197,6 @@ Examples:
 
 	// Phase 4: Fetch current issues with full content
 	const filterLabel = localConfig.label;
-	const syncStatuses = [statusTransitions.todo, statusTransitions.in_progress];
 
 	let issues: { nodes: Array<{ id: string; identifier: string }> };
 
@@ -217,14 +217,13 @@ Examples:
 	} else {
 		// Sync all matching issues
 		console.log(
-			`Fetching issues with status: ${syncStatuses.join(", ")}${filterLabel ? ` and label: ${filterLabel}` : ""}...`,
+			`Fetching all issues in current cycle${filterLabel ? ` with label: ${filterLabel}` : ""}...`,
 		);
 
-		// Build filter - label is optional
+		// Build filter - label is optional, no status filter
 		const issueFilter: Record<string, unknown> = {
 			team: { id: { eq: teamId } },
 			cycle: { id: { eq: cycleId } },
-			state: { name: { in: syncStatuses } },
 		};
 		if (filterLabel) {
 			issueFilter.labels = { name: { eq: filterLabel } };
@@ -238,7 +237,7 @@ Examples:
 
 	if (issues.nodes.length === 0) {
 		console.log(
-			`No issues found in current cycle with ${syncStatuses.join("/")} status${filterLabel ? ` and label: ${filterLabel}` : ""}.`,
+			`No issues found in current cycle${filterLabel ? ` with label: ${filterLabel}` : ""}.`,
 		);
 	}
 

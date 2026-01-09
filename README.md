@@ -14,7 +14,7 @@ Optimized Linear workflow for Claude Code — saves significant tokens compared 
 - **QA Team Support** — Auto-update parent issues in QA team to "Testing" when completing dev tasks
 - **Attachment Download** — Auto-download Linear images and files to local `.ttt/output/` for AI vision analysis
 - **Blocked Status** — Set tasks as blocked when waiting on external dependencies
-- **Claude Code Plugin** — Install plugin for `/ttt-*` commands and auto-activated skills
+- **Claude Code Plugin** — Install plugin for `/ttt:*` commands and auto-activated skills
 - **Cycle History** — Local `.toon` files preserve cycle data for AI context
 - **User Filtering** — Only see issues assigned to you or unassigned
 
@@ -58,9 +58,9 @@ During init, you'll configure:
 In Claude Code (with plugin installed):
 
 ```
-/ttt-sync              # Fetch all Linear issues for current cycle
-/ttt-work-on next      # Pick highest priority task & start working
-/ttt-done              # Complete task with AI-generated summary
+/ttt:sync              # Fetch all Linear issues for current cycle
+/ttt:work-on next      # Pick highest priority task & start working
+/ttt:done              # Complete task with AI-generated summary
 ```
 
 Or using CLI directly:
@@ -128,13 +128,18 @@ ttt status MP-123 --set done    # Mark as done
 ttt status MP-123 --set blocked # Set as blocked (waiting on dependency)
 ```
 
-### `ttt get-issue`
+### `ttt show`
 
-Fetch and display issue details from Linear.
+Show issue details or search issues from local cycle data.
 
 ```bash
-ttt get-issue MP-123           # Fetch from Linear and display
-ttt get-issue MP-123 --local   # Show from local data only
+ttt show                       # Show all issues in local cycle data
+ttt show MP-123                # Show specific issue from local data
+ttt show MP-123 --remote       # Fetch specific issue from Linear
+ttt show --label frontend      # Filter by label
+ttt show --status "In Progress" --user me   # My in-progress issues
+ttt show --priority 1          # Show urgent issues
+ttt show --export              # Export as markdown
 ```
 
 ### `ttt config`
@@ -181,11 +186,11 @@ Install the plugin for Claude Code integration:
 
 | Command | Description |
 |---------|-------------|
-| `/ttt-sync` | Sync Linear issues to local cycle data |
-| `/ttt-work-on` | Start working on a task |
-| `/ttt-done` | Mark current task as completed |
-| `/ttt-status` | Show or modify task status |
-| `/ttt-get-issue` | Fetch and display issue details |
+| `/ttt:sync` | Sync Linear issues to local cycle data |
+| `/ttt:work-on` | Start working on a task |
+| `/ttt:done` | Mark current task as completed |
+| `/ttt:status` | Show or modify task status |
+| `/ttt:show` | Show issue details or search issues |
 
 ### Auto-Activated Skill
 

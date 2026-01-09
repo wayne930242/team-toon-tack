@@ -16,7 +16,7 @@ const COMMANDS = [
 	"work-on",
 	"done",
 	"status",
-	"get-issue",
+	"show",
 	"config",
 	"help",
 	"version",
@@ -36,7 +36,7 @@ COMMANDS:
   work-on    Start working on a task (interactive or by ID)
   done       Mark current task as completed
   status     Show or modify task status
-  get-issue  Fetch and display issue details from Linear
+  show       Show issue details or search issues by filters
   config     Configure settings (status mappings, filters)
   help       Show this help message
   version    Show version
@@ -54,7 +54,9 @@ EXAMPLES:
   ttt work-on next              # Auto-select highest priority
   ttt done                      # Complete current task
   ttt done -m "Fixed the bug"   # With completion message
-  ttt get-issue MP-123          # Fetch issue details from Linear
+  ttt show MP-123               # Show issue from local data
+  ttt show --label frontend     # Search local issues by label
+  ttt show --status "In Progress"  # Filter by status
 
 ENVIRONMENT:
   LINEAR_API_KEY    Required. Your Linear API key
@@ -141,9 +143,9 @@ async function main() {
 				process.argv = ["node", "status.js", ...commandArgs];
 				await import(`${scriptDir}status.js`);
 				break;
-			case "get-issue":
-				process.argv = ["node", "get-issue.js", ...commandArgs];
-				await import(`${scriptDir}get-issue.js`);
+			case "show":
+				process.argv = ["node", "show.js", ...commandArgs];
+				await import(`${scriptDir}show.js`);
 				break;
 			case "config":
 				process.argv = ["node", "config.js", ...commandArgs];

@@ -1,5 +1,5 @@
 ---
-name: ttt-done
+name: ttt:done
 description: Mark current task as completed
 arguments:
   - name: issue-id
@@ -57,6 +57,8 @@ Also:
 ## Before Running
 
 Ensure you have:
-1. Committed your changes with a meaningful message
-2. Run tests and lint checks
+1. **Run project validation** - Use `/validate` command or validation skill if available
+2. Committed your changes with a meaningful message
 3. Pushed to remote branch (if applicable)
+
+**Important**: If validation fails, fix issues before marking as done.

@@ -524,29 +524,10 @@ async function updateGitignore(tttDir: string, interactive: boolean) {
 	}
 }
 
-async function showPluginInstallInstructions(
-	interactive: boolean,
-): Promise<boolean> {
-	if (!interactive) {
-		return false;
-	}
-
+function showPluginInstallInstructions(): void {
 	console.log("\n🤖 Claude Code Plugin:");
-
-	const { showInstructions } = await prompts({
-		type: "confirm",
-		name: "showInstructions",
-		message:
-			"Show Claude Code plugin installation instructions? (provides /ttt-* commands)",
-		initial: true,
-	});
-
-	if (!showInstructions) {
-		return false;
-	}
-
 	console.log(
-		"\n┌─────────────────────────────────────────────────────────────┐",
+		"┌─────────────────────────────────────────────────────────────┐",
 	);
 	console.log("│  Install team-toon-tack plugin in Claude Code:             │");
 	console.log(
@@ -577,19 +558,19 @@ async function showPluginInstallInstructions(
 		"│  Available commands after install:                          │",
 	);
 	console.log(
-		"│     /ttt-sync        - Sync Linear issues                   │",
+		"│     /ttt:sync        - Sync Linear issues                   │",
 	);
 	console.log(
-		"│     /ttt-work-on     - Start working on a task              │",
+		"│     /ttt:work-on     - Start working on a task              │",
 	);
 	console.log(
-		"│     /ttt-done        - Complete current task                │",
+		"│     /ttt:done        - Complete current task                │",
 	);
 	console.log(
-		"│     /ttt-status      - Show/modify task status              │",
+		"│     /ttt:status      - Show/modify task status              │",
 	);
 	console.log(
-		"│     /ttt-get-issue   - Fetch issue details                  │",
+		"│     /ttt:show        - Show/search issues                   │",
 	);
 	console.log(
 		"│                                                             │",
@@ -597,8 +578,6 @@ async function showPluginInstallInstructions(
 	console.log(
 		"└─────────────────────────────────────────────────────────────┘",
 	);
-
-	return true;
 }
 
 async function init() {
@@ -847,9 +826,7 @@ async function init() {
 	await updateGitignore(".ttt", options.interactive ?? true);
 
 	// Show Claude Code plugin installation instructions
-	const pluginInstructionsShown = await showPluginInstallInstructions(
-		options.interactive ?? true,
-	);
+	showPluginInstallInstructions();
 
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
@@ -891,11 +868,6 @@ async function init() {
 	console.log(`     export LINEAR_API_KEY="${apiKey}"`);
 	console.log("  2. Run sync: ttt sync");
 	console.log("  3. Start working: ttt work-on");
-	if (pluginInstructionsShown) {
-		console.log(
-			"\n💡 Tip: Install the Claude Code plugin for /ttt-* commands.",
-		);
-	}
 }
 
 init().catch(console.error);

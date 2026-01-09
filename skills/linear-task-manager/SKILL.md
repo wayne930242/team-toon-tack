@@ -43,8 +43,14 @@ ttt work-on MP-624
 # Check current task status
 ttt status
 
-# Get full issue details
-ttt get-issue MP-624
+# Show issue details from local data
+ttt show MP-624
+
+# Search issues by filters
+ttt show --status "In Progress" --user me
+
+# Export issues as markdown
+ttt show --export
 
 # Mark task as blocked if waiting on dependency
 ttt status MP-624 --set blocked
@@ -108,10 +114,20 @@ The `ttt done` command behaves differently based on configured mode:
 └── output/         # Downloaded attachments
 ```
 
+## Project Validation
+
+Before starting or completing tasks, run project validation:
+
+1. **Check for validation command/skill**: Look for `/validate`, `/check` commands or validation skills
+2. **Check package.json/Makefile**: Look for `lint`, `type-check`, `test` scripts
+
+If no validation exists, suggest running `/ttt:write-validate` to create a project-specific validation command.
+
 ## Best Practices
 
 ### DO
 - Always `ttt sync` before starting work
+- **Run project validation** before starting and before completing tasks
 - Use `ttt work-on next` for auto-prioritization
 - Include meaningful messages with `ttt done -m "..."`
 - Check `ttt status` to verify state before commits
@@ -120,17 +136,18 @@ The `ttt done` command behaves differently based on configured mode:
 - Don't manually edit `cycle.toon` - use CLI commands
 - Don't skip sync - local data may be stale
 - Don't forget to commit before `ttt done`
+- Don't mark tasks done without running validation
 
 ## Troubleshooting
 
 ### "No cycle data found"
 Run `ttt sync` to fetch issues from Linear.
 
-### "Issue not found in current cycle"
-The issue may not match filters. Check:
-- Issue is in active cycle
-- Issue status is Todo or In Progress
-- Issue matches configured label filter
+### "Issue not found in local data"
+The issue may not be synced. Try:
+- Run `ttt sync` to fetch latest issues
+- Use `ttt show MP-624 --remote` to fetch directly from Linear
+- Check if issue is in active cycle
 
 ### "LINEAR_API_KEY not set"
 ```bash
@@ -157,8 +174,9 @@ ttt work-on next           # Move to next task
 
 ### Example: Check Specific Issue
 ```bash
-ttt get-issue MP-624       # Fetch from Linear
-ttt get-issue MP-624 --local  # Show cached data
+ttt show MP-624            # Show from local data
+ttt show MP-624 --remote   # Fetch from Linear
+ttt show MP-624 --export   # Export as markdown
 ```
 
 ## Important Rules
@@ -166,5 +184,5 @@ ttt get-issue MP-624 --local  # Show cached data
 - Always verify `LINEAR_API_KEY` is set before operations
 - Run `ttt sync` at the start of each work session
 - Commit code before running `ttt done`
-- Use `--local` flag to avoid API calls when checking cached data
+- Use `ttt show` (default) to read from local data; use `--remote` only when needed
 - Check `.ttt/output/` for downloaded attachments and images

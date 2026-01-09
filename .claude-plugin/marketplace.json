@@ -13,7 +13,7 @@
 			"name": "team-toon-tack",
 			"source": "./",
 			"description": "Linear task sync & management CLI with commands and skills",
-			"version": "2.3.0"
+			"version": "2.3.2"
 		}
 	]
 }

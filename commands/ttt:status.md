@@ -1,5 +1,5 @@
 ---
-name: ttt-status
+name: ttt:status
 description: Show or modify task status
 arguments:
   - name: issue-id

@@ -1,5 +1,5 @@
 ---
-name: ttt-sync
+name: ttt:sync
 description: Sync Linear issues to local cycle data
 arguments:
   - name: issue-id

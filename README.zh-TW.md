@@ -14,7 +14,7 @@
 - **QA 團隊支援** — 完成開發任務時自動將 QA 團隊的 parent issue 更新為「Testing」
 - **附件下載** — 自動下載 Linear 圖片和檔案到本地 `.ttt/output/`，供 AI 視覺分析
 - **阻塞狀態** — 等待外部依賴時可設定任務為 blocked
-- **Claude Code Plugin** — 安裝 plugin 即可使用 `/ttt-*` 指令和自動啟用的技能
+- **Claude Code Plugin** — 安裝 plugin 即可使用 `/ttt:*` 指令和自動啟用的技能
 - **Cycle 歷史保存** — 本地 `.toon` 檔案保留 cycle 資料，方便 AI 檢閱
 - **使用者過濾** — 只顯示指派給你或未指派的工作
 
@@ -58,9 +58,9 @@ ttt init
 在 Claude Code 中（安裝 plugin 後）：
 
 ```
-/ttt-sync              # 從 Linear 取得當前 cycle 所有 issue
-/ttt-work-on next      # 挑選最高優先級任務並開始工作
-/ttt-done              # 完成任務，附上 AI 生成的摘要
+/ttt:sync              # 從 Linear 取得當前 cycle 所有 issue
+/ttt:work-on next      # 挑選最高優先級任務並開始工作
+/ttt:done              # 完成任務，附上 AI 生成的摘要
 ```
 
 或直接使用 CLI：
@@ -128,13 +128,18 @@ ttt status MP-123 --set done    # 標記為完成
 ttt status MP-123 --set blocked # 設為阻塞（等待外部依賴）
 ```
 
-### `ttt get-issue`
+### `ttt show`
 
-從 Linear 取得並顯示 issue 詳細資訊。
+顯示 issue 詳情或搜尋 issue。
 
 ```bash
-ttt get-issue MP-123           # 從 Linear 取得並顯示
-ttt get-issue MP-123 --local   # 只從本地資料顯示
+ttt show                       # 顯示本地 cycle 資料中的所有 issue
+ttt show MP-123                # 顯示特定 issue（從本地資料）
+ttt show MP-123 --remote       # 從 Linear 取得特定 issue
+ttt show --label frontend      # 依標籤過濾
+ttt show --status "In Progress" --user me   # 我進行中的 issue
+ttt show --priority 1          # 顯示緊急 issue
+ttt show --export              # 輸出為 markdown 格式
 ```
 
 ### `ttt config`
@@ -181,11 +186,11 @@ your-project/
 
 | 指令 | 說明 |
 |------|------|
-| `/ttt-sync` | 同步 Linear issue 到本地 |
-| `/ttt-work-on` | 開始處理任務 |
-| `/ttt-done` | 標記當前任務完成 |
-| `/ttt-status` | 顯示或修改任務狀態 |
-| `/ttt-get-issue` | 取得並顯示 issue 詳情 |
+| `/ttt:sync` | 同步 Linear issue 到本地 |
+| `/ttt:work-on` | 開始處理任務 |
+| `/ttt:done` | 標記當前任務完成 |
+| `/ttt:status` | 顯示或修改任務狀態 |
+| `/ttt:show` | 顯示 issue 詳情或搜尋 issue |
 
 ### 自動啟用技能
 
