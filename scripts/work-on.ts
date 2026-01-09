@@ -1,8 +1,10 @@
 import prompts from "prompts";
+import { createAdapter } from "./lib/adapters/index.js";
 import { displayTaskFull, PRIORITY_LABELS } from "./lib/display.js";
-import { getStatusTransitions, updateIssueStatus } from "./lib/linear.js";
+import { getStatusTransitions } from "./lib/linear.js";
 import {
 	getPrioritySortIndex,
+	getSourceType,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
@@ -108,30 +110,47 @@ Examples:
 	if (task.localStatus === "pending") {
 		task.localStatus = "in-progress";
 
-		// Update Linear (only if status_source is 'remote' or not set)
+		// Update remote (only if status_source is 'remote' or not set)
 		const statusSource = localConfig.status_source || "remote";
-		if (
-			statusSource === "remote" &&
-			task.linearId &&
-			process.env.LINEAR_API_KEY
-		) {
+		const sourceType = getSourceType(config);
+		const sourceId = task.sourceId ?? task.linearId;
+
+		if (statusSource === "remote" && sourceId) {
 			const transitions = getStatusTransitions(config);
-			const success = await updateIssueStatus(
-				task.linearId,
-				transitions.in_progress,
-				config,
-				localConfig.team,
-			);
-			if (success) {
-				task.status = transitions.in_progress;
-				console.log(`Linear: ${task.id} → ${transitions.in_progress}`);
+
+			try {
+				const adapter = createAdapter(config);
+
+				// Get statuses to find status ID
+				const teamId = config.teams[localConfig.team]?.id;
+				if (teamId) {
+					const statuses = await adapter.getStatuses(teamId);
+					const targetStatus = statuses.find(
+						(s) => s.name === transitions.in_progress,
+					);
+
+					if (targetStatus) {
+						const result = await adapter.updateIssueStatus(
+							sourceId,
+							targetStatus.id,
+						);
+						if (result.success) {
+							task.status = transitions.in_progress;
+							const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+							console.log(`${sourceName}: ${task.id} → ${transitions.in_progress}`);
+						}
+					}
+				}
+			} catch (error) {
+				// Silently fail if adapter not available (e.g., no API key)
 			}
 		}
 
 		await saveCycleData(data);
 		console.log(`Local: ${task.id} → in-progress`);
 		if (statusSource === "local") {
-			console.log(`(Linear status not updated - use 'sync --update' to push)`);
+			const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+			console.log(`(${sourceName} status not updated - use 'sync --update' to push)`);
 		}
 	}
 

@@ -1,11 +1,9 @@
 #!/usr/bin/env bun
+import { createAdapter } from "./lib/adapters/index.js";
 import { displayTaskWithStatus, getStatusIcon } from "./lib/display.js";
+import { getStatusTransitions, mapLocalStatusToLinear } from "./lib/linear.js";
 import {
-	getStatusTransitions,
-	mapLocalStatusToLinear,
-	updateIssueStatus,
-} from "./lib/linear.js";
-import {
+	getSourceType,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
@@ -162,32 +160,48 @@ Examples:
 			needsSave = true;
 		}
 
-		// Update Linear status (only if status_source is 'remote' or not set)
+		// Update remote status (only if status_source is 'remote' or not set)
 		const statusSource = localConfig.status_source || "remote";
-		if (statusSource === "remote" && (newLinearStatus || newLocalStatus)) {
+		const sourceType = getSourceType(config);
+		const sourceId = task.sourceId ?? task.linearId;
+
+		if (statusSource === "remote" && (newLinearStatus || newLocalStatus) && sourceId) {
 			let targetStateName = newLinearStatus;
 			if (!targetStateName && newLocalStatus) {
 				targetStateName = mapLocalStatusToLinear(newLocalStatus, config);
 			}
 
 			if (targetStateName) {
-				const success = await updateIssueStatus(
-					task.linearId,
-					targetStateName,
-					config,
-					localConfig.team,
-				);
-				if (success) {
-					task.status = targetStateName;
-					needsSave = true;
-					console.log(`Linear: ${task.id} → ${targetStateName}`);
+				try {
+					const adapter = createAdapter(config);
+					const teamId = config.teams[localConfig.team]?.id;
+
+					if (teamId) {
+						const statuses = await adapter.getStatuses(teamId);
+						const targetStatus = statuses.find((s) => s.name === targetStateName);
+
+						if (targetStatus) {
+							const result = await adapter.updateIssueStatus(
+								sourceId,
+								targetStatus.id,
+							);
+							if (result.success) {
+								task.status = targetStateName;
+								needsSave = true;
+								const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+								console.log(`${sourceName}: ${task.id} → ${targetStateName}`);
+							}
+						}
+					}
+				} catch (error) {
+					// Silently fail if adapter not available
 				}
 			}
 		} else if (
 			statusSource === "local" &&
 			(newLinearStatus || newLocalStatus)
 		) {
-			// Local mode: just note that Linear wasn't updated
+			// Local mode: just note that remote wasn't updated
 			needsSave = true;
 		}
 
@@ -198,8 +212,9 @@ Examples:
 				console.log(`Local: ${task.id} ${oldLocalStatus} → ${newLocalStatus}`);
 			}
 			if (statusSource === "local") {
+				const sourceName = sourceType === "trello" ? "Trello" : "Linear";
 				console.log(
-					`(Linear status not updated - use 'sync --update' to push)`,
+					`(${sourceName} status not updated - use 'sync --update' to push)`,
 				);
 			}
 		} else if (newLocalStatus) {

@@ -1,12 +1,11 @@
+import { createAdapter } from "./lib/adapters/index.js";
 import {
 	displayTaskFull,
 	getStatusIcon,
 	PRIORITY_LABELS,
 } from "./lib/display.js";
-import { fetchIssueDetail } from "./lib/sync.js";
 import {
-	getLinearClient,
-	getTeamId,
+	getSourceType,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
@@ -123,67 +122,107 @@ function displayTaskList(tasks: Task[]): void {
 	}
 }
 
-async function searchIssuesFromLinear(filters: SearchFilters): Promise<Task[]> {
+async function fetchIssueFromRemote(issueId: string): Promise<Task | null> {
+	const config = await loadConfig();
+	const adapter = createAdapter(config);
+	const sourceType = getSourceType(config);
+
+	const issue = await adapter.searchIssue(issueId);
+	if (!issue) {
+		return null;
+	}
+
+	return {
+		id: issue.id,
+		linearId: issue.sourceId,
+		sourceId: issue.sourceId,
+		sourceType,
+		title: issue.title,
+		status: issue.status,
+		localStatus: "pending",
+		assignee: issue.assigneeEmail,
+		priority: issue.priority,
+		labels: issue.labels,
+		branch: issue.branchName,
+		description: issue.description,
+		parentIssueId: issue.parentIssueId,
+		url: issue.url,
+		attachments: issue.attachments?.map((a) => ({
+			id: a.id,
+			title: a.title,
+			url: a.url,
+			sourceType: a.sourceType,
+		})),
+		comments: issue.comments?.map((c) => ({
+			id: c.id,
+			body: c.body,
+			createdAt: c.createdAt,
+			user: c.user,
+		})),
+	};
+}
+
+async function searchIssuesFromRemote(filters: SearchFilters): Promise<Task[]> {
 	const config = await loadConfig();
 	const localConfig = await loadLocalConfig();
-	const client = getLinearClient();
-	const teamId = getTeamId(config, localConfig.team);
+	const adapter = createAdapter(config);
+	const sourceType = getSourceType(config);
+	const teamId = config.teams[localConfig.team]?.id;
 
-	// Build filter
-	const issueFilter: Record<string, unknown> = {
-		team: { id: { eq: teamId } },
-	};
-
-	if (filters.label) {
-		issueFilter.labels = { name: { containsIgnoreCase: filters.label } };
+	if (!teamId) {
+		console.error(`Team "${localConfig.team}" not found in config.`);
+		return [];
 	}
 
-	if (filters.status) {
-		issueFilter.state = { name: { containsIgnoreCase: filters.status } };
-	}
-
-	if (filters.assignee) {
-		if (filters.assignee.toLowerCase() === "me") {
-			issueFilter.assignee = { email: { eq: localConfig.current_user } };
-		} else if (filters.assignee.toLowerCase() === "unassigned") {
-			issueFilter.assignee = { null: true };
-		} else {
-			issueFilter.assignee = {
-				email: { containsIgnoreCase: filters.assignee },
-			};
-		}
-	}
-
-	if (filters.priority !== undefined) {
-		issueFilter.priority = { eq: filters.priority };
-	}
-
-	const issues = await client.issues({
-		filter: issueFilter,
-		first: 50,
+	// Use adapter to get issues with filters
+	// Note: adapter API is simpler, filters applied in-memory for consistency
+	const issues = await adapter.getIssues({
+		teamId,
+		statusNames: filters.status ? [filters.status] : undefined,
+		labelName: filters.label,
+		limit: 50,
 	});
 
 	const tasks: Task[] = [];
 
-	for (const issueNode of issues.nodes) {
-		const issue = await client.issue(issueNode.id);
-		const assignee = await issue.assignee;
-		const labels = await issue.labels();
-		const state = await issue.state;
-		const parent = await issue.parent;
+	for (const issue of issues) {
+		// Apply additional filters
+		if (filters.assignee) {
+			const assigneeLower = filters.assignee.toLowerCase();
+			if (assigneeLower === "me") {
+				const userEmail = config.users[localConfig.current_user]?.email?.toLowerCase();
+				if (!userEmail || issue.assigneeEmail?.toLowerCase() !== userEmail) {
+					continue;
+				}
+			} else if (assigneeLower === "unassigned") {
+				if (issue.assigneeEmail) {
+					continue;
+				}
+			} else {
+				if (!issue.assigneeEmail?.toLowerCase().includes(assigneeLower)) {
+					continue;
+				}
+			}
+		}
+
+		if (filters.priority !== undefined && issue.priority !== filters.priority) {
+			continue;
+		}
 
 		const task: Task = {
-			id: issue.identifier,
-			linearId: issue.id,
+			id: issue.id,
+			linearId: issue.sourceId,
+			sourceId: issue.sourceId,
+			sourceType,
 			title: issue.title,
-			status: state ? state.name : "Unknown",
+			status: issue.status,
 			localStatus: "pending",
-			assignee: assignee?.email,
+			assignee: issue.assigneeEmail,
 			priority: issue.priority,
-			labels: labels.nodes.map((l: { name: string }) => l.name),
+			labels: issue.labels,
 			branch: issue.branchName,
-			description: issue.description ?? undefined,
-			parentIssueId: parent ? parent.identifier : undefined,
+			description: issue.description,
+			parentIssueId: issue.parentIssueId,
 			url: issue.url,
 		};
 
@@ -313,8 +352,11 @@ Examples:
 	if (hasFilters && !issueId) {
 		let tasks: Task[];
 		if (useRemote) {
-			console.error("Searching issues from Linear...");
-			tasks = await searchIssuesFromLinear(filters);
+			const config = await loadConfig();
+			const sourceType = getSourceType(config);
+			const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+			console.error(`Searching issues from ${sourceName}...`);
+			tasks = await searchIssuesFromRemote(filters);
 		} else {
 			const data = await loadCycleData();
 			if (!data) {
@@ -339,13 +381,16 @@ Examples:
 		process.exit(1);
 	}
 
-	// Fetch from remote Linear
+	// Fetch from remote
 	if (useRemote) {
-		console.error(`Fetching ${issueId} from Linear...`);
-		const task = await fetchIssueDetail(issueId);
+		const config = await loadConfig();
+		const sourceType = getSourceType(config);
+		const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+		console.error(`Fetching ${issueId} from ${sourceName}...`);
+		const task = await fetchIssueFromRemote(issueId);
 
 		if (!task) {
-			console.error(`Issue ${issueId} not found in Linear.`);
+			console.error(`Issue ${issueId} not found in ${sourceName}.`);
 			process.exit(1);
 		}
 

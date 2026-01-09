@@ -82,7 +82,22 @@ export type CompletionMode =
 	| "upstream_strict" // Mark task as done + parent to testing, fallback to dev testing if no parent (default when QA/PM teams set)
 	| "upstream_not_strict"; // Mark task as done + parent to testing, no fallback
 
+// Task source type for multi-source support
+export type TaskSourceType = "linear" | "trello";
+
+// Source configuration for different task management systems
+export interface SourceConfig {
+	type: TaskSourceType;
+	// Trello-specific config (credentials stored in env vars for security)
+	trello?: {
+		apiKey?: string; // Usually from TRELLO_API_KEY env var
+		token?: string; // Usually from TRELLO_TOKEN env var
+	};
+}
+
 export interface Config {
+	// Source configuration (defaults to Linear for backwards compatibility)
+	source?: SourceConfig;
 	teams: Record<string, TeamConfig>;
 	users: Record<string, UserConfig>;
 	labels?: Record<string, LabelConfig>;
@@ -138,10 +153,15 @@ export interface Comment {
 
 export interface Task {
 	id: string;
+	/** @deprecated Use sourceId instead. Kept for backwards compatibility. */
 	linearId: string;
+	/** Internal ID from the source system (Linear UUID, Trello card ID, etc.) */
+	sourceId?: string;
+	/** Source type this task came from */
+	sourceType?: TaskSourceType;
 	title: string;
 	status: string;
-	localStatus: "pending" | "in-progress" | "completed" | "blocked";
+	localStatus: "pending" | "in-progress" | "in-review" | "completed" | "blocked";
 	assignee?: string;
 	priority: number;
 	labels: string[];
@@ -277,4 +297,14 @@ export function getTeamId(config: Config, teamKey?: string): string {
 		process.exit(1);
 	}
 	return team.id;
+}
+
+// Get source type from config, defaulting to "linear" for backwards compatibility
+export function getSourceType(config: Config): TaskSourceType {
+	return config.source?.type ?? "linear";
+}
+
+// Helper to get sourceId from Task, falling back to linearId for backwards compatibility
+export function getTaskSourceId(task: Task): string {
+	return task.sourceId ?? task.linearId;
 }

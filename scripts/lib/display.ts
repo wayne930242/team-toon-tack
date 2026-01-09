@@ -14,6 +14,8 @@ export function getStatusIcon(localStatus: Task["localStatus"]): string {
 			return "✅";
 		case "in-progress":
 			return "🔄";
+		case "in-review":
+			return "👀";
 		case "blocked":
 			return "🚫";
 		default:

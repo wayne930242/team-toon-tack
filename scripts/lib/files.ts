@@ -40,35 +40,68 @@ export function extractLinearImageUrls(text: string): string[] {
 	return urls;
 }
 
+// MIME type to extension mapping
+const MIME_TO_EXT: Record<string, string> = {
+	// Images
+	"image/jpeg": "jpg",
+	"image/png": "png",
+	"image/gif": "gif",
+	"image/webp": "webp",
+	"image/svg+xml": "svg",
+	// Videos
+	"video/mp4": "mp4",
+	"video/webm": "webm",
+	"video/quicktime": "mov",
+	"video/x-msvideo": "avi",
+	// Documents
+	"application/json": "json",
+	"application/pdf": "pdf",
+	"text/plain": "txt",
+	"text/html": "html",
+	"text/css": "css",
+	"text/javascript": "js",
+	"application/javascript": "js",
+	// Archives
+	"application/zip": "zip",
+	"application/gzip": "gz",
+	"application/x-tar": "tar",
+};
+
 function getFileExtension(
 	url: string,
 	contentType?: string,
 ): { ext: string; isImage: boolean } {
 	// Try to get extension from content-type header
 	if (contentType) {
-		// Image types
-		const imageMatch = contentType.match(/image\/(\w+)/);
-		if (imageMatch) {
-			const ext = imageMatch[1] === "jpeg" ? "jpg" : imageMatch[1];
-			return { ext, isImage: true };
+		// Extract base MIME type (ignore charset and other params)
+		const baseMime = contentType.split(";")[0].trim().toLowerCase();
+
+		// Check our mapping
+		const mappedExt = MIME_TO_EXT[baseMime];
+		if (mappedExt) {
+			const isImage = baseMime.startsWith("image/");
+			return { ext: mappedExt, isImage };
 		}
-		// Video types
-		const videoMatch = contentType.match(/video\/(\w+)/);
-		if (videoMatch) {
-			const videoExt = videoMatch[1] === "quicktime" ? "mov" : videoMatch[1];
-			return { ext: videoExt, isImage: false };
+
+		// Fallback: extract from MIME type pattern
+		const match = baseMime.match(/^(\w+)\/(\w+)/);
+		if (match) {
+			const [, type, subtype] = match;
+			const isImage = type === "image";
+			return { ext: subtype, isImage };
 		}
 	}
+
 	// Fallback: try to get from URL path
 	const urlPath = new URL(url).pathname;
 	const ext = path.extname(urlPath).slice(1).toLowerCase();
-	if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) {
-		return { ext: ext === "jpeg" ? "jpg" : ext, isImage: true };
+	if (ext) {
+		const isImage = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext);
+		return { ext: ext === "jpeg" ? "jpg" : ext, isImage };
 	}
-	if (["mov", "mp4", "webm", "avi"].includes(ext)) {
-		return { ext, isImage: false };
-	}
-	return { ext: "png", isImage: true }; // Default assume image
+
+	// Last resort: unknown binary
+	return { ext: "bin", isImage: false };
 }
 
 export async function downloadLinearFile(

@@ -9,6 +9,12 @@ const __dirname = path.dirname(__filename);
 import { decode, encode } from "@toon-format/toon";
 import prompts from "prompts";
 import {
+	createAdapterForInit,
+	isValidSourceType,
+	type SourceStatus,
+	type TaskSourceType,
+} from "./lib/adapters/index.js";
+import {
 	buildConfig,
 	buildLocalConfig,
 	buildTeamsConfig,
@@ -21,6 +27,7 @@ import {
 	type LinearTeam,
 	type LinearUser,
 } from "./lib/config-builder.js";
+import { TrelloClient } from "./lib/trello.js";
 import {
 	type CompletionMode,
 	type Config,
@@ -29,11 +36,16 @@ import {
 	getPaths,
 	type LocalConfig,
 	type QaPmTeamConfig,
+	type SourceConfig,
 	type StatusTransitions,
+	type TaskSourceType as UtilsTaskSourceType,
 } from "./utils.js";
 
 interface InitOptions {
+	source?: TaskSourceType;
 	apiKey?: string;
+	trelloApiKey?: string;
+	trelloToken?: string;
 	user?: string;
 	team?: string;
 	label?: string;
@@ -47,9 +59,22 @@ function parseArgs(args: string[]): InitOptions {
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 		switch (arg) {
+			case "--source":
+			case "-s":
+				const sourceArg = args[++i];
+				if (sourceArg && isValidSourceType(sourceArg)) {
+					options.source = sourceArg;
+				}
+				break;
 			case "--api-key":
 			case "-k":
 				options.apiKey = args[++i];
+				break;
+			case "--trello-key":
+				options.trelloApiKey = args[++i];
+				break;
+			case "--trello-token":
+				options.trelloToken = args[++i];
 				break;
 			case "--user":
 			case "-u":
@@ -83,24 +108,28 @@ function parseArgs(args: string[]): InitOptions {
 
 function printHelp() {
 	console.log(`
-linear-toon init - Initialize configuration files
+ttt init - Initialize configuration files
 
 USAGE:
-  bun run init [OPTIONS]
+  ttt init [OPTIONS]
 
 OPTIONS:
+  -s, --source <type>   Task source: "linear" (default) or "trello"
   -k, --api-key <key>   Linear API key (or set LINEAR_API_KEY env)
-  -u, --user <email>    Your email address in Linear
-  -t, --team <name>     Team name to sync (optional, fetches from Linear)
+  --trello-key <key>    Trello API key (or set TRELLO_API_KEY env)
+  --trello-token <tok>  Trello token (or set TRELLO_TOKEN env)
+  -u, --user <email>    Your email/username
+  -t, --team <name>     Team/Board name to sync
   -l, --label <name>    Default label filter (e.g., Frontend, Backend)
   -f, --force           Overwrite existing config files
   -y, --yes             Non-interactive mode (use defaults/provided args)
   -h, --help            Show this help message
 
 EXAMPLES:
-  bun run init
-  bun run init --user alice@example.com --label Frontend
-  bun run init -k lin_api_xxx -y
+  ttt init                           # Interactive Linear setup
+  ttt init --source=trello           # Interactive Trello setup
+  ttt init --user alice@example.com --label Frontend
+  ttt init -k lin_api_xxx -y
 `);
 }
 
@@ -524,6 +553,336 @@ async function updateGitignore(tttDir: string, interactive: boolean) {
 	}
 }
 
+// ============================================
+// Task Source Selection
+// ============================================
+
+async function selectTaskSource(
+	options: InitOptions,
+): Promise<TaskSourceType> {
+	if (options.source) {
+		return options.source;
+	}
+
+	if (!options.interactive) {
+		return "linear"; // default
+	}
+
+	console.log("\n📦 Select Task Source:");
+	const response = await prompts({
+		type: "select",
+		name: "source",
+		message: "Which task management system do you use?",
+		choices: [
+			{
+				title: "Linear (recommended)",
+				value: "linear",
+				description: "Full feature support with cycles and workflows",
+			},
+			{
+				title: "Trello",
+				value: "trello",
+				description: "Board-based task management with lists as statuses",
+			},
+		],
+		initial: 0,
+	});
+
+	return response.source || "linear";
+}
+
+async function promptForTrelloCredentials(
+	options: InitOptions,
+): Promise<{ apiKey: string; token: string } | null> {
+	let apiKey = options.trelloApiKey || process.env.TRELLO_API_KEY;
+	let token = options.trelloToken || process.env.TRELLO_TOKEN;
+
+	if (!apiKey && options.interactive) {
+		console.log("\n🔑 Trello API Credentials:");
+		console.log("   Get your API key from: https://trello.com/power-ups/admin");
+
+		const keyResponse = await prompts({
+			type: "text",
+			name: "apiKey",
+			message: "Enter your Trello API key:",
+			validate: (v) => (v.length > 10 ? true : "API key seems too short"),
+		});
+		apiKey = keyResponse.apiKey;
+	}
+
+	if (!apiKey) {
+		return null;
+	}
+
+	if (!token && options.interactive) {
+		// Generate authorization URL
+		const authUrl = TrelloClient.getAuthorizationUrl(apiKey);
+		console.log("\n   To get your token, visit this URL and authorize:");
+		console.log(`   ${authUrl}`);
+
+		const tokenResponse = await prompts({
+			type: "password",
+			name: "token",
+			message: "Enter the token from the page:",
+		});
+		token = tokenResponse.token;
+	}
+
+	if (!token) {
+		return null;
+	}
+
+	// Validate credentials
+	const client = new TrelloClient(apiKey, token);
+	const isValid = await client.validateCredentials();
+
+	if (!isValid) {
+		console.error("Error: Invalid Trello credentials.");
+		return null;
+	}
+
+	console.log("  ✓ Trello credentials validated");
+	return { apiKey, token };
+}
+
+// ============================================
+// Trello-specific initialization
+// ============================================
+
+async function initTrello(options: InitOptions, paths: ReturnType<typeof getPaths>) {
+	const credentials = await promptForTrelloCredentials(options);
+	if (!credentials) {
+		console.error("Error: Trello API key and token are required.");
+		console.error("Get your API key from: https://trello.com/power-ups/admin");
+		process.exit(1);
+	}
+
+	const client = new TrelloClient(credentials.apiKey, credentials.token);
+
+	console.log("\n📡 Fetching data from Trello...");
+
+	// Fetch boards (equivalent to teams)
+	const boards = await client.getBoards();
+
+	if (boards.length === 0) {
+		console.error("Error: No boards found in your Trello account.");
+		process.exit(1);
+	}
+
+	// Select board (dev team)
+	let selectedBoard = boards[0];
+	if (options.team) {
+		const found = boards.find(
+			(b) => b.name.toLowerCase() === options.team?.toLowerCase(),
+		);
+		if (found) selectedBoard = found;
+	} else if (options.interactive && boards.length > 1) {
+		console.log("\n📋 Board Selection:");
+		const response = await prompts({
+			type: "select",
+			name: "boardId",
+			message: "Select your board:",
+			choices: boards.map((b) => ({ title: b.name, value: b.id })),
+		});
+		selectedBoard = boards.find((b) => b.id === response.boardId) || boards[0];
+	}
+	console.log(`  Board: ${selectedBoard.name}`);
+
+	// Fetch lists (statuses), labels, and members
+	const [lists, labels, members] = await Promise.all([
+		client.getBoardLists(selectedBoard.id),
+		client.getBoardLabels(selectedBoard.id),
+		client.getBoardMembers(selectedBoard.id),
+	]);
+
+	console.log(`  Lists: ${lists.length}`);
+	console.log(`  Labels: ${labels.filter((l) => l.name).length}`);
+	console.log(`  Members: ${members.length}`);
+
+	// Select user
+	let currentMember = members[0];
+	if (options.user) {
+		const found = members.find(
+			(m) =>
+				m.username.toLowerCase() === options.user?.toLowerCase() ||
+				m.fullName.toLowerCase() === options.user?.toLowerCase(),
+		);
+		if (found) currentMember = found;
+	} else if (options.interactive && members.length > 0) {
+		const response = await prompts({
+			type: "select",
+			name: "memberId",
+			message: "Select yourself:",
+			choices: members.map((m) => ({
+				title: `${m.fullName} (@${m.username})`,
+				value: m.id,
+			})),
+		});
+		currentMember = members.find((m) => m.id === response.memberId) || members[0];
+	}
+
+	// Select status mappings (lists)
+	const listChoices = lists.map((l) => ({ title: l.name, value: l.name }));
+	let statusTransitions: StatusTransitions;
+
+	if (options.interactive && lists.length > 0) {
+		console.log("\n📊 Configure status mappings (lists):");
+
+		const todoResponse = await prompts({
+			type: "select",
+			name: "todo",
+			message: 'Select list for "Todo" (pending tasks):',
+			choices: listChoices,
+			initial: listChoices.findIndex((c) =>
+				/todo|backlog|to do/i.test(c.value),
+			),
+		});
+
+		const inProgressResponse = await prompts({
+			type: "select",
+			name: "in_progress",
+			message: 'Select list for "In Progress":',
+			choices: listChoices,
+			initial: listChoices.findIndex((c) =>
+				/progress|doing|working/i.test(c.value),
+			),
+		});
+
+		const doneResponse = await prompts({
+			type: "select",
+			name: "done",
+			message: 'Select list for "Done":',
+			choices: listChoices,
+			initial: listChoices.findIndex((c) => /done|complete|finished/i.test(c.value)),
+		});
+
+		statusTransitions = {
+			todo: todoResponse.todo || lists[0]?.name || "Todo",
+			in_progress: inProgressResponse.in_progress || lists[1]?.name || "In Progress",
+			done: doneResponse.done || lists[lists.length - 1]?.name || "Done",
+		};
+	} else {
+		// Auto-detect from list names
+		statusTransitions = {
+			todo: lists.find((l) => /todo|backlog|to do/i.test(l.name))?.name || lists[0]?.name || "Todo",
+			in_progress: lists.find((l) => /progress|doing|working/i.test(l.name))?.name || lists[1]?.name || "In Progress",
+			done: lists.find((l) => /done|complete|finished/i.test(l.name))?.name || lists[lists.length - 1]?.name || "Done",
+		};
+	}
+
+	// Select label filter
+	const validLabels = labels.filter((l) => l.name);
+	const defaultLabel = await selectLabelFilter(
+		validLabels.map((l) => ({ id: l.id, name: l.name, color: l.color ?? undefined })) as LinearLabel[],
+		options,
+	);
+
+	// Status source
+	const statusSource = await selectStatusSource(options);
+
+	// Completion mode (simplified for Trello - no QA/PM teams)
+	const completionMode: CompletionMode = "simple";
+
+	// Build config
+	const teamsConfig: Record<string, { id: string; name: string }> = {};
+	const teamKey = selectedBoard.name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+	teamsConfig[teamKey] = { id: selectedBoard.id, name: selectedBoard.name };
+
+	const usersConfig: Record<string, { id: string; email: string; displayName: string }> = {};
+	for (const member of members) {
+		const userKey = member.username.toLowerCase().replace(/[^a-z0-9]/g, "_");
+		usersConfig[userKey] = {
+			id: member.id,
+			email: "", // Trello doesn't expose email
+			displayName: member.fullName || member.username,
+		};
+	}
+
+	const labelsConfig: Record<string, { id: string; name: string; color?: string }> = {};
+	for (const label of validLabels) {
+		const labelKey = label.name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+		labelsConfig[labelKey] = {
+			id: label.id,
+			name: label.name,
+			color: label.color ?? undefined,
+		};
+	}
+
+	const statusesConfig: Record<string, { name: string; type: string }> = {};
+	for (const list of lists) {
+		const statusKey = list.name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+		statusesConfig[statusKey] = { name: list.name, type: "list" };
+	}
+
+	const sourceConfig: SourceConfig = {
+		type: "trello",
+		trello: {
+			// Don't store credentials in config for security
+			// They should be in environment variables
+		},
+	};
+
+	const config: Config = {
+		source: sourceConfig,
+		teams: teamsConfig,
+		users: usersConfig,
+		labels: labelsConfig,
+		statuses: statusesConfig,
+		status_transitions: statusTransitions,
+	};
+
+	// Find keys
+	const currentUserKey = Object.entries(usersConfig).find(
+		([_, u]) => u.id === currentMember.id,
+	)?.[0] || Object.keys(usersConfig)[0];
+
+	const localConfig: LocalConfig = {
+		current_user: currentUserKey,
+		team: teamKey,
+		completion_mode: completionMode,
+		label: defaultLabel,
+		status_source: statusSource,
+	};
+
+	// Write config files
+	console.log("\n📝 Writing configuration files...");
+	await fs.mkdir(paths.baseDir, { recursive: true });
+
+	await fs.writeFile(paths.configPath, encode(config), "utf-8");
+	console.log(`  ✓ ${paths.configPath}`);
+
+	await fs.writeFile(paths.localPath, encode(localConfig), "utf-8");
+	console.log(`  ✓ ${paths.localPath}`);
+
+	// Update .gitignore
+	await updateGitignore(".ttt", options.interactive ?? true);
+
+	// Summary
+	console.log("\n✅ Initialization complete!\n");
+	console.log("Configuration summary:");
+	console.log(`  Source: Trello`);
+	console.log(`  Board: ${selectedBoard.name}`);
+	console.log(`  User: ${currentMember.fullName} (@${currentMember.username})`);
+	console.log(`  Label filter: ${defaultLabel || "(none)"}`);
+	console.log(`  Status source: ${statusSource === "local" ? "local" : "remote"}`);
+	console.log(`  Status mappings:`);
+	console.log(`    Todo: ${statusTransitions.todo}`);
+	console.log(`    In Progress: ${statusTransitions.in_progress}`);
+	console.log(`    Done: ${statusTransitions.done}`);
+
+	console.log("\nNext steps:");
+	if (!process.env.TRELLO_API_KEY || !process.env.TRELLO_TOKEN) {
+		console.log("  1. Set environment variables:");
+		console.log(`     export TRELLO_API_KEY="${credentials.apiKey}"`);
+		console.log(`     export TRELLO_TOKEN="<your-token>"`);
+		console.log("  2. Run sync: ttt sync");
+		console.log("  3. Start working: ttt work-on");
+	} else {
+		console.log("  1. Run sync: ttt sync");
+		console.log("  2. Start working: ttt work-on");
+	}
+}
+
 function showPluginInstallInstructions(): void {
 	console.log("\n🤖 Claude Code Plugin:");
 	console.log(
@@ -585,7 +944,7 @@ async function init() {
 	const options = parseArgs(args);
 	const paths = getPaths();
 
-	console.log("🚀 Linear-TOON Initialization\n");
+	console.log("🚀 Team Toon Tack Initialization\n");
 
 	// Check existing files
 	const configExists = await fileExists(paths.configPath);
@@ -612,6 +971,17 @@ async function init() {
 			process.exit(1);
 		}
 	}
+
+	// Select task source
+	const source = await selectTaskSource(options);
+
+	// Branch based on source
+	if (source === "trello") {
+		await initTrello(options, paths);
+		return;
+	}
+
+	// === Linear initialization (default) ===
 
 	// Get API key
 	const apiKey = await promptForApiKey(options);
@@ -749,6 +1119,9 @@ async function init() {
 		statusTransitions,
 		currentCycle ?? undefined,
 	);
+
+	// Add source config for Linear
+	config.source = { type: "linear" };
 
 	// Find keys
 	const currentUserKey = findUserKey(config.users, currentUser.id);

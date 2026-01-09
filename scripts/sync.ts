@@ -1,22 +1,26 @@
+import { createAdapter, type TaskSourceAdapter } from "./lib/adapters/index.js";
 import {
 	clearIssueImages,
 	downloadLinearImage,
 	ensureOutputDir,
 	extractLinearImageUrls,
 	isLinearImageUrl,
-} from "./lib/images.js";
+} from "./lib/files.js";
 import {
 	type Attachment,
 	type Comment,
+	type Config,
 	type CycleData,
 	type CycleInfo,
 	getLinearClient,
 	getPaths,
 	getPrioritySortIndex,
+	getSourceType,
 	getTeamId,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
+	type LocalConfig,
 	saveConfig,
 	saveCycleData,
 	type Task,
@@ -65,9 +69,23 @@ Examples:
 
 	const config = await loadConfig();
 	const localConfig = await loadLocalConfig();
+	const { outputPath } = getPaths();
+
+	// Check source type and branch
+	const sourceType = getSourceType(config);
+	if (sourceType === "trello") {
+		await syncTrello(config, localConfig, {
+			shouldUpdate,
+			syncAll,
+			singleIssueId,
+			outputPath,
+		});
+		return;
+	}
+
+	// === Linear sync (default) ===
 	const client = getLinearClient();
 	const teamId = getTeamId(config, localConfig.team);
-	const { outputPath } = getPaths();
 
 	// Ensure output directory exists
 	await ensureOutputDir(outputPath);
@@ -382,6 +400,27 @@ Examples:
 					updatedCount++;
 				}
 			}
+		} else if (state) {
+			// New task: infer localStatus from remote status
+			if (state.name === statusTransitions.in_progress) {
+				localStatus = "in-progress";
+			} else if (
+				statusTransitions.testing &&
+				state.name === statusTransitions.testing
+			) {
+				localStatus = "in-review";
+			} else if (
+				state.name === statusTransitions.done ||
+				state.type === "completed"
+			) {
+				localStatus = "completed";
+			} else if (
+				statusTransitions.blocked &&
+				state.name === statusTransitions.blocked
+			) {
+				localStatus = "blocked";
+			}
+			// Default "pending" for todo or other states
 		}
 
 		const task: Task = {
@@ -447,6 +486,229 @@ Examples:
 		console.log(
 			`   Updated ${updatedCount} issues to ${statusTransitions.testing} in Linear.`,
 		);
+	}
+}
+
+// ============================================
+// Trello Sync
+// ============================================
+
+interface TrelloSyncOptions {
+	shouldUpdate: boolean;
+	syncAll: boolean;
+	singleIssueId?: string;
+	outputPath: string;
+}
+
+async function syncTrello(
+	config: Config,
+	localConfig: LocalConfig,
+	options: TrelloSyncOptions,
+) {
+	const { shouldUpdate, syncAll, singleIssueId, outputPath } = options;
+
+	// Create adapter
+	const adapter = createAdapter(config);
+
+	// Validate connection
+	const isConnected = await adapter.validateConnection();
+	if (!isConnected) {
+		console.error("Error: Failed to connect to Trello.");
+		console.error("Check your TRELLO_API_KEY and TRELLO_TOKEN environment variables.");
+		process.exit(1);
+	}
+
+	// Ensure output directory exists
+	await ensureOutputDir(outputPath);
+
+	// Build excluded labels set
+	const excludedLabels = new Set(localConfig.exclude_labels ?? []);
+
+	// Get team (board) ID
+	const teamId = config.teams[localConfig.team]?.id;
+	if (!teamId) {
+		console.error(`Error: Team "${localConfig.team}" not found in config.`);
+		process.exit(1);
+	}
+
+	// Get status transitions
+	const statusTransitions = config.status_transitions || {
+		todo: "Todo",
+		in_progress: "In Progress",
+		done: "Done",
+	};
+	const syncStatuses = [statusTransitions.todo, statusTransitions.in_progress];
+
+	// Load existing data
+	const existingData = await loadCycleData();
+	const existingTasksMap = new Map(existingData?.tasks.map((t) => [t.id, t]));
+
+	// Phase 1: Push local status changes if --update
+	if (shouldUpdate && existingData) {
+		console.log("Pushing local status changes to Trello...");
+		let pushCount = 0;
+
+		// Get statuses to find list IDs
+		const statuses = await adapter.getStatuses(teamId);
+		const statusIdMap = new Map(statuses.map((s) => [s.name, s.id]));
+
+		for (const task of existingData.tasks) {
+			let targetStatusName: string | undefined;
+
+			if (task.localStatus === "in-progress") {
+				if (task.status !== statusTransitions.in_progress) {
+					targetStatusName = statusTransitions.in_progress;
+				}
+			} else if (task.localStatus === "completed") {
+				if (task.status !== statusTransitions.done) {
+					targetStatusName = statusTransitions.done;
+				}
+			}
+
+			if (targetStatusName) {
+				const targetStatusId = statusIdMap.get(targetStatusName);
+				if (targetStatusId) {
+					const result = await adapter.updateIssueStatus(
+						task.sourceId ?? task.linearId,
+						targetStatusId,
+					);
+					if (result.success) {
+						console.log(`  ${task.id} → ${targetStatusName}`);
+						pushCount++;
+					} else {
+						console.error(`  Failed to update ${task.id}: ${result.error}`);
+					}
+				}
+			}
+		}
+
+		if (pushCount > 0) {
+			console.log(`Pushed ${pushCount} status updates to Trello.`);
+		} else {
+			console.log("No local changes to push.");
+		}
+	}
+
+	// Phase 2: Fetch issues
+	const statusDesc = syncAll ? "all statuses" : `${syncStatuses.join("/")} status`;
+	const filterLabel = localConfig.label;
+	console.log(
+		`Fetching cards (${statusDesc})${filterLabel ? ` with label: ${filterLabel}` : ""}...`,
+	);
+
+	let issues;
+	if (singleIssueId) {
+		// Sync single issue
+		console.log(`Fetching card ${singleIssueId}...`);
+		const issue = await adapter.searchIssue(singleIssueId);
+		issues = issue ? [issue] : [];
+	} else {
+		issues = await adapter.getIssues({
+			teamId,
+			statusNames: syncAll ? undefined : syncStatuses,
+			labelName: filterLabel,
+			excludeLabels: localConfig.exclude_labels,
+			limit: 100,
+		});
+	}
+
+	if (issues.length === 0) {
+		console.log(
+			`No cards found${filterLabel ? ` with label: ${filterLabel}` : ""}.`,
+		);
+	} else {
+		console.log(`Found ${issues.length} cards. Processing...`);
+	}
+
+	// Phase 3: Convert to tasks
+	const tasks: Task[] = [];
+	let processedCount = 0;
+	const totalIssues = issues.length;
+
+	for (const issue of issues) {
+		processedCount++;
+		process.stdout.write(`\r  Processing ${processedCount}/${totalIssues}...`);
+
+		// Skip if any label is in excluded list
+		if (issue.labels.some((name) => excludedLabels.has(name))) {
+			continue;
+		}
+
+		// Preserve local status
+		let localStatus: Task["localStatus"] = "pending";
+		if (existingTasksMap.has(issue.id)) {
+			const existing = existingTasksMap.get(issue.id);
+			localStatus = existing?.localStatus ?? "pending";
+		}
+
+		const task: Task = {
+			id: issue.id,
+			linearId: issue.sourceId, // For backwards compatibility
+			sourceId: issue.sourceId,
+			sourceType: "trello",
+			title: issue.title,
+			status: issue.status,
+			localStatus,
+			assignee: issue.assigneeEmail,
+			priority: issue.priority,
+			labels: issue.labels,
+			branch: issue.branchName,
+			description: issue.description,
+			parentIssueId: issue.parentIssueId,
+			url: issue.url,
+			attachments: issue.attachments?.map((a) => ({
+				id: a.id,
+				title: a.title,
+				url: a.url,
+				sourceType: a.sourceType,
+			})),
+			comments: issue.comments?.map((c) => ({
+				id: c.id,
+				body: c.body,
+				createdAt: c.createdAt,
+				user: c.user,
+			})),
+		};
+
+		tasks.push(task);
+	}
+
+	// Sort by priority
+	tasks.sort((a, b) => {
+		const pa = getPrioritySortIndex(a.priority, config.priority_order);
+		const pb = getPrioritySortIndex(b.priority, config.priority_order);
+		return pa - pb;
+	});
+
+	// Merge tasks
+	let finalTasks: Task[];
+	if (singleIssueId && existingData) {
+		const existingTasks = existingData.tasks.filter((t) => t.id !== singleIssueId);
+		finalTasks = [...existingTasks, ...tasks];
+		finalTasks.sort((a, b) => {
+			const pa = getPrioritySortIndex(a.priority, config.priority_order);
+			const pb = getPrioritySortIndex(b.priority, config.priority_order);
+			return pa - pb;
+		});
+	} else {
+		finalTasks = tasks;
+	}
+
+	// Save data (Trello has no cycle, use board name)
+	const boardName = config.teams[localConfig.team]?.name ?? "Board";
+	const newData: CycleData = {
+		cycleId: teamId,
+		cycleName: boardName,
+		updatedAt: new Date().toISOString(),
+		tasks: finalTasks,
+	};
+
+	await saveCycleData(newData);
+
+	if (singleIssueId) {
+		console.log(`\n✅ Synced card ${singleIssueId}.`);
+	} else {
+		console.log(`\n✅ Synced ${tasks.length} cards from ${boardName}.`);
 	}
 }
 
