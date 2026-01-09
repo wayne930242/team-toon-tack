@@ -1,4 +1,4 @@
-import prompts from "prompts";
+import { select } from "@inquirer/prompts";
 import { createAdapter } from "./lib/adapters/index.js";
 import { displayTaskFull, PRIORITY_LABELS } from "./lib/display.js";
 import { getStatusTransitions } from "./lib/linear.js";
@@ -63,23 +63,21 @@ Examples:
 		}
 
 		const choices = pendingTasks.map((task) => ({
-			title: `${PRIORITY_LABELS[task.priority] || "⚪"} ${task.id}: ${task.title}`,
+			name: `${PRIORITY_LABELS[task.priority] || "⚪"} ${task.id}: ${task.title}`,
 			value: task.id,
 			description: task.labels.join(", "),
 		}));
 
-		const response = await prompts({
-			type: "select",
-			name: "issueId",
+		const selectedId = await select({
 			message: "選擇要處理的任務:",
 			choices: choices,
 		});
 
-		if (!response.issueId) {
+		if (!selectedId) {
 			console.log("已取消");
 			process.exit(0);
 		}
-		issueId = response.issueId;
+		issueId = selectedId;
 	} else if (["next", "下一個", "下一個工作"].includes(issueId)) {
 		if (pendingTasks.length === 0) {
 			console.log("✅ 沒有待處理的任務，所有工作已完成或進行中");

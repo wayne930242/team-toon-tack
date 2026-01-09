@@ -75,15 +75,15 @@ export function formatCommitLink(commit: CommitInfo): string {
 
 export function buildCompletionComment(
 	commit: CommitInfo,
-	aiMessage?: string,
+	promptMessage?: string,
 ): string {
 	const commitLink = formatCommitLink(commit);
 
 	const commentParts = [
 		"## ✅ 開發完成",
 		"",
-		"### 🤖 AI 修復說明",
-		aiMessage || "_No description provided_",
+		"### 🔧 修復說明",
+		promptMessage || "_No description provided_",
 		"",
 		"### 📝 Commit Info",
 		`**Commit:** ${commitLink}`,

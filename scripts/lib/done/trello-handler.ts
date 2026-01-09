@@ -14,7 +14,7 @@ import type { CompletionContext, CompletionResult } from "./types.js";
 export async function handleTrelloCompletion(
 	context: CompletionContext,
 ): Promise<CompletionResult> {
-	const { task, config, localConfig, commit, aiMessage } = context;
+	const { task, config, localConfig, commit, promptMessage } = context;
 	const sourceId = task.sourceId ?? task.linearId;
 
 	if (!sourceId) {
@@ -46,7 +46,7 @@ export async function handleTrelloCompletion(
 
 		// Add comment with commit info
 		if (commit) {
-			const commentBody = buildCompletionComment(commit, aiMessage);
+			const commentBody = buildCompletionComment(commit, promptMessage);
 			const commentResult = await adapter.addComment(sourceId, commentBody);
 			if (commentResult.success) {
 				console.log(`Trello: 已新增 commit 留言`);

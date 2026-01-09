@@ -1,6 +1,6 @@
 {
 	"name": "team-toon-tack",
-	"version": "3.0.0",
+	"version": "3.1.0",
 	"description": "Linear & Trello task sync & management CLI with TOON format",
 	"type": "module",
 	"bin": {
@@ -26,14 +26,13 @@
 		"release": "npm config set //registry.npmjs.org/:_authToken=$NPM_PUBLISH_KEY && npm publish"
 	},
 	"dependencies": {
+		"@inquirer/prompts": "^8.1.0",
 		"@linear/sdk": "^69.0.0",
-		"@toon-format/toon": "^2.1.0",
-		"prompts": "^2.4.2"
+		"@toon-format/toon": "^2.1.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.11",
 		"@types/node": "^25.0.3",
-		"@types/prompts": "^2.4.9",
 		"typescript": "^5.9.3"
 	},
 	"keywords": [

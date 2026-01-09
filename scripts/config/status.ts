@@ -1,4 +1,4 @@
-import prompts from "prompts";
+import { select } from "@inquirer/prompts";
 import { getWorkflowStates } from "../lib/linear.js";
 import {
 	type Config,
@@ -21,7 +21,7 @@ export async function configureStatus(
 	}
 
 	const stateChoices = states.map((s) => ({
-		title: `${s.name} (${s.type})`,
+		name: `${s.name} (${s.type})`,
 		value: s.name,
 	}));
 
@@ -38,50 +38,40 @@ export async function configureStatus(
 	const defaultTesting =
 		current.testing || states.find((s) => s.name === "Testing")?.name;
 
-	const todoResponse = await prompts({
-		type: "select",
-		name: "todo",
+	const todo = await select({
 		message: 'Select status for "Todo" (pending tasks):',
 		choices: stateChoices,
-		initial: stateChoices.findIndex((c) => c.value === defaultTodo),
+		default: defaultTodo,
 	});
 
-	const inProgressResponse = await prompts({
-		type: "select",
-		name: "in_progress",
+	const in_progress = await select({
 		message: 'Select status for "In Progress" (working tasks):',
 		choices: stateChoices,
-		initial: stateChoices.findIndex((c) => c.value === defaultInProgress),
+		default: defaultInProgress,
 	});
 
-	const doneResponse = await prompts({
-		type: "select",
-		name: "done",
+	const done = await select({
 		message: 'Select status for "Done" (completed tasks):',
 		choices: stateChoices,
-		initial: stateChoices.findIndex((c) => c.value === defaultDone),
+		default: defaultDone,
 	});
 
 	// Testing is optional
 	const testingChoices = [
-		{ title: "(None)", value: undefined },
+		{ name: "(None)", value: undefined as string | undefined },
 		...stateChoices,
 	];
-	const testingResponse = await prompts({
-		type: "select",
-		name: "testing",
+	const testing = await select<string | undefined>({
 		message: 'Select status for "Testing" (optional, for parent tasks):',
 		choices: testingChoices,
-		initial: defaultTesting
-			? testingChoices.findIndex((c) => c.value === defaultTesting)
-			: 0,
+		default: defaultTesting,
 	});
 
 	const statusTransitions: StatusTransitions = {
-		todo: todoResponse.todo || defaultTodo,
-		in_progress: inProgressResponse.in_progress || defaultInProgress,
-		done: doneResponse.done || defaultDone,
-		testing: testingResponse.testing,
+		todo: todo || defaultTodo,
+		in_progress: in_progress || defaultInProgress,
+		done: done || defaultDone,
+		testing: testing,
 	};
 
 	config.status_transitions = statusTransitions;

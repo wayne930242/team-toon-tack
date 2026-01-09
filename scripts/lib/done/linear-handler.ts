@@ -178,7 +178,7 @@ async function handleUpstreamCompletion(
 export async function handleLinearCompletion(
 	context: CompletionContext,
 ): Promise<CompletionResult> {
-	const { task, localConfig, commit, aiMessage } = context;
+	const { task, localConfig, commit, promptMessage } = context;
 
 	// Determine completion mode
 	const completionMode: CompletionMode =
@@ -213,7 +213,7 @@ export async function handleLinearCompletion(
 
 	// Add comment with commit info
 	if (commit) {
-		const commentBody = buildCompletionComment(commit, aiMessage);
+		const commentBody = buildCompletionComment(commit, promptMessage);
 		const commentSuccess = await addComment(task.linearId, commentBody);
 		if (commentSuccess) {
 			console.log(`Linear: 已新增 commit 留言`);

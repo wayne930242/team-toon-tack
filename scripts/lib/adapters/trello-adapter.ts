@@ -132,9 +132,9 @@ export class TrelloAdapter implements TaskSourceAdapter {
 				}
 			}
 
-			// Filter by label if specified
-			if (options.labelName) {
-				if (!labelNames.includes(options.labelName)) {
+			// Filter by labels if specified (OR logic - card must have at least one)
+			if (options.labelNames && options.labelNames.length > 0) {
+				if (!labelNames.some((name) => options.labelNames?.includes(name))) {
 					continue;
 				}
 			}

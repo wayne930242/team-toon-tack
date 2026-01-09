@@ -2,7 +2,7 @@
  * Trello-specific prompt functions for init
  */
 
-import prompts from "prompts";
+import { input, password } from "@inquirer/prompts";
 import { TrelloClient } from "../trello.js";
 import type { InitOptions } from "./types.js";
 
@@ -21,13 +21,10 @@ export async function promptForTrelloCredentials(
 		console.log("\n🔑 Trello API Credentials:");
 		console.log("   Get your API key from: https://trello.com/power-ups/admin");
 
-		const keyResponse = await prompts({
-			type: "text",
-			name: "apiKey",
+		apiKey = await input({
 			message: "Enter your Trello API key:",
 			validate: (v) => (v.length > 10 ? true : "API key seems too short"),
 		});
-		apiKey = keyResponse.apiKey;
 	}
 
 	if (!apiKey) {
@@ -40,12 +37,9 @@ export async function promptForTrelloCredentials(
 		console.log("\n   To get your token, visit this URL and authorize:");
 		console.log(`   ${authUrl}`);
 
-		const tokenResponse = await prompts({
-			type: "password",
-			name: "token",
+		token = await password({
 			message: "Enter the token from the page:",
 		});
-		token = tokenResponse.token;
 	}
 
 	if (!token) {

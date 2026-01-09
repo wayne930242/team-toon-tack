@@ -4,7 +4,7 @@
  * Entry point that delegates to source-specific completion handlers
  */
 
-import prompts from "prompts";
+import { input, select } from "@inquirer/prompts";
 import {
 	type CompletionContext,
 	handleLinearCompletion,
@@ -87,23 +87,21 @@ async function doneJob() {
 				console.log(`Auto-selected: ${issueId}`);
 			} else if (process.stdin.isTTY) {
 				const choices = inProgressTasks.map((t) => ({
-					title: `${t.id}: ${t.title}`,
+					name: `${t.id}: ${t.title}`,
 					value: t.id,
 					description: t.labels.join(", "),
 				}));
 
-				const response = await prompts({
-					type: "select",
-					name: "issueId",
+				const selectedId = await select({
 					message: "選擇要完成的任務:",
 					choices: choices,
 				});
 
-				if (!response.issueId) {
+				if (!selectedId) {
 					console.log("已取消");
 					process.exit(0);
 				}
-				issueId = response.issueId;
+				issueId = selectedId;
 			} else {
 				console.error("多個進行中任務，請指定 issue ID:");
 				for (const t of inProgressTasks) {
@@ -139,14 +137,11 @@ async function doneJob() {
 	const commit = getLatestCommit();
 
 	// Get AI summary message
-	let aiMessage = argMessage || "";
-	if (!aiMessage && process.stdin.isTTY) {
-		const aiMsgResponse = await prompts({
-			type: "text",
-			name: "aiMessage",
-			message: "AI 修復說明 (如何解決此問題):",
+	let promptMessage = argMessage || "";
+	if (!promptMessage && process.stdin.isTTY) {
+		promptMessage = await input({
+			message: "🔧 修復說明 (如何解決此問題):",
 		});
-		aiMessage = aiMsgResponse.aiMessage || "";
 	}
 
 	// Update remote (only if status_source is 'remote' or not set)
@@ -161,7 +156,7 @@ async function doneJob() {
 			config,
 			localConfig,
 			commit,
-			aiMessage,
+			promptMessage,
 		};
 
 		// Branch based on source type
@@ -215,8 +210,8 @@ async function doneJob() {
 			console.log(`URL: ${commit.commitUrl}`);
 		}
 	}
-	if (aiMessage) {
-		console.log(`AI: ${aiMessage}`);
+	if (promptMessage) {
+		console.log(`🔧 說明: ${promptMessage}`);
 	}
 	console.log(`\n🎉 任務完成！`);
 }

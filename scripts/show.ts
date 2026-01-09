@@ -179,7 +179,7 @@ async function searchIssuesFromRemote(filters: SearchFilters): Promise<Task[]> {
 	const issues = await adapter.getIssues({
 		teamId,
 		statusNames: filters.status ? [filters.status] : undefined,
-		labelName: filters.label,
+		labelNames: filters.label ? [filters.label] : undefined,
 		limit: 50,
 	});
 

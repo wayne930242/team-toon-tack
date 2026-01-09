@@ -39,9 +39,9 @@ export function parseArgs(args: string[]): InitOptions {
 				case "-t":
 					options.team = value;
 					break;
-				case "--label":
+				case "--labels":
 				case "-l":
-					options.label = value;
+					options.labels = value.split(",").map((l) => l.trim());
 					break;
 			}
 			continue;
@@ -75,10 +75,12 @@ export function parseArgs(args: string[]): InitOptions {
 			case "-t":
 				options.team = args[++i];
 				break;
-			case "--label":
-			case "-l":
-				options.label = args[++i];
+			case "--labels":
+			case "-l": {
+				const labelArg = args[++i];
+				options.labels = labelArg?.split(",").map((l) => l.trim());
 				break;
+			}
 			case "--force":
 			case "-f":
 				options.force = true;
@@ -111,7 +113,7 @@ OPTIONS:
   --trello-token <tok>  Trello token (or set TRELLO_TOKEN env)
   -u, --user <email>    Your email/username
   -t, --team <name>     Team/Board name to sync
-  -l, --label <name>    Default label filter (e.g., Frontend, Backend)
+  -l, --labels <names>  Label filters, comma-separated (e.g., "Frontend,Backend")
   -f, --force           Overwrite existing config files
   -y, --yes             Non-interactive mode (use defaults/provided args)
   -h, --help            Show this help message
@@ -119,7 +121,7 @@ OPTIONS:
 EXAMPLES:
   ttt init                           # Interactive Linear setup
   ttt init --source=trello           # Interactive Trello setup
-  ttt init --user alice@example.com --label Frontend
+  ttt init --user alice@example.com --labels "Frontend,Backend"
   ttt init -k lin_api_xxx -y
 `);
 }

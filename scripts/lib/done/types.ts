@@ -16,7 +16,7 @@ export interface CompletionContext {
 	config: Config;
 	localConfig: LocalConfig;
 	commit: CommitInfo | null;
-	aiMessage: string;
+	promptMessage: string;
 }
 
 export interface CompletionResult {

@@ -3,8 +3,8 @@
  */
 
 import fs from "node:fs/promises";
+import { select } from "@inquirer/prompts";
 import { encode } from "@toon-format/toon";
-import prompts from "prompts";
 import type {
 	CompletionMode,
 	Config,
@@ -51,13 +51,11 @@ export async function initTrello(
 		if (found) selectedBoard = found;
 	} else if (options.interactive && boards.length > 1) {
 		console.log("\n📋 Board Selection:");
-		const response = await prompts({
-			type: "select",
-			name: "boardId",
+		const boardId = await select({
 			message: "Select your board:",
-			choices: boards.map((b) => ({ title: b.name, value: b.id })),
+			choices: boards.map((b) => ({ name: b.name, value: b.id })),
 		});
-		selectedBoard = boards.find((b) => b.id === response.boardId) || boards[0];
+		selectedBoard = boards.find((b) => b.id === boardId) || boards[0];
 	}
 	console.log(`  Board: ${selectedBoard.name}`);
 
@@ -82,61 +80,55 @@ export async function initTrello(
 		);
 		if (found) currentMember = found;
 	} else if (options.interactive && members.length > 0) {
-		const response = await prompts({
-			type: "select",
-			name: "memberId",
+		const memberId = await select({
 			message: "Select yourself:",
 			choices: members.map((m) => ({
-				title: `${m.fullName} (@${m.username})`,
+				name: `${m.fullName} (@${m.username})`,
 				value: m.id,
 			})),
 		});
-		currentMember =
-			members.find((m) => m.id === response.memberId) || members[0];
+		currentMember = members.find((m) => m.id === memberId) || members[0];
 	}
 
 	// Select status mappings (lists)
-	const listChoices = lists.map((l) => ({ title: l.name, value: l.name }));
+	const listChoices = lists.map((l) => ({ name: l.name, value: l.name }));
 	let statusTransitions: StatusTransitions;
 
 	if (options.interactive && lists.length > 0) {
 		console.log("\n📊 Configure status mappings (lists):");
 
-		const todoResponse = await prompts({
-			type: "select",
-			name: "todo",
+		const defaultTodo =
+			lists.find((l) => /todo|backlog|to do/i.test(l.name))?.name ||
+			lists[0]?.name;
+		const defaultInProgress =
+			lists.find((l) => /progress|doing|working/i.test(l.name))?.name ||
+			lists[1]?.name;
+		const defaultDone =
+			lists.find((l) => /done|complete|finished/i.test(l.name))?.name ||
+			lists[lists.length - 1]?.name;
+
+		const todo = await select({
 			message: 'Select list for "Todo" (pending tasks):',
 			choices: listChoices,
-			initial: listChoices.findIndex((c) =>
-				/todo|backlog|to do/i.test(c.value),
-			),
+			default: defaultTodo,
 		});
 
-		const inProgressResponse = await prompts({
-			type: "select",
-			name: "in_progress",
+		const in_progress = await select({
 			message: 'Select list for "In Progress":',
 			choices: listChoices,
-			initial: listChoices.findIndex((c) =>
-				/progress|doing|working/i.test(c.value),
-			),
+			default: defaultInProgress,
 		});
 
-		const doneResponse = await prompts({
-			type: "select",
-			name: "done",
+		const done = await select({
 			message: 'Select list for "Done":',
 			choices: listChoices,
-			initial: listChoices.findIndex((c) =>
-				/done|complete|finished/i.test(c.value),
-			),
+			default: defaultDone,
 		});
 
 		statusTransitions = {
-			todo: todoResponse.todo || lists[0]?.name || "Todo",
-			in_progress:
-				inProgressResponse.in_progress || lists[1]?.name || "In Progress",
-			done: doneResponse.done || lists[lists.length - 1]?.name || "Done",
+			todo: todo || lists[0]?.name || "Todo",
+			in_progress: in_progress || lists[1]?.name || "In Progress",
+			done: done || lists[lists.length - 1]?.name || "Done",
 		};
 	} else {
 		// Auto-detect from list names
@@ -240,7 +232,7 @@ export async function initTrello(
 		current_user: currentUserKey,
 		team: teamKey,
 		completion_mode: completionMode,
-		label: defaultLabel,
+		labels: defaultLabel,
 		status_source: statusSource,
 	};
 
@@ -263,7 +255,9 @@ export async function initTrello(
 	console.log(`  Source: Trello`);
 	console.log(`  Board: ${selectedBoard.name}`);
 	console.log(`  User: ${currentMember.fullName} (@${currentMember.username})`);
-	console.log(`  Label filter: ${defaultLabel || "(none)"}`);
+	console.log(
+		`  Label filters: ${defaultLabel && defaultLabel.length > 0 ? defaultLabel.join(", ") : "(none)"}`,
+	);
 	console.log(
 		`  Status source: ${statusSource === "local" ? "local" : "remote"}`,
 	);

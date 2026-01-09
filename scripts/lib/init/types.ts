@@ -11,7 +11,7 @@ export interface InitOptions {
 	trelloToken?: string;
 	user?: string;
 	team?: string;
-	label?: string;
+	labels?: string[];
 	force?: boolean;
 	interactive?: boolean;
 }

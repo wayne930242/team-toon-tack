@@ -1,7 +1,6 @@
-import prompts from "prompts";
+import { checkbox, select } from "@inquirer/prompts";
 import { getDefaultStatusTransitions } from "../lib/config-builder.js";
 import {
-	type CompletionMode,
 	type Config,
 	getLinearClient,
 	type LocalConfig,
@@ -52,21 +51,18 @@ export async function configureTeams(
 
 	// 1. Select dev team (single)
 	console.log("\n👨‍💻 Dev Team:");
-	const devTeamResponse = await prompts({
-		type: "select",
-		name: "teamId",
+	const devTeamId = await select({
 		message: "Select your dev team:",
 		choices: teams.map((t) => {
-			const key = teamKeyMap.get(t.id) || "";
+			const _key = teamKeyMap.get(t.id) || "";
 			return {
-				title: t.name,
+				name: t.name,
 				value: t.id,
-				selected: key === localConfig.team,
 			};
 		}),
+		default: teams.find((t) => teamKeyMap.get(t.id) === localConfig.team)?.id,
 	});
 
-	const devTeamId = devTeamResponse.teamId;
 	const devTeamKey = teamKeyMap.get(devTeamId) || localConfig.team;
 	const devTeam = teams.find((t) => t.id === devTeamId);
 
@@ -75,26 +71,17 @@ export async function configureTeams(
 	const devDefaults = getDefaultStatusTransitions(devStates);
 
 	console.log("\n🔍 Dev Team Testing/Review Status:");
-	const devTestingResponse = await prompts({
-		type: "select",
-		name: "testingStatus",
+	const devTestingStatus = await select<string | undefined>({
 		message: "Select testing/review status for dev team:",
 		choices: [
-			{ title: "(Skip - no testing status)", value: undefined },
+			{ name: "(Skip - no testing status)", value: undefined },
 			...devStates.map((s) => ({
-				title: `${s.name} (${s.type})`,
+				name: `${s.name} (${s.type})`,
 				value: s.name,
 			})),
 		],
-		initial: localConfig.dev_testing_status
-			? devStates.findIndex((s) => s.name === localConfig.dev_testing_status) +
-				1
-			: devDefaults.testing
-				? devStates.findIndex((s) => s.name === devDefaults.testing) + 1
-				: 0,
+		default: localConfig.dev_testing_status || devDefaults.testing,
 	});
-
-	const devTestingStatus = devTestingResponse.testingStatus;
 
 	// 3. Select QA/PM teams (multiple)
 	const otherTeams = teams.filter((t) => t.id !== devTeamId);
@@ -102,24 +89,19 @@ export async function configureTeams(
 
 	if (otherTeams.length > 0) {
 		console.log("\n🔗 QA/PM Teams:");
-		const qaPmResponse = await prompts({
-			type: "multiselect",
-			name: "teamIds",
+		const selectedQaPmIds = await checkbox({
 			message:
 				"Select QA/PM teams for cross-team parent updates (space to select):",
 			choices: otherTeams.map((t) => {
 				const key = teamKeyMap.get(t.id) || "";
 				const currentQaPm = localConfig.qa_pm_teams || [];
 				return {
-					title: t.name,
+					name: t.name,
 					value: t.id,
-					selected: currentQaPm.some((qp) => qp.team === key),
+					checked: currentQaPm.some((qp) => qp.team === key),
 				};
 			}),
-			hint: "- Press space to select, enter to confirm. Leave empty to skip.",
 		});
-
-		const selectedQaPmIds = qaPmResponse.teamIds || [];
 
 		// 4. For each QA/PM team, select testing status
 		for (const teamId of selectedQaPmIds) {
@@ -136,31 +118,23 @@ export async function configureTeams(
 			);
 
 			const stateChoices = teamStates.map((s) => ({
-				title: `${s.name} (${s.type})`,
+				name: `${s.name} (${s.type})`,
 				value: s.name,
 			}));
 
-			const statusResponse = await prompts({
-				type: "select",
-				name: "testingStatus",
+			const testingStatus = await select<string | undefined>({
 				message: `Select testing status for ${team.name}:`,
 				choices: [
-					{ title: "(Skip this team)", value: undefined },
+					{ name: "(Skip this team)", value: undefined },
 					...stateChoices,
 				],
-				initial: existingConfig?.testing_status
-					? stateChoices.findIndex(
-							(c) => c.value === existingConfig.testing_status,
-						) + 1
-					: defaults.testing
-						? stateChoices.findIndex((c) => c.value === defaults.testing) + 1
-						: 0,
+				default: existingConfig?.testing_status || defaults.testing,
 			});
 
-			if (statusResponse.testingStatus) {
+			if (testingStatus) {
 				qaPmTeams.push({
 					team: teamKey,
-					testing_status: statusResponse.testingStatus,
+					testing_status: testingStatus,
 				});
 			}
 		}
@@ -171,47 +145,34 @@ export async function configureTeams(
 	const currentMode =
 		localConfig.completion_mode ||
 		(qaPmTeams.length > 0 ? "upstream_strict" : "simple");
-	const defaultModeIndex =
-		currentMode === "simple"
-			? 0
-			: currentMode === "strict_review"
-				? 1
-				: currentMode === "upstream_strict"
-					? 2
-					: 3;
 
-	const modeResponse = await prompts({
-		type: "select",
-		name: "mode",
+	const completionMode = await select({
 		message: "How should tasks be completed?",
 		choices: [
 			{
-				title: "Simple",
-				value: "simple",
+				name: "Simple",
+				value: "simple" as const,
 				description: "Mark task as done directly",
 			},
 			{
-				title: "Strict Review",
-				value: "strict_review",
+				name: "Strict Review",
+				value: "strict_review" as const,
 				description: "Mark task to dev team's testing status",
 			},
 			{
-				title: "Upstream Strict (recommended with QA/PM)",
-				value: "upstream_strict",
+				name: "Upstream Strict (recommended with QA/PM)",
+				value: "upstream_strict" as const,
 				description:
 					"Done + parent to testing, fallback to testing if no parent",
 			},
 			{
-				title: "Upstream Not Strict",
-				value: "upstream_not_strict",
+				name: "Upstream Not Strict",
+				value: "upstream_not_strict" as const,
 				description: "Done + parent to testing, no fallback",
 			},
 		],
-		initial: defaultModeIndex,
+		default: currentMode,
 	});
-
-	const completionMode: CompletionMode =
-		modeResponse.mode || (qaPmTeams.length > 0 ? "upstream_strict" : "simple");
 
 	// Update local config
 	localConfig.team = devTeamKey;

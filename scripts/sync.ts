@@ -216,8 +216,12 @@ Examples:
 	const existingTasksMap = new Map(existingData?.tasks.map((t) => [t.id, t]));
 
 	// Phase 4: Fetch current issues with full content
-	const filterLabel = localConfig.label;
+	const filterLabels = localConfig.labels;
 	const syncStatuses = [statusTransitions.todo, statusTransitions.in_progress];
+	const labelDesc =
+		filterLabels && filterLabels.length > 0
+			? ` with labels: ${filterLabels.join(", ")}`
+			: "";
 
 	let issues: { nodes: Array<{ id: string; identifier: string }> };
 
@@ -240,9 +244,7 @@ Examples:
 		const statusDesc = syncAll
 			? "all statuses"
 			: `${syncStatuses.join("/")} status`;
-		console.log(
-			`Fetching issues (${statusDesc})${filterLabel ? ` with label: ${filterLabel}` : ""}...`,
-		);
+		console.log(`Fetching issues (${statusDesc})${labelDesc}...`);
 
 		// Build filter - label is optional
 		const issueFilter: Record<string, unknown> = {
@@ -253,8 +255,8 @@ Examples:
 		if (!syncAll) {
 			issueFilter.state = { name: { in: syncStatuses } };
 		}
-		if (filterLabel) {
-			issueFilter.labels = { name: { eq: filterLabel } };
+		if (filterLabels && filterLabels.length > 0) {
+			issueFilter.labels = { name: { in: filterLabels } };
 		}
 
 		issues = await client.issues({
@@ -264,9 +266,7 @@ Examples:
 	}
 
 	if (issues.nodes.length === 0) {
-		console.log(
-			`No issues found in current cycle${filterLabel ? ` with label: ${filterLabel}` : ""}.`,
-		);
+		console.log(`No issues found in current cycle${labelDesc}.`);
 	} else {
 		console.log(`Found ${issues.nodes.length} issues. Processing...`);
 	}
@@ -595,10 +595,12 @@ async function syncTrello(
 	const statusDesc = syncAll
 		? "all statuses"
 		: `${syncStatuses.join("/")} status`;
-	const filterLabel = localConfig.label;
-	console.log(
-		`Fetching cards (${statusDesc})${filterLabel ? ` with label: ${filterLabel}` : ""}...`,
-	);
+	const filterLabels = localConfig.labels;
+	const labelDesc =
+		filterLabels && filterLabels.length > 0
+			? ` with labels: ${filterLabels.join(", ")}`
+			: "";
+	console.log(`Fetching cards (${statusDesc})${labelDesc}...`);
 
 	let issues: Awaited<ReturnType<typeof adapter.getIssues>>;
 	if (singleIssueId) {
@@ -610,16 +612,14 @@ async function syncTrello(
 		issues = await adapter.getIssues({
 			teamId,
 			statusNames: syncAll ? undefined : syncStatuses,
-			labelName: filterLabel,
+			labelNames: filterLabels,
 			excludeLabels: localConfig.exclude_labels,
 			limit: 100,
 		});
 	}
 
 	if (issues.length === 0) {
-		console.log(
-			`No cards found${filterLabel ? ` with label: ${filterLabel}` : ""}.`,
-		);
+		console.log(`No cards found${labelDesc}.`);
 	} else {
 		console.log(`Found ${issues.length} cards. Processing...`);
 	}

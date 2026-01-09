@@ -3,7 +3,7 @@
  */
 
 import fs from "node:fs/promises";
-import prompts from "prompts";
+import { confirm } from "@inquirer/prompts";
 
 export async function updateGitignore(
 	tttDir: string,
@@ -39,11 +39,9 @@ export async function updateGitignore(
 
 		// Ask user in interactive mode
 		if (interactive) {
-			const { addToGitignore } = await prompts({
-				type: "confirm",
-				name: "addToGitignore",
+			const addToGitignore = await confirm({
 				message: `Add ${entry} to .gitignore?`,
-				initial: true,
+				default: true,
 			});
 			if (!addToGitignore) return;
 		}

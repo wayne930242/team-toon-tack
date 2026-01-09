@@ -244,7 +244,7 @@ export async function initLinear(
 					localConfig.qa_pm_teams = existingLocal.qa_pm_teams;
 				if (existingLocal.completion_mode)
 					localConfig.completion_mode = existingLocal.completion_mode;
-				if (existingLocal.label) localConfig.label = existingLocal.label;
+				if (existingLocal.labels) localConfig.labels = existingLocal.labels;
 				if (existingLocal.exclude_labels)
 					localConfig.exclude_labels = existingLocal.exclude_labels;
 				if (existingLocal.status_source)
@@ -268,7 +268,9 @@ export async function initLinear(
 	console.log(
 		`  User: ${currentUser.displayName || currentUser.name} (${currentUser.email})`,
 	);
-	console.log(`  Label filter: ${defaultLabel || "(none)"}`);
+	console.log(
+		`  Label filters: ${defaultLabel && defaultLabel.length > 0 ? defaultLabel.join(", ") : "(none)"}`,
+	);
 	console.log(
 		`  Status source: ${statusSource === "local" ? "local (use 'sync --update' to push)" : "remote (immediate sync)"}`,
 	);

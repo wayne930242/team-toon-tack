@@ -17,7 +17,7 @@ export function showConfig(config: Config, localConfig: LocalConfig): void {
 
 	// Filters
 	console.log("\nFilters:");
-	console.log(`  Label: ${localConfig.label || "(all)"}`);
+	console.log(`  Labels: ${localConfig.labels?.join(", ") || "(all)"}`);
 	console.log(
 		`  Exclude labels: ${localConfig.exclude_labels?.join(", ") || "(none)"}`,
 	);

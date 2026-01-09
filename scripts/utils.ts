@@ -193,7 +193,7 @@ export interface LocalConfig {
 	qa_pm_teams?: QaPmTeamConfig[]; // multiple QA/PM teams with their testing statuses
 	completion_mode?: CompletionMode; // how done-job handles task completion
 	exclude_labels?: string[];
-	label?: string; // include only this label (optional filter)
+	labels?: string[]; // include only these labels (optional filter, OR logic)
 	status_source?: "remote" | "local"; // 'remote' = update Linear immediately, 'local' = only update local until sync --update
 	// Legacy fields (for backwards compatibility)
 	teams?: string[]; // deprecated: use team (single dev team)

@@ -1,4 +1,4 @@
-import prompts from "prompts";
+import { checkbox } from "@inquirer/prompts";
 import {
 	type Config,
 	getLinearClient,
@@ -22,43 +22,36 @@ export async function configureFilters(
 	});
 	const labels = labelsData.nodes;
 
-	// Label filter (optional)
-	const labelChoices = [
-		{ title: "(No filter - sync all labels)", value: "" },
-		...labels.map((l) => ({ title: l.name, value: l.name })),
-	];
-	const labelResponse = await prompts({
-		type: "select",
-		name: "label",
-		message: "Select label filter (optional):",
+	// Labels filter (multiselect, optional)
+	const labelChoices = labels.map((l) => ({
+		name: l.name,
+		value: l.name,
+		checked: localConfig.labels?.includes(l.name),
+	}));
+	const selectedLabels = await checkbox({
+		message: "Select label filters (space to select, enter to confirm):",
 		choices: labelChoices,
-		initial: localConfig.label
-			? labelChoices.findIndex((c) => c.value === localConfig.label)
-			: 0,
 	});
 
 	// Exclude labels
-	const excludeLabelsResponse = await prompts({
-		type: "multiselect",
-		name: "excludeLabels",
+	const excludeLabelChoices = labels.map((l) => ({
+		name: l.name,
+		value: l.name,
+		checked: localConfig.exclude_labels?.includes(l.name),
+	}));
+	const excludeLabels = await checkbox({
 		message: "Select labels to exclude (space to select):",
-		choices: labels.map((l) => ({
-			title: l.name,
-			value: l.name,
-			selected: localConfig.exclude_labels?.includes(l.name),
-		})),
+		choices: excludeLabelChoices,
 	});
 
-	localConfig.label = labelResponse.label || undefined;
+	localConfig.labels = selectedLabels.length > 0 ? selectedLabels : undefined;
 	localConfig.exclude_labels =
-		excludeLabelsResponse.excludeLabels?.length > 0
-			? excludeLabelsResponse.excludeLabels
-			: undefined;
+		excludeLabels.length > 0 ? excludeLabels : undefined;
 
 	await saveLocalConfig(localConfig);
 
 	console.log("\n✅ Filters updated:");
-	console.log(`  Label: ${localConfig.label || "(all)"}`);
+	console.log(`  Labels: ${localConfig.labels?.join(", ") || "(all)"}`);
 	console.log(
 		`  Exclude labels: ${localConfig.exclude_labels?.join(", ") || "(none)"}`,
 	);

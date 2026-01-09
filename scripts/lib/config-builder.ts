@@ -207,7 +207,7 @@ export function buildLocalConfig(
 	devTestingStatus?: string,
 	qaPmTeams?: QaPmTeamConfig[],
 	completionMode?: CompletionMode,
-	defaultLabel?: string,
+	defaultLabels?: string[],
 	excludeLabels?: string[],
 	statusSource?: "remote" | "local",
 ): LocalConfig {
@@ -217,7 +217,8 @@ export function buildLocalConfig(
 		dev_testing_status: devTestingStatus,
 		qa_pm_teams: qaPmTeams && qaPmTeams.length > 0 ? qaPmTeams : undefined,
 		completion_mode: completionMode,
-		label: defaultLabel,
+		labels:
+			defaultLabels && defaultLabels.length > 0 ? defaultLabels : undefined,
 		exclude_labels:
 			excludeLabels && excludeLabels.length > 0 ? excludeLabels : undefined,
 		status_source: statusSource,

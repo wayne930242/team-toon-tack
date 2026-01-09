@@ -114,8 +114,8 @@ export class LinearAdapter implements TaskSourceAdapter {
 			filter.state = { name: { in: options.statusNames } };
 		}
 
-		if (options.labelName) {
-			filter.labels = { name: { eq: options.labelName } };
+		if (options.labelNames && options.labelNames.length > 0) {
+			filter.labels = { name: { in: options.labelNames } };
 		}
 
 		if (options.assigneeEmail) {

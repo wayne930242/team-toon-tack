@@ -4,7 +4,7 @@
  * Entry point that delegates to source-specific initialization
  */
 
-import prompts from "prompts";
+import { confirm } from "@inquirer/prompts";
 import {
 	type InitPaths,
 	initLinear,
@@ -48,11 +48,9 @@ async function init() {
 		if (localExists) console.log(`  ✓ ${paths.localPath}`);
 
 		if (options.interactive) {
-			const { proceed } = await prompts({
-				type: "confirm",
-				name: "proceed",
+			const proceed = await confirm({
 				message: "Update existing configuration?",
-				initial: true,
+				default: true,
 			});
 			if (!proceed) {
 				console.log("Cancelled.");
