@@ -199,7 +199,7 @@ export class TrelloClient {
 	async getBoardCards(boardId: string): Promise<TrelloCard[]> {
 		return this.request<TrelloCard[]>(
 			"GET",
-			`/boards/${boardId}/cards?filter=open&fields=id,name,desc,url,shortUrl,shortLink,closed,pos,due,dueComplete,idBoard,idList,idMembers,idLabels,badges,dateLastActivity&attachments=false&members=false&labels=true`,
+			`/boards/${boardId}/cards?filter=open&fields=id,name,desc,url,shortUrl,shortLink,closed,pos,due,dueComplete,idBoard,idList,idMembers,idLabels,labels,badges,dateLastActivity&attachments=false&members=false`,
 		);
 	}
 
