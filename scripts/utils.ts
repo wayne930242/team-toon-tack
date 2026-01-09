@@ -62,11 +62,11 @@ export interface CycleInfo {
 }
 
 export interface StatusTransitions {
-	todo: string; // Linear status name for "todo" tasks (e.g., 'Todo', 'Backlog')
-	in_progress: string; // Linear status name for "in progress" tasks (e.g., 'In Progress')
-	done: string; // Linear status name for "done" tasks (e.g., 'Done', 'Completed')
-	testing?: string; // Linear status name for "testing" tasks (optional, e.g., 'Testing', 'In Review')
-	blocked?: string; // Linear status name for "blocked" tasks (optional, e.g., 'Blocked', 'On Hold')
+	todo: string | string[]; // Status name(s) for "todo" tasks - supports multiple for sync filter (e.g., ['Backlog', 'Todo'])
+	in_progress: string; // Target status for "in progress" (move destination)
+	done: string; // Target status for "done" (move destination)
+	testing?: string; // Target status for "testing" (move destination, optional)
+	blocked?: string; // Target status for "blocked" (move destination, optional)
 }
 
 // QA/PM Team configuration with its testing status

@@ -1,11 +1,13 @@
 import { createAdapter } from "./lib/adapters/index.js";
 import {
+	clearAllOutput,
 	clearIssueImages,
 	downloadLinearImage,
 	ensureOutputDir,
 	extractLinearImageUrls,
 	isLinearImageUrl,
 } from "./lib/files.js";
+import { getSyncStatuses } from "./lib/status-helpers.js";
 import {
 	type Attachment,
 	type Comment,
@@ -89,6 +91,11 @@ Examples:
 
 	// Ensure output directory exists
 	await ensureOutputDir(outputPath);
+
+	// Clear previous output for full sync (not single-issue)
+	if (!singleIssueId) {
+		await clearAllOutput(outputPath);
+	}
 
 	// Build excluded labels set
 	const excludedLabels = new Set(localConfig.exclude_labels ?? []);
@@ -217,7 +224,7 @@ Examples:
 
 	// Phase 4: Fetch current issues with full content
 	const filterLabels = localConfig.labels;
-	const syncStatuses = [statusTransitions.todo, statusTransitions.in_progress];
+	const syncStatuses = getSyncStatuses(statusTransitions);
 	const labelDesc =
 		filterLabels && filterLabels.length > 0
 			? ` with labels: ${filterLabels.join(", ")}`
@@ -523,6 +530,11 @@ async function syncTrello(
 	// Ensure output directory exists
 	await ensureOutputDir(outputPath);
 
+	// Clear previous output for full sync (not single-issue)
+	if (!singleIssueId) {
+		await clearAllOutput(outputPath);
+	}
+
 	// Build excluded labels set
 	const excludedLabels = new Set(localConfig.exclude_labels ?? []);
 
@@ -539,7 +551,7 @@ async function syncTrello(
 		in_progress: "In Progress",
 		done: "Done",
 	};
-	const syncStatuses = [statusTransitions.todo, statusTransitions.in_progress];
+	const syncStatuses = getSyncStatuses(statusTransitions);
 
 	// Load existing data
 	const existingData = await loadCycleData();

@@ -161,3 +161,21 @@ export async function clearIssueImages(
 export async function ensureOutputDir(outputDir: string): Promise<void> {
 	await fs.mkdir(outputDir, { recursive: true });
 }
+
+/**
+ * Clear all files in output directory (for fresh sync)
+ */
+export async function clearAllOutput(outputDir: string): Promise<void> {
+	try {
+		const files = await fs.readdir(outputDir);
+		for (const file of files) {
+			const filepath = path.join(outputDir, file);
+			const stat = await fs.stat(filepath);
+			if (stat.isFile()) {
+				await fs.unlink(filepath);
+			}
+		}
+	} catch {
+		// Directory doesn't exist or other error, ignore
+	}
+}
