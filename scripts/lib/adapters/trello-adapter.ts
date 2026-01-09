@@ -16,7 +16,6 @@ import {
 	type SourceStatus,
 	type SourceTeam,
 	type SourceUser,
-	STANDARD_PRIORITIES,
 	type TaskSourceAdapter,
 } from "./types.js";
 
@@ -24,7 +23,10 @@ export class TrelloAdapter implements TaskSourceAdapter {
 	readonly type = "trello" as const;
 	private client: TrelloClient;
 	private listsCache: Map<string, { id: string; name: string }[]> = new Map();
-	private membersCache: Map<string, Map<string, { id: string; email?: string; displayName: string }>> = new Map();
+	private membersCache: Map<
+		string,
+		Map<string, { id: string; email?: string; displayName: string }>
+	> = new Map();
 
 	constructor(apiKey: string, token: string) {
 		this.client = new TrelloClient(apiKey, token);
@@ -53,7 +55,10 @@ export class TrelloAdapter implements TaskSourceAdapter {
 		}));
 
 		// Cache members for later lookup
-		const memberMap = new Map<string, { id: string; email?: string; displayName: string }>();
+		const memberMap = new Map<
+			string,
+			{ id: string; email?: string; displayName: string }
+		>();
 		for (const user of users) {
 			memberMap.set(user.id, user);
 		}
@@ -118,7 +123,7 @@ export class TrelloAdapter implements TaskSourceAdapter {
 
 		for (const card of cards) {
 			const listName = listMap.get(card.idList) ?? "Unknown";
-			const labelNames = card.labels.map((l) => l.name).filter(Boolean);
+			const labelNames = (card.labels ?? []).map((l) => l.name).filter(Boolean);
 
 			// Filter by status names if specified
 			if (options.statusNames && options.statusNames.length > 0) {
@@ -231,7 +236,8 @@ export class TrelloAdapter implements TaskSourceAdapter {
 				url: card.url,
 				parentIssueId: undefined,
 				branchName: undefined,
-				attachments: sourceAttachments.length > 0 ? sourceAttachments : undefined,
+				attachments:
+					sourceAttachments.length > 0 ? sourceAttachments : undefined,
 				comments: sourceComments.length > 0 ? sourceComments : undefined,
 			};
 		} catch {

@@ -161,7 +161,12 @@ export interface Task {
 	sourceType?: TaskSourceType;
 	title: string;
 	status: string;
-	localStatus: "pending" | "in-progress" | "in-review" | "completed" | "blocked";
+	localStatus:
+		| "pending"
+		| "in-progress"
+		| "in-review"
+		| "completed"
+		| "blocked";
 	assignee?: string;
 	priority: number;
 	labels: string[];

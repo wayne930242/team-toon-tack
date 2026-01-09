@@ -25,12 +25,15 @@ export function createAdapter(config: Config): TaskSourceAdapter {
 			return new LinearAdapter();
 
 		case "trello": {
-			const apiKey = config.source?.trello?.apiKey || process.env.TRELLO_API_KEY;
+			const apiKey =
+				config.source?.trello?.apiKey || process.env.TRELLO_API_KEY;
 			const token = config.source?.trello?.token || process.env.TRELLO_TOKEN;
 
 			if (!apiKey || !token) {
 				console.error("Error: Trello credentials not configured.");
-				console.error("Set TRELLO_API_KEY and TRELLO_TOKEN environment variables,");
+				console.error(
+					"Set TRELLO_API_KEY and TRELLO_TOKEN environment variables,",
+				);
 				console.error("or run 'ttt init --source=trello' to configure.");
 				process.exit(1);
 			}

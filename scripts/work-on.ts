@@ -137,11 +137,13 @@ Examples:
 						if (result.success) {
 							task.status = transitions.in_progress;
 							const sourceName = sourceType === "trello" ? "Trello" : "Linear";
-							console.log(`${sourceName}: ${task.id} → ${transitions.in_progress}`);
+							console.log(
+								`${sourceName}: ${task.id} → ${transitions.in_progress}`,
+							);
 						}
 					}
 				}
-			} catch (error) {
+			} catch (_error) {
 				// Silently fail if adapter not available (e.g., no API key)
 			}
 		}
@@ -150,7 +152,9 @@ Examples:
 		console.log(`Local: ${task.id} → in-progress`);
 		if (statusSource === "local") {
 			const sourceName = sourceType === "trello" ? "Trello" : "Linear";
-			console.log(`(${sourceName} status not updated - use 'sync --update' to push)`);
+			console.log(
+				`(${sourceName} status not updated - use 'sync --update' to push)`,
+			);
 		}
 	}
 

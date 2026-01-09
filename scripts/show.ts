@@ -190,7 +190,8 @@ async function searchIssuesFromRemote(filters: SearchFilters): Promise<Task[]> {
 		if (filters.assignee) {
 			const assigneeLower = filters.assignee.toLowerCase();
 			if (assigneeLower === "me") {
-				const userEmail = config.users[localConfig.current_user]?.email?.toLowerCase();
+				const userEmail =
+					config.users[localConfig.current_user]?.email?.toLowerCase();
 				if (!userEmail || issue.assigneeEmail?.toLowerCase() !== userEmail) {
 					continue;
 				}

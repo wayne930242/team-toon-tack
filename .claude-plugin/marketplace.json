@@ -5,15 +5,15 @@
 		"email": "wayne930242@gmail.com"
 	},
 	"metadata": {
-		"description": "Linear task management tools for Claude Code - efficient workflow without MCP overhead",
+		"description": "Task management tools for Claude Code - supports Linear and Trello, efficient workflow without MCP overhead",
 		"version": "1.0.0"
 	},
 	"plugins": [
 		{
 			"name": "team-toon-tack",
 			"source": "./",
-			"description": "Linear task sync & management CLI with commands and skills",
-			"version": "2.3.6"
+			"description": "Linear/Trello task sync & management CLI with commands and skills",
+			"version": "2.4.0"
 		}
 	]
 }

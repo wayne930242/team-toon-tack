@@ -1,4 +1,4 @@
-import { createAdapter, type TaskSourceAdapter } from "./lib/adapters/index.js";
+import { createAdapter } from "./lib/adapters/index.js";
 import {
 	clearIssueImages,
 	downloadLinearImage,
@@ -17,10 +17,10 @@ import {
 	getPrioritySortIndex,
 	getSourceType,
 	getTeamId,
+	type LocalConfig,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
-	type LocalConfig,
 	saveConfig,
 	saveCycleData,
 	type Task,
@@ -514,7 +514,9 @@ async function syncTrello(
 	const isConnected = await adapter.validateConnection();
 	if (!isConnected) {
 		console.error("Error: Failed to connect to Trello.");
-		console.error("Check your TRELLO_API_KEY and TRELLO_TOKEN environment variables.");
+		console.error(
+			"Check your TRELLO_API_KEY and TRELLO_TOKEN environment variables.",
+		);
 		process.exit(1);
 	}
 
@@ -590,13 +592,15 @@ async function syncTrello(
 	}
 
 	// Phase 2: Fetch issues
-	const statusDesc = syncAll ? "all statuses" : `${syncStatuses.join("/")} status`;
+	const statusDesc = syncAll
+		? "all statuses"
+		: `${syncStatuses.join("/")} status`;
 	const filterLabel = localConfig.label;
 	console.log(
 		`Fetching cards (${statusDesc})${filterLabel ? ` with label: ${filterLabel}` : ""}...`,
 	);
 
-	let issues;
+	let issues: Awaited<ReturnType<typeof adapter.getIssues>>;
 	if (singleIssueId) {
 		// Sync single issue
 		console.log(`Fetching card ${singleIssueId}...`);
@@ -683,7 +687,9 @@ async function syncTrello(
 	// Merge tasks
 	let finalTasks: Task[];
 	if (singleIssueId && existingData) {
-		const existingTasks = existingData.tasks.filter((t) => t.id !== singleIssueId);
+		const existingTasks = existingData.tasks.filter(
+			(t) => t.id !== singleIssueId,
+		);
 		finalTasks = [...existingTasks, ...tasks];
 		finalTasks.sort((a, b) => {
 			const pa = getPrioritySortIndex(a.priority, config.priority_order);

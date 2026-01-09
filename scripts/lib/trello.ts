@@ -276,9 +276,13 @@ export class TrelloClient {
 	 * Add a comment to a card
 	 */
 	async addComment(cardId: string, text: string): Promise<TrelloAction> {
-		return this.request<TrelloAction>("POST", `/cards/${cardId}/actions/comments`, {
-			text,
-		});
+		return this.request<TrelloAction>(
+			"POST",
+			`/cards/${cardId}/actions/comments`,
+			{
+				text,
+			},
+		);
 	}
 
 	/**

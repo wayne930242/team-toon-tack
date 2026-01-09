@@ -165,7 +165,11 @@ Examples:
 		const sourceType = getSourceType(config);
 		const sourceId = task.sourceId ?? task.linearId;
 
-		if (statusSource === "remote" && (newLinearStatus || newLocalStatus) && sourceId) {
+		if (
+			statusSource === "remote" &&
+			(newLinearStatus || newLocalStatus) &&
+			sourceId
+		) {
 			let targetStateName = newLinearStatus;
 			if (!targetStateName && newLocalStatus) {
 				targetStateName = mapLocalStatusToLinear(newLocalStatus, config);
@@ -178,7 +182,9 @@ Examples:
 
 					if (teamId) {
 						const statuses = await adapter.getStatuses(teamId);
-						const targetStatus = statuses.find((s) => s.name === targetStateName);
+						const targetStatus = statuses.find(
+							(s) => s.name === targetStateName,
+						);
 
 						if (targetStatus) {
 							const result = await adapter.updateIssueStatus(
@@ -188,12 +194,13 @@ Examples:
 							if (result.success) {
 								task.status = targetStateName;
 								needsSave = true;
-								const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+								const sourceName =
+									sourceType === "trello" ? "Trello" : "Linear";
 								console.log(`${sourceName}: ${task.id} → ${targetStateName}`);
 							}
 						}
 					}
-				} catch (error) {
+				} catch (_error) {
 					// Silently fail if adapter not available
 				}
 			}

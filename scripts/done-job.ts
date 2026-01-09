@@ -1,188 +1,33 @@
+#!/usr/bin/env bun
+/**
+ * ttt done - Complete a task
+ * Entry point that delegates to source-specific completion handlers
+ */
+
 import prompts from "prompts";
-import { createAdapter } from "./lib/adapters/index.js";
-import { buildCompletionComment, getLatestCommit } from "./lib/git.js";
 import {
-	addComment,
-	getStatusTransitions,
-	getWorkflowStates,
-	updateIssueStatus,
-} from "./lib/linear.js";
+	type CompletionContext,
+	handleLinearCompletion,
+	handleTrelloCompletion,
+	parseArgs,
+	printHelp,
+} from "./lib/done/index.js";
+import { getLatestCommit } from "./lib/git.js";
 import { fetchIssueDetail, syncSingleIssue } from "./lib/sync.js";
 import {
-	type CompletionMode,
-	type Config,
-	getLinearClient,
 	getSourceType,
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
-	type QaPmTeamConfig,
 	saveCycleData,
 	type Task,
 } from "./utils.js";
-
-// Helper function to update parent issue to a specific status
-async function updateParentStatus(
-	parentIssueId: string,
-	targetStatus: string,
-	_qaPmTeams: QaPmTeamConfig[] | undefined,
-	config: Config,
-): Promise<{ success: boolean; status?: string }> {
-	try {
-		const client = getLinearClient();
-		const searchResult = await client.searchIssues(parentIssueId);
-		const parentIssue = searchResult.nodes.find(
-			(issue) => issue.identifier === parentIssueId,
-		);
-
-		if (!parentIssue) {
-			return { success: false };
-		}
-
-		const parentTeam = await parentIssue.team;
-		if (!parentTeam) {
-			return { success: false };
-		}
-
-		// Find the matching team configuration
-		const teamEntries = Object.entries(config.teams);
-		const matchingTeamEntry = teamEntries.find(
-			([_, t]) => t.id === parentTeam.id,
-		);
-
-		if (!matchingTeamEntry) {
-			return { success: false };
-		}
-
-		const [parentTeamKey] = matchingTeamEntry;
-
-		// Get workflow states for the parent's team
-		const parentStates = await getWorkflowStates(config, parentTeamKey);
-		const targetState = parentStates.find((s) => s.name === targetStatus);
-
-		if (!targetState) {
-			return { success: false };
-		}
-
-		// Update the parent issue
-		await client.updateIssue(parentIssue.id, {
-			stateId: targetState.id,
-		});
-
-		return { success: true, status: targetStatus };
-	} catch (error) {
-		console.error("Failed to update parent issue:", error);
-		return { success: false };
-	}
-}
-
-// Helper function to update parent issue to testing status (uses QA team config)
-async function updateParentToTesting(
-	parentIssueId: string,
-	qaPmTeams: QaPmTeamConfig[],
-	config: Config,
-): Promise<{ success: boolean; testingStatus?: string }> {
-	try {
-		const client = getLinearClient();
-		const searchResult = await client.searchIssues(parentIssueId);
-		const parentIssue = searchResult.nodes.find(
-			(issue) => issue.identifier === parentIssueId,
-		);
-
-		if (!parentIssue) {
-			return { success: false };
-		}
-
-		const parentTeam = await parentIssue.team;
-		if (!parentTeam) {
-			return { success: false };
-		}
-
-		// Find the matching QA/PM team configuration
-		const teamEntries = Object.entries(config.teams);
-		const matchingTeamEntry = teamEntries.find(
-			([_, t]) => t.id === parentTeam.id,
-		);
-
-		if (!matchingTeamEntry) {
-			return { success: false };
-		}
-
-		const [parentTeamKey] = matchingTeamEntry;
-
-		// Find the QA/PM team config for this parent's team
-		const qaPmConfig = qaPmTeams.find((qp) => qp.team === parentTeamKey);
-
-		if (!qaPmConfig) {
-			// Parent's team is not in the configured QA/PM teams
-			return { success: false };
-		}
-
-		// Get workflow states for the parent's team
-		const parentStates = await getWorkflowStates(config, parentTeamKey);
-		const testingState = parentStates.find(
-			(s) => s.name === qaPmConfig.testing_status,
-		);
-
-		if (!testingState) {
-			return { success: false };
-		}
-
-		// Update the parent issue
-		await client.updateIssue(parentIssue.id, {
-			stateId: testingState.id,
-		});
-
-		return { success: true, testingStatus: qaPmConfig.testing_status };
-	} catch (error) {
-		console.error("Failed to update parent issue:", error);
-		return { success: false };
-	}
-}
-
-function parseArgs(args: string[]): {
-	issueId?: string;
-	message?: string;
-	fromRemote: boolean;
-} {
-	let issueId: string | undefined;
-	let message: string | undefined;
-	let fromRemote = false;
-
-	for (let i = 0; i < args.length; i++) {
-		const arg = args[i];
-		if (arg === "-m" || arg === "--message") {
-			message = args[++i];
-		} else if (arg === "--from-remote" || arg === "-r") {
-			fromRemote = true;
-		} else if (!arg.startsWith("-")) {
-			issueId = arg;
-		}
-	}
-
-	return { issueId, message, fromRemote };
-}
 
 async function doneJob() {
 	const args = process.argv.slice(2);
 
 	if (args.includes("--help") || args.includes("-h")) {
-		console.log(`Usage: ttt done [issue-id] [-m message] [--from-remote]
-
-Arguments:
-  issue-id          Issue ID (e.g., MP-624). Optional if only one task is in-progress
-
-Options:
-  -m, --message     AI summary message describing the fix
-  -r, --from-remote Fetch issue directly from Linear (bypasses local data check)
-                    Use when issue exists in Linear but not in local sync data
-
-Examples:
-  ttt done                         # Complete current in-progress task
-  ttt done MP-624                  # Complete specific task
-  ttt done -m "Fixed null check"   # With completion message
-  ttt done MP-624 -m "Refactored"  # Specific task with message
-  ttt done MP-624 --from-remote    # Complete issue fetched directly from Linear`);
+		printHelp();
 		process.exit(0);
 	}
 
@@ -274,7 +119,9 @@ Examples:
 		);
 		if (!localTask) {
 			console.error(`Issue ${issueId} not found in local data.`);
-			console.error(`Hint: Run 'ttt sync ${issueId}' or use '--from-remote' flag.`);
+			console.error(
+				`Hint: Run 'ttt sync ${issueId}' or use '--from-remote' flag.`,
+			);
 			process.exit(1);
 		}
 
@@ -308,191 +155,27 @@ Examples:
 	const sourceId = task.sourceId ?? task.linearId;
 
 	if (sourceId && statusSource === "remote") {
-		const transitions = getStatusTransitions(config);
+		// Build completion context
+		const context: CompletionContext = {
+			task,
+			config,
+			localConfig,
+			commit,
+			aiMessage,
+		};
 
+		// Branch based on source type
 		if (sourceType === "trello") {
-			// === Trello: Simple completion (no parent issue logic) ===
-			try {
-				const adapter = createAdapter(config);
-				const teamId = config.teams[localConfig.team]?.id;
-
-				if (teamId) {
-					const statuses = await adapter.getStatuses(teamId);
-					const doneStatus = statuses.find((s) => s.name === transitions.done);
-
-					if (doneStatus) {
-						const result = await adapter.updateIssueStatus(sourceId, doneStatus.id);
-						if (result.success) {
-							console.log(`Trello: ${task.id} → ${transitions.done}`);
-						}
-					}
-
-					// Add comment with commit info
-					if (commit) {
-						const commentBody = buildCompletionComment(commit, aiMessage);
-						const commentResult = await adapter.addComment(sourceId, commentBody);
-						if (commentResult.success) {
-							console.log(`Trello: 已新增 commit 留言`);
-						}
-					}
-				}
-			} catch (error) {
-				console.error("Failed to update Trello:", error);
-			}
+			await handleTrelloCompletion(context);
 		} else {
-			// === Linear: Complex completion with parent issue handling ===
-			// Determine completion mode
-			const completionMode: CompletionMode =
-				localConfig.completion_mode ||
-				(localConfig.qa_pm_teams && localConfig.qa_pm_teams.length > 0
-					? "upstream_strict"
-					: "simple");
-
-			// Get the testing status to use (from dev team)
-			const devTestingStatus =
-				localConfig.dev_testing_status || transitions.testing;
-
-			// Execute based on completion mode
-			let parentUpdateSuccess = false;
-			let parentTestingStatus: string | undefined;
-
-			switch (completionMode) {
-				case "simple": {
-					// Mark task as done
-					const success = await updateIssueStatus(
-						task.linearId,
-						transitions.done,
-						config,
-						localConfig.team,
-					);
-					if (success) {
-						console.log(`Linear: ${task.id} → ${transitions.done}`);
-					}
-					// Also mark parent as done if exists
-					if (task.parentIssueId) {
-						const result = await updateParentStatus(
-							task.parentIssueId,
-							transitions.done,
-							localConfig.qa_pm_teams,
-							config,
-						);
-						if (result.success) {
-							console.log(
-								`Linear: Parent ${task.parentIssueId} → ${transitions.done}`,
-							);
-						}
-					}
-					break;
-				}
-
-				case "strict_review": {
-					// Mark task to dev team's testing status
-					if (devTestingStatus) {
-						const success = await updateIssueStatus(
-							task.linearId,
-							devTestingStatus,
-							config,
-							localConfig.team,
-						);
-						if (success) {
-							console.log(`Linear: ${task.id} → ${devTestingStatus}`);
-						}
-						// Also mark parent to testing if exists
-						if (task.parentIssueId && localConfig.qa_pm_teams?.length) {
-							const result = await updateParentToTesting(
-								task.parentIssueId,
-								localConfig.qa_pm_teams,
-								config,
-							);
-							if (result.success) {
-								console.log(
-									`Linear: Parent ${task.parentIssueId} → ${result.testingStatus}`,
-								);
-							}
-						}
-					} else {
-						console.warn(
-							"No dev testing status configured, falling back to done",
-						);
-						const success = await updateIssueStatus(
-							task.linearId,
-							transitions.done,
-							config,
-							localConfig.team,
-						);
-						if (success) {
-							console.log(`Linear: ${task.id} → ${transitions.done}`);
-						}
-					}
-					break;
-				}
-
-				case "upstream_strict":
-				case "upstream_not_strict": {
-					// First, mark as done
-					const doneSuccess = await updateIssueStatus(
-						task.linearId,
-						transitions.done,
-						config,
-						localConfig.team,
-					);
-					if (doneSuccess) {
-						console.log(`Linear: ${task.id} → ${transitions.done}`);
-					}
-
-					// Try to update parent to testing
-					if (task.parentIssueId && localConfig.qa_pm_teams?.length) {
-						const result = await updateParentToTesting(
-							task.parentIssueId,
-							localConfig.qa_pm_teams,
-							config,
-						);
-						parentUpdateSuccess = result.success;
-						parentTestingStatus = result.testingStatus;
-
-						if (parentUpdateSuccess) {
-							console.log(
-								`Linear: Parent ${task.parentIssueId} → ${parentTestingStatus}`,
-							);
-						}
-					}
-
-					// Fallback logic for upstream_strict
-					if (
-						completionMode === "upstream_strict" &&
-						!parentUpdateSuccess &&
-						devTestingStatus
-					) {
-						// No parent or parent update failed, fallback to testing
-						const fallbackSuccess = await updateIssueStatus(
-							task.linearId,
-							devTestingStatus,
-							config,
-							localConfig.team,
-						);
-						if (fallbackSuccess) {
-							console.log(
-								`Linear: ${task.id} → ${devTestingStatus} (fallback, no valid parent)`,
-							);
-						}
-					}
-					break;
-				}
-			}
-
-			// Add comment with commit info
-			if (commit) {
-				const commentBody = buildCompletionComment(commit, aiMessage);
-				const commentSuccess = await addComment(task.linearId, commentBody);
-				if (commentSuccess) {
-					console.log(`Linear: 已新增 commit 留言`);
-				}
-			}
+			await handleLinearCompletion(context);
 		}
 	} else if (statusSource === "local") {
 		const sourceName = sourceType === "trello" ? "Trello" : "Linear";
 		console.log(`Local: ${task.id} marked as completed`);
-		console.log(`(${sourceName} status not updated - use 'sync --update' to push)`);
+		console.log(
+			`(${sourceName} status not updated - use 'sync --update' to push)`,
+		);
 	}
 
 	// Sync full issue data from remote (including new comment)
