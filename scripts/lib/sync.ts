@@ -11,6 +11,7 @@ import {
 	type Task,
 } from "../utils.js";
 import { getStatusTransitions } from "./linear.js";
+import { mapRemoteToLocalStatus } from "./status-helpers.js";
 
 export interface FetchIssueOptions {
 	client?: LinearClient;
@@ -141,13 +142,7 @@ export async function syncSingleIssue(
 	// Map remote status to local status if not preserving
 	if (!preserveLocalStatus) {
 		const transitions = getStatusTransitions(config);
-		if (task.status === transitions.done) {
-			task.localStatus = "completed";
-		} else if (task.status === transitions.in_progress) {
-			task.localStatus = "in-progress";
-		} else {
-			task.localStatus = "pending";
-		}
+		task.localStatus = mapRemoteToLocalStatus(task.status, transitions);
 	}
 
 	// Update cycle data
