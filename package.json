@@ -1,7 +1,7 @@
 {
 	"name": "team-toon-tack",
 	"version": "3.0.0",
-	"description": "Linear task sync & management CLI with TOON format",
+	"description": "Linear & Trello task sync & management CLI with TOON format",
 	"type": "module",
 	"bin": {
 		"ttt": "./dist/bin/cli.js",
@@ -28,8 +28,7 @@
 	"dependencies": {
 		"@linear/sdk": "^69.0.0",
 		"@toon-format/toon": "^2.1.0",
-		"prompts": "^2.4.2",
-		"team-toon-tack": "^2.0.2"
+		"prompts": "^2.4.2"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.11",
@@ -39,6 +38,7 @@
 	},
 	"keywords": [
 		"linear",
+		"trello",
 		"task-management",
 		"cli",
 		"toon",
