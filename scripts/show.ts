@@ -1,4 +1,8 @@
-import { displayTaskFull, PRIORITY_LABELS, getStatusIcon } from "./lib/display.js";
+import {
+	displayTaskFull,
+	getStatusIcon,
+	PRIORITY_LABELS,
+} from "./lib/display.js";
 import { fetchIssueDetail } from "./lib/sync.js";
 import {
 	getLinearClient,
@@ -24,7 +28,9 @@ function taskToMarkdown(task: Task): string {
 	lines.push("");
 	lines.push(`- **Status**: ${task.status} (Local: ${task.localStatus})`);
 	lines.push(`- **Priority**: ${priority}`);
-	lines.push(`- **Labels**: ${task.labels.length > 0 ? task.labels.join(", ") : "-"}`);
+	lines.push(
+		`- **Labels**: ${task.labels.length > 0 ? task.labels.join(", ") : "-"}`,
+	);
 	lines.push(`- **Assignee**: ${task.assignee || "Unassigned"}`);
 	if (task.branch) lines.push(`- **Branch**: \`${task.branch}\``);
 	if (task.url) lines.push(`- **URL**: ${task.url}`);
@@ -83,7 +89,9 @@ function tasksToMarkdownList(tasks: Task[]): string {
 		lines.push(`| Status | ${task.status} |`);
 		lines.push(`| Priority | ${priority} |`);
 		lines.push(`| Assignee | ${assignee} |`);
-		lines.push(`| Labels | ${task.labels.length > 0 ? task.labels.join(", ") : "-"} |`);
+		lines.push(
+			`| Labels | ${task.labels.length > 0 ? task.labels.join(", ") : "-"} |`,
+		);
 		if (task.url) lines.push(`| URL | ${task.url} |`);
 		lines.push("");
 	}
@@ -107,7 +115,9 @@ function displayTaskList(tasks: Task[]): void {
 		const labels = task.labels.length > 0 ? task.labels.join(", ") : "-";
 
 		console.log(`${icon} ${task.id}: ${task.title}`);
-		console.log(`   Status: ${task.status} | Priority: ${priority} | Assignee: ${assignee}`);
+		console.log(
+			`   Status: ${task.status} | Priority: ${priority} | Assignee: ${assignee}`,
+		);
 		console.log(`   Labels: ${labels}`);
 		console.log("─".repeat(80));
 	}
@@ -138,7 +148,9 @@ async function searchIssuesFromLinear(filters: SearchFilters): Promise<Task[]> {
 		} else if (filters.assignee.toLowerCase() === "unassigned") {
 			issueFilter.assignee = { null: true };
 		} else {
-			issueFilter.assignee = { email: { containsIgnoreCase: filters.assignee } };
+			issueFilter.assignee = {
+				email: { containsIgnoreCase: filters.assignee },
+			};
 		}
 	}
 
@@ -181,13 +193,16 @@ async function searchIssuesFromLinear(filters: SearchFilters): Promise<Task[]> {
 	return tasks;
 }
 
-async function searchIssuesFromLocal(data: { tasks: Task[] }, filters: SearchFilters): Promise<Task[]> {
+async function searchIssuesFromLocal(
+	data: { tasks: Task[] },
+	filters: SearchFilters,
+): Promise<Task[]> {
 	let tasks = data.tasks;
 
 	if (filters.label) {
 		const labelLower = filters.label.toLowerCase();
 		tasks = tasks.filter((t) =>
-			t.labels.some((l) => l.toLowerCase().includes(labelLower))
+			t.labels.some((l) => l.toLowerCase().includes(labelLower)),
 		);
 	}
 
@@ -203,13 +218,14 @@ async function searchIssuesFromLocal(data: { tasks: Task[] }, filters: SearchFil
 		} else if (assigneeLower === "me") {
 			const localConfig = await loadLocalConfig();
 			const config = await loadConfig();
-			const userEmail = config.users[localConfig.current_user]?.email?.toLowerCase();
+			const userEmail =
+				config.users[localConfig.current_user]?.email?.toLowerCase();
 			if (userEmail) {
 				tasks = tasks.filter((t) => t.assignee?.toLowerCase() === userEmail);
 			}
 		} else {
 			tasks = tasks.filter((t) =>
-				t.assignee?.toLowerCase().includes(assigneeLower)
+				t.assignee?.toLowerCase().includes(assigneeLower),
 			);
 		}
 	}
@@ -275,7 +291,7 @@ Examples:
 
 	// Find issue ID (argument that doesn't start with -)
 	const issueId = args.find(
-		(arg) => !arg.startsWith("-") && arg.match(/^[A-Z]+-\d+$/i)
+		(arg) => !arg.startsWith("-") && arg.match(/^[A-Z]+-\d+$/i),
 	);
 
 	// If no issue ID and no filters, show all local issues
@@ -358,7 +374,7 @@ Examples:
 	}
 
 	const task = data.tasks.find(
-		(t) => t.id === issueId || t.id === issueId.toUpperCase()
+		(t) => t.id === issueId || t.id === issueId.toUpperCase(),
 	);
 	if (!task) {
 		console.error(`Issue ${issueId} not found in local data.`);

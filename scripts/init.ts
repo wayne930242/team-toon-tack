@@ -825,9 +825,6 @@ async function init() {
 	// Update .gitignore (always use relative path .ttt)
 	await updateGitignore(".ttt", options.interactive ?? true);
 
-	// Show Claude Code plugin installation instructions
-	showPluginInstallInstructions();
-
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
 	console.log("Configuration summary:");
@@ -864,10 +861,20 @@ async function init() {
 	}
 
 	console.log("\nNext steps:");
-	console.log("  1. Set LINEAR_API_KEY in your shell profile:");
-	console.log(`     export LINEAR_API_KEY="${apiKey}"`);
-	console.log("  2. Run sync: ttt sync");
-	console.log("  3. Start working: ttt work-on");
+	if (!process.env.LINEAR_API_KEY) {
+		// Show partial key for confirmation (first 12 chars + masked)
+		const maskedKey = `${apiKey.slice(0, 12)}...${"*".repeat(8)}`;
+		console.log("  1. Set LINEAR_API_KEY in your shell profile:");
+		console.log(`     export LINEAR_API_KEY="${maskedKey}"`);
+		console.log("  2. Run sync: ttt sync");
+		console.log("  3. Start working: ttt work-on");
+	} else {
+		console.log("  1. Run sync: ttt sync");
+		console.log("  2. Start working: ttt work-on");
+	}
+
+	// Show Claude Code plugin installation instructions at the end
+	showPluginInstallInstructions();
 }
 
 init().catch(console.error);
