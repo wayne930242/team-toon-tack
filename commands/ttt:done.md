@@ -57,8 +57,6 @@ Also:
 ## Before Running
 
 Ensure you have:
-1. **Run project validation** - Use `/validate` command or validation skill if available
-2. Committed your changes with a meaningful message
-3. Pushed to remote branch (if applicable)
-
-**Important**: If validation fails, fix issues before marking as done.
+1. Committed your changes with a meaningful message
+2. Pushed to remote branch (if applicable)
+3. Verified code quality (lint, type-check) if applicable

@@ -211,20 +211,20 @@ The `ttt done` command behaves differently based on configured mode:
 - No cycle or parent issue support
 - Always uses simple completion mode
 
-## Project Validation
+## Work-On Skill
 
-Before starting or completing tasks, run project validation:
+Before starting tasks, check for project-specific work guidelines:
 
-1. **Check for validation command/skill**: Look for `/validate`, `/check` commands or validation skills
+1. **Check for work-on skill**: Look for `work-on`, `start-work` skills in `.claude/skills/`
 2. **Check package.json/Makefile**: Look for `lint`, `type-check`, `test` scripts
 
-If no validation exists, suggest running `/ttt:write-validate` to create a project-specific validation command.
+If no work-on skill exists, suggest running `/ttt:write-work-on-skill` to create project-specific best practices (includes validation, code style, workflow conventions).
 
 ## Best Practices
 
 ### DO
 - Always `ttt sync` before starting work
-- **Run project validation** before starting and before completing tasks
+- **Check for work-on skill** before starting tasks
 - Use `ttt work-on next` for auto-prioritization
 - Include meaningful messages with `ttt done -m "..."`
 - Check `ttt status` to verify state before commits
@@ -234,7 +234,7 @@ If no validation exists, suggest running `/ttt:write-validate` to create a proje
 - Don't manually edit `cycle.toon` - use CLI commands
 - Don't skip sync - local data may be stale
 - Don't forget to commit before `ttt done`
-- Don't mark tasks done without running validation
+- Don't mark tasks done without verification
 - Don't use `--all` on sync unless you need completed issues
 
 ## Troubleshooting

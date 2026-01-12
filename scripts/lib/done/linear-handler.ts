@@ -211,8 +211,8 @@ export async function handleLinearCompletion(
 			result = await handleSimpleCompletion(context);
 	}
 
-	// Add comment with commit info
-	if (commit) {
+	// Add comment with commit info (only if promptMessage provided)
+	if (commit && promptMessage) {
 		const commentBody = buildCompletionComment(commit, promptMessage);
 		const commentSuccess = await addComment(task.linearId, commentBody);
 		if (commentSuccess) {

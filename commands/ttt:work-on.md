@@ -44,36 +44,48 @@ ttt work-on next
 
 1. Read the task description and requirements
 2. Check out the suggested branch: `git checkout -b <branch-name>`
-3. **Run project validation** (see below)
+3. **Check for work-on skill** (see below)
 4. Begin implementation
 
-## Project Validation
+## Work-On Skill
 
-Before starting work, check for validation tools:
+Check for project-specific work guidelines:
 
-### 1. Check for Existing Validation
+### 1. Check for Existing Work-On Skill
 
 Look for:
-- **Commands**: `/validate`, `/check`, `/lint` in available commands
-- **Skills**: `validate`, `check`, `verify` in available skills
-- **Scripts**: `lint`, `type-check`, `test` in `package.json` or `Makefile`
+- **Skills**: `work-on`, `start-work`, `begin-task` in `.claude/skills/`
+- **Alternative**: Check for `validate`, `check` skills that define project guidelines
 
-### 2. If No Validation Found
+### 2. If No Work-On Skill Found
 
-Ask user:
+Suggest user create one:
 ```
-No validation command or skill found for this project.
+No work-on skill found for this project.
+
+A work-on skill defines best practices for starting tasks:
+- Code style and conventions
+- Pre-work validation checks
+- Branch naming conventions
+- Required setup steps
+
 Would you like to create one? (y/n)
 ```
 
 If yes, run:
 ```
-/ttt:write-validate
+/ttt:write-work-on-skill
 ```
 
-### 3. Run Validation
+The work-on skill should include:
+- **Validation**: lint, type-check, test commands
+- **Code style**: formatting, naming conventions
+- **Workflow**: branch naming, commit message format
+- **Setup**: required dependencies, environment checks
 
-Once validation is available:
-- Use `/validate` command if exists
-- Or use validation skill if available
-- Or run detected scripts directly
+### 3. Use Work-On Skill
+
+Once available:
+- Follow the guidelines defined in the skill
+- Run any validation checks specified
+- Ensure code style compliance

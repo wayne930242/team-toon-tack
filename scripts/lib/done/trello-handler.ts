@@ -44,8 +44,8 @@ export async function handleTrelloCompletion(
 			console.log(`Trello: ${task.id} → ${transitions.done}`);
 		}
 
-		// Add comment with commit info
-		if (commit) {
+		// Add comment with commit info (only if promptMessage provided)
+		if (commit && promptMessage) {
 			const commentBody = buildCompletionComment(commit, promptMessage);
 			const commentResult = await adapter.addComment(sourceId, commentBody);
 			if (commentResult.success) {
