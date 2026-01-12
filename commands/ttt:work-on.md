@@ -3,8 +3,9 @@ name: ttt:work-on
 description: Start working on a Linear task
 arguments:
   - name: issue-id
-    description: Issue ID (e.g., MP-624), 'next' for auto-select, or omit for interactive
+    description: Issue ID (e.g., MP-624). Defaults to 'next' (auto-select highest priority)
     required: false
+    default: next
 ---
 
 # TTT Work-On Command
@@ -13,21 +14,14 @@ Start working on a task from the current cycle.
 
 ## Usage
 
-### Interactive Selection
+### Auto-Select Highest Priority (Default)
 ```bash
-ttt work-on
+ttt work-on next
 ```
 
 ### Specific Issue
-If `issue-id` is provided (e.g., MP-624):
 ```bash
 ttt work-on {{ issue-id }}
-```
-
-### Auto-Select Highest Priority
-If `issue-id` is "next":
-```bash
-ttt work-on next
 ```
 
 ## What This Does
