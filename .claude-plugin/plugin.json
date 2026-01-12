@@ -1,7 +1,7 @@
 {
 	"name": "team-toon-tack",
 	"description": "Linear/Trello task sync & management CLI for Claude Code - saves tokens vs MCP",
-	"version": "2.5.1",
+	"version": "2.5.2",
 	"author": {
 		"name": "wayne930242",
 		"email": "wayne930242@gmail.com"

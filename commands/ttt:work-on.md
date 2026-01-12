@@ -41,6 +41,17 @@ ttt work-on {{ issue-id }}
 3. **Check for work-on skill** (see below)
 4. Begin implementation
 
+## CRITICAL: After Task Completion
+
+**MUST execute `/ttt:done` when the task is completed.**
+
+This is MANDATORY. After finishing implementation:
+
+1. Commit changes: `git add . && git commit -m "..."`
+2. **Execute `/ttt:done -m "completion summary"`**
+
+Do NOT skip this step. The task is not complete until `/ttt:done` is executed.
+
 ## Work-On Skill
 
 Check for project-specific work guidelines:

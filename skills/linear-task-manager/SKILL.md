@@ -220,12 +220,26 @@ Before starting tasks, check for project-specific work guidelines:
 
 If no work-on skill exists, suggest running `/ttt:write-work-on-skill` to create project-specific best practices (includes validation, code style, workflow conventions).
 
+## CRITICAL: Task Completion
+
+**MUST execute `/ttt:done` when any task is completed.**
+
+This is MANDATORY - never skip this step:
+
+```bash
+# After committing changes
+/ttt:done -m "completion summary"
+```
+
+A task is NOT complete until `/ttt:done` is executed.
+
 ## Best Practices
 
 ### DO
 - Always `ttt sync` before starting work
 - **Check for work-on skill** before starting tasks
 - Use `ttt work-on next` for auto-prioritization
+- **MUST execute `/ttt:done -m "..."` after completing any task**
 - Include meaningful messages with `ttt done -m "..."`
 - Check `ttt status` to verify state before commits
 - Use `ttt show --export` to get issue context as markdown
@@ -234,6 +248,7 @@ If no work-on skill exists, suggest running `/ttt:write-work-on-skill` to create
 - Don't manually edit `cycle.toon` - use CLI commands
 - Don't skip sync - local data may be stale
 - Don't forget to commit before `ttt done`
+- **Don't forget to execute `/ttt:done` after task completion**
 - Don't mark tasks done without verification
 - Don't use `--all` on sync unless you need completed issues
 
