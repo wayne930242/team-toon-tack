@@ -102,6 +102,9 @@ Examples:
 	} else if (task.localStatus === "completed") {
 		console.log(`⚠️ 此任務 ${task.id} 已完成`);
 		process.exit(0);
+	} else if (task.localStatus === "in-review") {
+		console.log(`⚠️ 此任務 ${task.id} 正在審核中`);
+		process.exit(0);
 	}
 
 	// Mark as In Progress
