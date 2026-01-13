@@ -15,20 +15,26 @@ async function workOn() {
 	const args = process.argv.slice(2);
 
 	if (args.includes("--help") || args.includes("-h")) {
-		console.log(`Usage: ttt work-on [issue-id]
+		console.log(`Usage: ttt work-on [issue-id] [options]
 
 Arguments:
   issue-id    Issue ID (e.g., MP-624) or 'next' for auto-select
               If omitted, shows interactive selection
 
+Options:
+  --dry-run   Pick task without changing status (preview only)
+
 Examples:
   ttt work-on           # Interactive selection
   ttt work-on MP-624    # Work on specific issue
-  ttt work-on next      # Auto-select highest priority`);
+  ttt work-on next      # Auto-select highest priority
+  ttt work-on --dry-run # Preview selection without changes`);
 		process.exit(0);
 	}
 
-	let issueId = args[0];
+	const dryRun = args.includes("--dry-run");
+	const filteredArgs = args.filter((a) => a !== "--dry-run");
+	let issueId = filteredArgs[0];
 
 	const config = await loadConfig();
 	const data = await loadCycleData();
@@ -107,8 +113,8 @@ Examples:
 		process.exit(0);
 	}
 
-	// Mark as In Progress
-	if (task.localStatus === "pending") {
+	// Mark as In Progress (skip if dry-run)
+	if (task.localStatus === "pending" && !dryRun) {
 		task.localStatus = "in-progress";
 
 		// Update remote (only if status_source is 'remote' or not set)
@@ -160,8 +166,13 @@ Examples:
 	}
 
 	// Display task info
-	displayTaskFull(task, "👷");
-	console.log("Next: bun type-check && bun lint");
+	const icon = dryRun ? "🔍" : "👷";
+	displayTaskFull(task, icon);
+	if (dryRun) {
+		console.log("(dry-run: no changes made)");
+	} else {
+		console.log("Next: bun type-check && bun lint");
+	}
 }
 
 workOn().catch(console.error);

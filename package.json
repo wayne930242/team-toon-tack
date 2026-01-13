@@ -1,6 +1,6 @@
 {
 	"name": "team-toon-tack",
-	"version": "3.2.5",
+	"version": "3.2.6",
 	"description": "Linear & Trello task sync & management CLI with TOON format",
 	"type": "module",
 	"bin": {

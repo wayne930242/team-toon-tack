@@ -24,6 +24,14 @@ ttt work-on next
 ttt work-on {{ issue-id }}
 ```
 
+### Preview Mode (Dry Run)
+```bash
+ttt work-on --dry-run        # Interactive selection, preview only
+ttt work-on next --dry-run   # Auto-select, preview only
+```
+
+Use `--dry-run` to preview task selection without changing any status.
+
 ## What This Does
 
 1. Marks the task as `in-progress` locally
