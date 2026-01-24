@@ -650,11 +650,29 @@ async function syncTrello(
 			continue;
 		}
 
-		// Preserve local status
+		// Preserve local status or infer from remote status
 		let localStatus: Task["localStatus"] = "pending";
 		if (existingTasksMap.has(issue.id)) {
 			const existing = existingTasksMap.get(issue.id);
 			localStatus = existing?.localStatus ?? "pending";
+		} else {
+			// New task: infer localStatus from remote status
+			if (issue.status === statusTransitions.in_progress) {
+				localStatus = "in-progress";
+			} else if (
+				statusTransitions.testing &&
+				issue.status === statusTransitions.testing
+			) {
+				localStatus = "in-review";
+			} else if (issue.status === statusTransitions.done) {
+				localStatus = "completed";
+			} else if (
+				statusTransitions.blocked &&
+				issue.status === statusTransitions.blocked
+			) {
+				localStatus = "blocked";
+			}
+			// Default "pending" for todo or other states
 		}
 
 		const task: Task = {
