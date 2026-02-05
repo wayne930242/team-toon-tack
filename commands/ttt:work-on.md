@@ -3,102 +3,80 @@ name: ttt:work-on
 description: Start working on a Linear task
 arguments:
   - name: issue-id
-    description: Issue ID (e.g., MP-624). Defaults to 'next' (auto-select highest priority)
+    description: "Issue ID (e.g., MP-624) or 'next' for auto-select. Defaults to 'next'."
     required: false
     default: next
+  - name: dry-run
+    description: Preview selection without changing status
+    required: false
 ---
 
-# TTT Work-On Command
+<law>
+YOU MUST execute the `ttt work-on` command using the Bash tool.
+DO NOT manually edit cycle.toon or change task status by other means.
+After the task is completed, YOU MUST execute `/ttt:done -m "summary"`. This is MANDATORY.
+</law>
 
-Start working on a task from the current cycle.
+# /ttt:work-on — Start Working on a Task
 
-## Usage
+## Execution
 
-### Auto-Select Highest Priority (Default)
 ```bash
-ttt work-on next
+ttt work-on {{ issue-id | default: "next" }} {{ "--dry-run" if dry-run }}
 ```
 
-### Specific Issue
-```bash
-ttt work-on {{ issue-id }}
+### Argument Resolution
+
+| Input | Command |
+|-------|---------|
+| (none) | `ttt work-on next` |
+| `next` | `ttt work-on next` |
+| `MP-624` | `ttt work-on MP-624` |
+| `--dry-run` | `ttt work-on next --dry-run` |
+| `MP-624 --dry-run` | `ttt work-on MP-624 --dry-run` |
+
+## Full CLI Reference
+
+```
+Usage: ttt work-on [issue-id] [options]
+
+Arguments:
+  issue-id    Issue ID (e.g., MP-624) or 'next' for auto-select
+              If omitted, shows interactive selection
+
+Options:
+  --dry-run   Pick task without changing status (preview only)
 ```
 
-### Preview Mode (Dry Run)
-```bash
-ttt work-on --dry-run        # Interactive selection, preview only
-ttt work-on next --dry-run   # Auto-select, preview only
-```
+## After Execution
 
-Use `--dry-run` to preview task selection without changing any status.
-
-## What This Does
-
-1. Marks the task as `in-progress` locally
-2. Updates Linear status to "In Progress" (if status_source is remote)
-3. Displays full task details including:
-   - Title and description
-   - Priority and labels
-   - Attachments and comments
-   - Branch name for checkout
-
-## After Running
-
-1. Read the task description and requirements
+1. Read the task description and requirements from the output
 2. Check out the suggested branch: `git checkout -b <branch-name>`
-3. **Check for work-on skill** (see below)
+3. Check for project-specific **work-on skill** in `.claude/skills/`
 4. Begin implementation
 
-## CRITICAL: After Task Completion
+## CRITICAL: Task Completion Contract
 
-**MUST execute `/ttt:done` when the task is completed.**
+When the task is completed, you MUST execute:
 
-This is MANDATORY. After finishing implementation:
-
-1. Commit changes: `git add . && git commit -m "..."`
-2. **Execute `/ttt:done -m "completion summary"`**
-
-Do NOT skip this step. The task is not complete until `/ttt:done` is executed.
-
-## Work-On Skill
-
-Check for project-specific work guidelines:
-
-### 1. Check for Existing Work-On Skill
-
-Look for:
-- **Skills**: `work-on`, `start-work`, `begin-task` in `.claude/skills/`
-- **Alternative**: Check for `validate`, `check` skills that define project guidelines
-
-### 2. If No Work-On Skill Found
-
-Suggest user create one:
 ```
-No work-on skill found for this project.
-
-A work-on skill defines best practices for starting tasks:
-- Code style and conventions
-- Pre-work validation checks
-- Branch naming conventions
-- Required setup steps
-
-Would you like to create one? (y/n)
+/ttt:done -m "completion summary"
 ```
 
-If yes, run:
-```
-/ttt:write-work-on-skill
-```
+A task is NOT complete until `/ttt:done` is executed. Do NOT skip this step.
 
-The work-on skill should include:
-- **Validation**: lint, type-check, test commands
-- **Code style**: formatting, naming conventions
-- **Workflow**: branch naming, commit message format
-- **Setup**: required dependencies, environment checks
+## Work-On Skill Integration
 
-### 3. Use Work-On Skill
+After starting a task, check for project-specific work guidelines:
 
-Once available:
-- Follow the guidelines defined in the skill
-- Run any validation checks specified
-- Ensure code style compliance
+1. Look for `work-on` or `start-work` skills in `.claude/skills/`
+2. If found, follow those guidelines
+3. If not found, suggest creating one with `/ttt:write-work-on-skill`
+
+## Error Handling
+
+| Error | Solution |
+|-------|----------|
+| `No cycle data found` | Run `ttt sync` first |
+| `No eligible tasks` | All tasks assigned or in-review; run `ttt sync` to refresh |
+| `Issue not found` | Run `ttt sync <id>` to fetch it |

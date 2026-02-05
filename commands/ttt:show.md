@@ -6,121 +6,85 @@ arguments:
     description: Issue ID to show (e.g., MP-624)
     required: false
   - name: label
-    description: Filter by label (--label <label>)
+    description: Filter by label
     required: false
   - name: status
-    description: Filter by status (--status <status>)
+    description: "Filter by status (e.g., 'In Progress', 'Todo')"
     required: false
   - name: user
-    description: Filter by assignee (--user <email|me|unassigned>)
+    description: "Filter by assignee (email, 'me', or 'unassigned')"
     required: false
   - name: priority
-    description: Filter by priority (--priority <0-4>)
+    description: "Filter by priority (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low)"
     required: false
   - name: remote
-    description: Fetch from Linear instead of local data (--remote)
+    description: Fetch from Linear API instead of local data
     required: false
   - name: export
-    description: Output as markdown format (--export)
+    description: Output as markdown format
     required: false
 ---
 
-# TTT Show Command
+<law>
+YOU MUST execute the `ttt show` command using the Bash tool.
+DO NOT read cycle.toon directly — the CLI handles formatting and filtering.
+DO NOT simulate or fabricate issue data.
+</law>
 
-Show issue details or search issues from local cycle data.
+# /ttt:show — Show Issues
 
-## Usage
+## Execution
 
-### Show All Issues
-```bash
-ttt show
-```
-
-### Show Specific Issue
-```bash
-ttt show {{ issue-id }}
-```
-
-### Search by Filters
-```bash
-ttt show --label {{ label }}
-ttt show --status "{{ status }}"
-ttt show --user {{ user }}
-ttt show --priority {{ priority }}
-```
-
-### Fetch from Linear (Remote)
-```bash
-ttt show {{ issue-id }} --remote
-ttt show --remote --status todo
-```
-
-## What This Does
-
-1. By default, reads from local cycle.toon data (no API calls)
-2. Supports filtering by label, status, user, priority
-3. Use --remote to fetch fresh data from Linear API
-4. Displays comprehensive information:
-   - Title and description
-   - Status (both Linear and local)
-   - Priority level
-   - Labels
-   - Assignee
-   - Branch name
-   - Parent issue (if subtask)
-   - Attachments with local paths
-   - Comments with timestamps
-
-## Filter Options
-
-| Option | Description | Example |
-|--------|-------------|---------|
-| `--label` | Filter by label name | `--label frontend` |
-| `--status` | Filter by Linear status | `--status "In Progress"` |
-| `--user` | Filter by assignee | `--user me`, `--user unassigned` |
-| `--priority` | Filter by priority (0-4) | `--priority 1` (Urgent) |
-| `--remote` | Fetch from Linear API | `--remote` |
-| `--export` | Output as markdown | `--export` |
-
-## Priority Values
-
-- 0: None
-- 1: Urgent
-- 2: High
-- 3: Medium
-- 4: Low
-
-## Use Cases
-
-- List all issues in current cycle
-- Search issues by label or status
-- Review issue details before starting work
-- Check requirements and acceptance criteria
-- View attachments and mockups
-- Read comment history and discussions
-
-## Examples
+Build the command from arguments and run it:
 
 ```bash
-# Show all local issues
-ttt show
-
-# Show specific issue
-ttt show MP-624
-
-# My in-progress issues
-ttt show --status "In Progress" --user me
-
-# All urgent issues
-ttt show --priority 1
-
-# Frontend issues
-ttt show --label frontend
-
-# Fetch fresh data from Linear
-ttt show MP-624 --remote
-
-# Export as markdown
-ttt show --export
-ttt show MP-624 --export
+ttt show {{ issue-id }} \
+  {{ "--label " + label if label }} \
+  {{ "--status \"" + status + "\"" if status }} \
+  {{ "--user " + user if user }} \
+  {{ "--priority " + priority if priority }} \
+  {{ "--remote" if remote }} \
+  {{ "--export" if export }}
 ```
+
+### Common Examples
+
+```bash
+ttt show                                    # List all local issues
+ttt show MP-624                             # Show specific issue
+ttt show MP-624 --remote                    # Fetch fresh from Linear
+ttt show MP-624 --export                    # Export as markdown
+ttt show --label frontend                   # Filter by label
+ttt show --status "In Progress" --user me   # My in-progress issues
+ttt show --priority 1                       # All urgent issues
+ttt show --export                           # Export all as markdown
+```
+
+## Full CLI Reference
+
+```
+Usage: ttt show [issue-id] [options]
+
+Arguments:
+  issue-id              Optional. Show specific issue (e.g., MP-624)
+
+Options:
+  --remote              Fetch from Linear instead of local data
+  --export              Output as markdown format
+  --label <label>       Filter by label
+  --status <status>     Filter by status
+  --user <email>        Filter by assignee ("me", "unassigned", or email)
+  --priority <n>        Filter by priority (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low)
+```
+
+## After Execution
+
+Present the output to the user. If `--export` was used, the output is markdown-formatted and can be used as context.
+
+## Error Handling
+
+| Error | Solution |
+|-------|----------|
+| `No cycle data found` | Run `ttt sync` first |
+| `Issue not found` | Try `ttt show <id> --remote` or `ttt sync <id>` |
+| `LINEAR_API_KEY not set` | Required for `--remote`; ask user to set it |

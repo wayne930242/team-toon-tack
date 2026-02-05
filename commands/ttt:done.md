@@ -3,60 +3,80 @@ name: ttt:done
 description: Mark current task as completed
 arguments:
   - name: issue-id
-    description: Optional issue ID if multiple tasks in progress
+    description: Issue ID if multiple tasks in progress (e.g., MP-624)
     required: false
   - name: message
-    description: Completion message (use -m flag)
+    description: Completion message summarizing what was done
+    required: false
+  - name: from-remote
+    description: Fetch issue from Linear (bypass local data check)
     required: false
 ---
 
-# TTT Done Command
+<law>
+YOU MUST execute the `ttt done` command using the Bash tool.
+DO NOT manually edit cycle.toon or Linear status by other means.
+DO NOT skip this command — it updates both local and remote status, posts a completion comment, and syncs state.
+</law>
 
-Mark the current in-progress task as completed.
+# /ttt:done — Complete a Task
 
-## Usage
+## Execution
 
-### Auto-Select (single in-progress task)
 ```bash
-ttt done
+ttt done {{ issue-id }} {{ "-m \"" + message + "\"" if message }} {{ "--from-remote" if from-remote }}
 ```
 
-### Specific Issue
-If `issue-id` is provided:
+### Common Examples
+
 ```bash
-ttt done {{ issue-id }}
+ttt done                                # Complete current in-progress task
+ttt done MP-624                         # Complete specific task
+ttt done -m "Fixed null check"          # With completion message
+ttt done MP-624 -m "Refactored auth"    # Specific task with message
+ttt done MP-624 --from-remote           # Issue not in local data
 ```
 
-### With Completion Message
-If `message` is provided:
-```bash
-ttt done -m "{{ message }}"
+## Full CLI Reference
+
 ```
+Usage: ttt done [issue-id] [-m message] [--from-remote]
 
-### Combined
-```bash
-ttt done {{ issue-id }} -m "{{ message }}"
+Arguments:
+  issue-id              Optional. Issue ID if multiple tasks in-progress
+
+Options:
+  -m, --message         Completion message describing what was done
+  -r, --from-remote     Fetch issue from Linear (bypass local data check)
 ```
-
-## What This Does
-
-Based on configured completion mode:
-
-| Mode | Behavior |
-|------|----------|
-| `simple` | Task → Done, Parent → Done |
-| `strict_review` | Task → Testing, Parent → QA Testing |
-| `upstream_strict` | Task → Done, Parent → Testing |
-| `upstream_not_strict` | Task → Done, Parent → Testing (no fallback) |
-
-Also:
-1. Gets latest git commit info
-2. Adds completion comment to Linear with commit details
-3. Syncs task back from Linear to update local status
 
 ## Before Running
 
-Ensure you have:
-1. Committed your changes with a meaningful message
-2. Pushed to remote branch (if applicable)
-3. Verified code quality (lint, type-check) if applicable
+Ensure:
+1. Code changes are committed (`git add && git commit`)
+2. Code quality checks passed (lint, type-check) if applicable
+
+## What It Does
+
+Based on configured completion mode:
+
+| Mode | Task Status | Parent Status |
+|------|-------------|---------------|
+| `simple` | → Done | → Done |
+| `strict_review` | → Testing | → QA Testing |
+| `upstream_strict` | → Done | → Testing |
+| `upstream_not_strict` | → Done | → Testing (no fallback) |
+
+Additionally:
+- Reads latest git commit info
+- Posts completion comment to Linear with commit details
+- Syncs task back from Linear to update local status
+
+## Error Handling
+
+| Error | Solution |
+|-------|----------|
+| `No in-progress task` | Specify issue-id explicitly |
+| `Multiple in-progress` | Specify issue-id to disambiguate |
+| `Issue not found` | Use `--from-remote` flag |
+| `No commits found` | Commit your changes first |
