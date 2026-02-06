@@ -31,7 +31,6 @@ function taskToMarkdown(task: Task): string {
 		`- **Labels**: ${task.labels.length > 0 ? task.labels.join(", ") : "-"}`,
 	);
 	lines.push(`- **Assignee**: ${task.assignee || "Unassigned"}`);
-	if (task.branch) lines.push(`- **Branch**: \`${task.branch}\``);
 	if (task.url) lines.push(`- **URL**: ${task.url}`);
 	if (task.parentIssueId) lines.push(`- **Parent**: ${task.parentIssueId}`);
 
@@ -143,7 +142,6 @@ async function fetchIssueFromRemote(issueId: string): Promise<Task | null> {
 		assignee: issue.assigneeEmail,
 		priority: issue.priority,
 		labels: issue.labels,
-		branch: issue.branchName,
 		description: issue.description,
 		parentIssueId: issue.parentIssueId,
 		url: issue.url,
@@ -221,7 +219,6 @@ async function searchIssuesFromRemote(filters: SearchFilters): Promise<Task[]> {
 			assignee: issue.assigneeEmail,
 			priority: issue.priority,
 			labels: issue.labels,
-			branch: issue.branchName,
 			description: issue.description,
 			parentIssueId: issue.parentIssueId,
 			url: issue.url,

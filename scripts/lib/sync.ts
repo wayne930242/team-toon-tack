@@ -95,7 +95,6 @@ export async function fetchIssueDetail(
 		assignee: assigneeEmail,
 		priority: issue.priority,
 		labels: labelNames,
-		branch: issue.branchName,
 		description: issue.description ?? undefined,
 		parentIssueId: parent ? parent.identifier : undefined,
 		url: issue.url,

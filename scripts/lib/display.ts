@@ -36,7 +36,6 @@ export function displayTaskInfo(task: Task): void {
 	console.log(`Priority: ${PRIORITY_LABELS[task.priority] || "None"}`);
 	console.log(`Labels: ${task.labels.join(", ")}`);
 	if (task.assignee) console.log(`Assignee: ${task.assignee}`);
-	console.log(`Branch: ${task.branch || "N/A"}`);
 	if (task.url) console.log(`URL: ${task.url}`);
 }
 
@@ -108,7 +107,6 @@ export function displayTaskWithStatus(task: Task): void {
 	console.log(`  Priority: ${PRIORITY_LABELS[task.priority] || "None"}`);
 	console.log(`  Labels: ${task.labels.join(", ")}`);
 	console.log(`  Assignee: ${task.assignee || "Unassigned"}`);
-	console.log(`  Branch: ${task.branch || "N/A"}`);
 	if (task.url) console.log(`  URL: ${task.url}`);
 	displayTaskDescription(task);
 	displayTaskAttachments(task);
