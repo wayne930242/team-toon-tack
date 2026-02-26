@@ -48,13 +48,15 @@ Examples:
 
 	// Get current user email for filtering
 	const currentUserEmail = config.users[localConfig.current_user]?.email;
+	const normalizedCurrentUserEmail = currentUserEmail?.toLowerCase();
 
 	const pendingTasks = data.tasks
-		.filter(
-			(t) =>
-				t.localStatus === "pending" &&
-				(!currentUserEmail || t.assignee === currentUserEmail),
-		)
+		.filter((t) => {
+			if (t.localStatus !== "pending") return false;
+			if (!normalizedCurrentUserEmail) return true;
+			if (!t.assignee) return true; // Include unassigned tasks
+			return t.assignee.toLowerCase() === normalizedCurrentUserEmail;
+		})
 		.sort((a, b) => {
 			const pa = getPrioritySortIndex(a.priority, config.priority_order);
 			const pb = getPrioritySortIndex(b.priority, config.priority_order);
