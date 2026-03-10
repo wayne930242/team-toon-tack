@@ -649,6 +649,9 @@ async function syncTrello(
 			continue;
 		}
 
+		// Fetch full issue details (comments, attachments) per card
+		const fullIssue = await adapter.getIssue(issue.sourceId);
+
 		// Preserve local status or infer from remote status
 		let localStatus: Task["localStatus"] = "pending";
 		if (existingTasksMap.has(issue.id)) {
@@ -688,13 +691,13 @@ async function syncTrello(
 			description: issue.description,
 			parentIssueId: issue.parentIssueId,
 			url: issue.url,
-			attachments: issue.attachments?.map((a) => ({
+			attachments: fullIssue?.attachments?.map((a) => ({
 				id: a.id,
 				title: a.title,
 				url: a.url,
 				sourceType: a.sourceType,
 			})),
-			comments: issue.comments?.map((c) => ({
+			comments: fullIssue?.comments?.map((c) => ({
 				id: c.id,
 				body: c.body,
 				createdAt: c.createdAt,
