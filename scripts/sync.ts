@@ -3,11 +3,16 @@ import {
 	clearAllOutput,
 	clearIssueImages,
 	downloadLinearImage,
+	downloadTrelloFile,
 	ensureOutputDir,
-	extractLinearImageUrls,
+	extractImageUrls,
 	isLinearImageUrl,
 } from "./lib/files.js";
-import { getSyncStatuses } from "./lib/status-helpers.js";
+import {
+	getReviewStatuses,
+	getSyncStatuses,
+	resolveLocalStatus,
+} from "./lib/status-helpers.js";
 import {
 	type Attachment,
 	type Comment,
@@ -27,6 +32,51 @@ import {
 	saveCycleData,
 	type Task,
 } from "./utils.js";
+
+async function downloadEmbeddedImages(
+	texts: Array<string | undefined>,
+	issueId: string,
+	attachments: Attachment[],
+	outputDir: string,
+	downloadFile: (
+		url: string,
+		issueId: string,
+		attachmentId: string,
+		outputDir: string,
+	) => Promise<string | undefined>,
+	titlePrefix: string,
+	sourceType: string,
+	filterUrl?: (url: string) => boolean,
+): Promise<void> {
+	let imageIndex = 0;
+
+	for (const text of texts) {
+		if (!text) continue;
+
+		for (const url of extractImageUrls(text)) {
+			if (filterUrl && !filterUrl(url)) continue;
+			if (attachments.some((a) => a.url === url)) continue;
+
+			const attachmentId = `${titlePrefix.toLowerCase()}_${imageIndex++}`;
+			const localPath = await downloadFile(
+				url,
+				issueId,
+				attachmentId,
+				outputDir,
+			);
+
+			if (localPath) {
+				attachments.push({
+					id: attachmentId,
+					title: `${titlePrefix} Image`,
+					url,
+					sourceType,
+					localPath,
+				});
+			}
+		}
+	}
+}
 
 async function sync() {
 	const args = process.argv.slice(2);
@@ -199,7 +249,12 @@ Examples:
 
 			if (targetStateId) {
 				try {
-					await client.updateIssue(task.linearId, { stateId: targetStateId });
+					const payload = await client.updateIssue(task.linearId, {
+						stateId: targetStateId,
+					});
+					if (!payload.success) {
+						throw new Error("Linear mutation returned success=false");
+					}
 					const targetName =
 						targetStateId === inProgressStateId
 							? statusTransitions.in_progress
@@ -340,37 +395,6 @@ Examples:
 			attachments.push(attachment);
 		}
 
-		// Extract and download images from description
-		if (issue.description) {
-			const descriptionImageUrls = extractLinearImageUrls(issue.description);
-			for (const url of descriptionImageUrls) {
-				// Generate a short ID from URL (last segment of path)
-				const urlPath = new URL(url).pathname;
-				const segments = urlPath.split("/").filter(Boolean);
-				const imageId = segments[segments.length - 1] || `desc_${Date.now()}`;
-
-				// Skip if already in attachments
-				if (attachments.some((a) => a.url === url)) continue;
-
-				const localPath = await downloadLinearImage(
-					url,
-					issue.identifier,
-					imageId,
-					outputPath,
-				);
-
-				if (localPath) {
-					attachments.push({
-						id: imageId,
-						title: `Description Image`,
-						url: url,
-						sourceType: "description",
-						localPath: localPath,
-					});
-				}
-			}
-		}
-
 		// Build comments list
 		const comments: Comment[] = await Promise.all(
 			commentsData.nodes.map(async (c) => {
@@ -384,18 +408,40 @@ Examples:
 			}),
 		);
 
+		await downloadEmbeddedImages(
+			[
+				issue.description ?? undefined,
+				...comments
+					.map((comment) => comment.body)
+					.filter((body): body is string => Boolean(body)),
+			],
+			issue.identifier,
+			attachments,
+			outputPath,
+			downloadLinearImage,
+			"Embedded",
+			"description",
+			isLinearImageUrl,
+		);
+
 		let localStatus: Task["localStatus"] = "pending";
 
 		// Preserve local status & sync completed tasks to Linear
 		if (existingTasksMap.has(issue.identifier)) {
 			const existing = existingTasksMap.get(issue.identifier);
-			localStatus = existing?.localStatus ?? "pending";
+			localStatus = resolveLocalStatus(
+				existing?.localStatus,
+				state?.name ?? "",
+				statusTransitions,
+				localConfig,
+			);
 
 			if (localStatus === "completed" && state && testingStateId) {
 				// Skip if already in terminal states (done, testing, or cancelled type)
-				const terminalStates = [statusTransitions.done];
-				if (statusTransitions.testing)
-					terminalStates.push(statusTransitions.testing);
+				const terminalStates = [
+					statusTransitions.done,
+					...getReviewStatuses(statusTransitions, localConfig),
+				];
 				const isTerminal =
 					terminalStates.includes(state.name) || state.type === "cancelled";
 
@@ -403,31 +449,25 @@ Examples:
 					console.log(
 						`Updating ${issue.identifier} to ${statusTransitions.testing} in Linear...`,
 					);
-					await client.updateIssue(issue.id, { stateId: testingStateId });
+					const payload = await client.updateIssue(issue.id, {
+						stateId: testingStateId,
+					});
+					if (!payload.success) {
+						throw new Error("Linear mutation returned success=false");
+					}
 					updatedCount++;
 				}
 			}
 		} else if (state) {
-			// New task: infer localStatus from remote status
-			if (state.name === statusTransitions.in_progress) {
-				localStatus = "in-progress";
-			} else if (
-				statusTransitions.testing &&
-				state.name === statusTransitions.testing
-			) {
-				localStatus = "in-review";
-			} else if (
-				state.name === statusTransitions.done ||
-				state.type === "completed"
-			) {
+			localStatus = resolveLocalStatus(
+				undefined,
+				state.name,
+				statusTransitions,
+				localConfig,
+			);
+			if (state.type === "completed") {
 				localStatus = "completed";
-			} else if (
-				statusTransitions.blocked &&
-				state.name === statusTransitions.blocked
-			) {
-				localStatus = "blocked";
 			}
-			// Default "pending" for todo or other states
 		}
 
 		const task: Task = {
@@ -651,30 +691,67 @@ async function syncTrello(
 
 		// Fetch full issue details (comments, attachments) per card
 		const fullIssue = await adapter.getIssue(issue.sourceId);
+		const comments: Comment[] =
+			fullIssue?.comments?.map((c) => ({
+				id: c.id,
+				body: c.body,
+				createdAt: c.createdAt,
+				user: c.user,
+			})) ?? [];
+		const attachments: Attachment[] =
+			fullIssue?.attachments?.map((a) => ({
+				id: a.id,
+				title: a.title,
+				url: a.url,
+				sourceType: a.sourceType,
+			})) ?? [];
+
+		await clearIssueImages(outputPath, issue.id);
+
+		for (const attachment of attachments) {
+			const localPath = await downloadTrelloFile(
+				attachment.url,
+				issue.id,
+				attachment.id,
+				outputPath,
+			);
+			if (localPath) {
+				attachment.localPath = localPath;
+			}
+		}
+
+		await downloadEmbeddedImages(
+			[
+				fullIssue?.description ?? issue.description,
+				...comments
+					.map((comment) => comment.body)
+					.filter((body): body is string => Boolean(body)),
+			],
+			issue.id,
+			attachments,
+			outputPath,
+			downloadTrelloFile,
+			"Trello",
+			"trello",
+		);
 
 		// Preserve local status or infer from remote status
 		let localStatus: Task["localStatus"] = "pending";
 		if (existingTasksMap.has(issue.id)) {
 			const existing = existingTasksMap.get(issue.id);
-			localStatus = existing?.localStatus ?? "pending";
+			localStatus = resolveLocalStatus(
+				existing?.localStatus,
+				issue.status,
+				statusTransitions,
+				localConfig,
+			);
 		} else {
-			// New task: infer localStatus from remote status
-			if (issue.status === statusTransitions.in_progress) {
-				localStatus = "in-progress";
-			} else if (
-				statusTransitions.testing &&
-				issue.status === statusTransitions.testing
-			) {
-				localStatus = "in-review";
-			} else if (issue.status === statusTransitions.done) {
-				localStatus = "completed";
-			} else if (
-				statusTransitions.blocked &&
-				issue.status === statusTransitions.blocked
-			) {
-				localStatus = "blocked";
-			}
-			// Default "pending" for todo or other states
+			localStatus = resolveLocalStatus(
+				undefined,
+				issue.status,
+				statusTransitions,
+				localConfig,
+			);
 		}
 
 		const task: Task = {
@@ -691,18 +768,8 @@ async function syncTrello(
 			description: issue.description,
 			parentIssueId: issue.parentIssueId,
 			url: issue.url,
-			attachments: fullIssue?.attachments?.map((a) => ({
-				id: a.id,
-				title: a.title,
-				url: a.url,
-				sourceType: a.sourceType,
-			})),
-			comments: fullIssue?.comments?.map((c) => ({
-				id: c.id,
-				body: c.body,
-				createdAt: c.createdAt,
-				user: c.user,
-			})),
+			attachments: attachments.length > 0 ? attachments : undefined,
+			comments: comments.length > 0 ? comments : undefined,
 		};
 
 		tasks.push(task);

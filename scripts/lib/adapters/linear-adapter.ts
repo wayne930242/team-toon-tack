@@ -266,7 +266,15 @@ export class LinearAdapter implements TaskSourceAdapter {
 		statusId: string,
 	): Promise<{ success: boolean; error?: string }> {
 		try {
-			await this.client.updateIssue(sourceId, { stateId: statusId });
+			const payload = await this.client.updateIssue(sourceId, {
+				stateId: statusId,
+			});
+			if (!payload.success) {
+				return {
+					success: false,
+					error: `Linear mutation returned success=false for ${sourceId}`,
+				};
+			}
 			return { success: true };
 		} catch (e) {
 			return {

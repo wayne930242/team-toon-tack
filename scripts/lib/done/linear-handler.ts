@@ -31,6 +31,12 @@ async function handleSimpleCompletion(
 	);
 	if (success) {
 		console.log(`Linear: ${task.id} → ${transitions.done}`);
+	} else {
+		return {
+			success: false,
+			status: task.status,
+			message: `Failed to move ${task.id} to ${transitions.done}`,
+		};
 	}
 
 	// Also mark parent as done if exists
@@ -72,6 +78,12 @@ async function handleStrictReview(
 		);
 		if (success) {
 			console.log(`Linear: ${task.id} → ${devTestingStatus}`);
+		} else {
+			return {
+				success: false,
+				status: task.status,
+				message: `Failed to move ${task.id} to ${devTestingStatus}`,
+			};
 		}
 
 		// Also mark parent to testing if exists
@@ -101,6 +113,12 @@ async function handleStrictReview(
 	);
 	if (success) {
 		console.log(`Linear: ${task.id} → ${transitions.done}`);
+	} else {
+		return {
+			success: false,
+			status: task.status,
+			message: `Failed to move ${task.id} to ${transitions.done}`,
+		};
 	}
 
 	return { success: true, status: transitions.done };
@@ -165,8 +183,21 @@ async function handleUpstreamCompletion(
 			console.log(
 				`Linear: ${task.id} → ${devTestingStatus} (fallback, no valid parent)`,
 			);
+			return { success: true, status: devTestingStatus };
 		}
-		return { success: true, status: devTestingStatus };
+		return {
+			success: false,
+			status: task.status,
+			message: `Failed to move ${task.id} to ${devTestingStatus}`,
+		};
+	}
+
+	if (!doneSuccess) {
+		return {
+			success: false,
+			status: task.status,
+			message: `Failed to move ${task.id} to ${transitions.done}`,
+		};
 	}
 
 	return { success: true, status: transitions.done };
@@ -212,7 +243,7 @@ export async function handleLinearCompletion(
 	}
 
 	// Add comment with commit info (only if promptMessage provided)
-	if (commit && promptMessage) {
+	if (result.success && commit && promptMessage) {
 		const commentBody = buildCompletionComment(commit, promptMessage);
 		const commentSuccess = await addComment(task.linearId, commentBody);
 		if (commentSuccess) {

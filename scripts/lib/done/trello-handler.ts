@@ -42,6 +42,11 @@ export async function handleTrelloCompletion(
 		const result = await adapter.updateIssueStatus(sourceId, doneStatus.id);
 		if (result.success) {
 			console.log(`Trello: ${task.id} → ${transitions.done}`);
+		} else {
+			return {
+				success: false,
+				message: result.error || `Failed to move ${task.id} to ${transitions.done}`,
+			};
 		}
 
 		// Add comment with commit info (only if promptMessage provided)

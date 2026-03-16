@@ -115,7 +115,7 @@ export async function syncSingleIssue(
 ): Promise<Task | null> {
 	const {
 		config,
-		localConfig: _localConfig,
+		localConfig,
 		preserveLocalStatus = true,
 	} = options;
 	const client = options.client ?? getLinearClient();
@@ -141,7 +141,11 @@ export async function syncSingleIssue(
 	// Map remote status to local status if not preserving
 	if (!preserveLocalStatus) {
 		const transitions = getStatusTransitions(config);
-		task.localStatus = mapRemoteToLocalStatus(task.status, transitions);
+		task.localStatus = mapRemoteToLocalStatus(
+			task.status,
+			transitions,
+			localConfig,
+		);
 	}
 
 	// Update cycle data

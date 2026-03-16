@@ -51,7 +51,15 @@ export async function updateIssueStatus(
 		const targetState = states.find((s) => s.name === targetStatusName);
 
 		if (targetState) {
-			await client.updateIssue(linearId, { stateId: targetState.id });
+			const payload = await client.updateIssue(linearId, {
+				stateId: targetState.id,
+			});
+			if (!payload.success) {
+				console.error(
+					`Failed to update Linear: mutation returned success=false for ${linearId} → ${targetStatusName}`,
+				);
+				return false;
+			}
 			return true;
 		}
 		return false;

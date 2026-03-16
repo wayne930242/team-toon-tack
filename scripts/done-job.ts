@@ -7,6 +7,7 @@
 import { input, select } from "@inquirer/prompts";
 import {
 	type CompletionContext,
+	type CompletionResult,
 	handleLinearCompletion,
 	handleTrelloCompletion,
 	parseArgs,
@@ -148,6 +149,7 @@ async function doneJob() {
 	const statusSource = localConfig.status_source || "remote";
 	const sourceType = getSourceType(config);
 	const sourceId = task.sourceId ?? task.linearId;
+	let completionResult: CompletionResult | null = null;
 
 	if (sourceId && statusSource === "remote") {
 		// Build completion context
@@ -161,9 +163,17 @@ async function doneJob() {
 
 		// Branch based on source type
 		if (sourceType === "trello") {
-			await handleTrelloCompletion(context);
+			completionResult = await handleTrelloCompletion(context);
 		} else {
-			await handleLinearCompletion(context);
+			completionResult = await handleLinearCompletion(context);
+		}
+
+		if (!completionResult.success) {
+			console.error(
+				completionResult.message ||
+					`Failed to update remote status for ${task.id}.`,
+			);
+			process.exit(1);
 		}
 	} else if (statusSource === "local") {
 		const sourceName = sourceType === "trello" ? "Trello" : "Linear";
@@ -185,6 +195,16 @@ async function doneJob() {
 			console.log(
 				`Synced: ${syncedTask.id} → ${syncedTask.status} (local: ${syncedTask.localStatus})`,
 			);
+
+			if (
+				completionResult?.status &&
+				syncedTask.status !== completionResult.status
+			) {
+				console.error(
+					`Remote status verification failed for ${task.id}: expected ${completionResult.status}, got ${syncedTask.status}.`,
+				);
+				process.exit(1);
+			}
 		}
 	} else {
 		// For Trello, skip full sync (would require adapter-based syncSingleIssue)
