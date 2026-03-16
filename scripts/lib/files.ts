@@ -173,6 +173,24 @@ async function downloadRemoteFile(
 	}
 }
 
+interface TrelloCredentials {
+	apiKey?: string;
+	token?: string;
+}
+
+function getTrelloAuthorizationHeader(
+	credentials?: TrelloCredentials,
+): string | undefined {
+	const apiKey = credentials?.apiKey ?? process.env.TRELLO_API_KEY;
+	const token = credentials?.token ?? process.env.TRELLO_TOKEN;
+
+	if (!apiKey || !token) {
+		return undefined;
+	}
+
+	return `OAuth oauth_consumer_key="${apiKey}", oauth_token="${token}"`;
+}
+
 export async function downloadLinearFile(
 	url: string,
 	issueId: string,
@@ -194,20 +212,28 @@ export async function downloadTrelloFile(
 	issueId: string,
 	attachmentId: string,
 	outputDir: string,
+	credentials?: TrelloCredentials,
 ): Promise<string | undefined> {
+	const authorizationHeader = getTrelloAuthorizationHeader(credentials);
+
 	return downloadRemoteFile(url, issueId, attachmentId, outputDir, {
+		headers: authorizationHeader
+			? {
+					Authorization: authorizationHeader,
+				}
+			: undefined,
 		transformUrl: (rawUrl) => {
 			if (!isTrelloFileUrl(rawUrl)) {
 				return rawUrl;
 			}
 
 			const parsed = new URL(rawUrl);
-			if (process.env.TRELLO_API_KEY && !parsed.searchParams.has("key")) {
-				parsed.searchParams.set("key", process.env.TRELLO_API_KEY);
-			}
-			if (process.env.TRELLO_TOKEN && !parsed.searchParams.has("token")) {
-				parsed.searchParams.set("token", process.env.TRELLO_TOKEN);
-			}
+
+			parsed.protocol = "https:";
+			parsed.host = "api.trello.com";
+			parsed.searchParams.delete("key");
+			parsed.searchParams.delete("token");
+
 			return parsed.toString();
 		},
 	});

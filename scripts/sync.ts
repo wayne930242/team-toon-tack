@@ -552,6 +552,17 @@ async function syncTrello(
 	options: TrelloSyncOptions,
 ) {
 	const { shouldUpdate, syncAll, singleIssueId, outputPath } = options;
+	const trelloCredentials = {
+		apiKey: config.source?.trello?.apiKey ?? process.env.TRELLO_API_KEY,
+		token: config.source?.trello?.token ?? process.env.TRELLO_TOKEN,
+	};
+	const downloadTrelloAttachment = (
+		url: string,
+		issueId: string,
+		attachmentId: string,
+		outputDir: string,
+	) =>
+		downloadTrelloFile(url, issueId, attachmentId, outputDir, trelloCredentials);
 
 	// Create adapter
 	const adapter = createAdapter(config);
@@ -709,7 +720,7 @@ async function syncTrello(
 		await clearIssueImages(outputPath, issue.id);
 
 		for (const attachment of attachments) {
-			const localPath = await downloadTrelloFile(
+			const localPath = await downloadTrelloAttachment(
 				attachment.url,
 				issue.id,
 				attachment.id,
@@ -730,7 +741,7 @@ async function syncTrello(
 			issue.id,
 			attachments,
 			outputPath,
-			downloadTrelloFile,
+			downloadTrelloAttachment,
 			"Trello",
 			"trello",
 		);
