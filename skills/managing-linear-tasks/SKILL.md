@@ -1,6 +1,6 @@
 ---
 name: managing-linear-tasks
-description: Use when the user mentions Linear or Trello issues, references issue IDs like MP-123, or asks to sync, show, start, complete, or check status of tasks.
+description: Use when the user mentions Linear or Trello issues, references issue IDs like MP-123, or asks to sync, show, start, complete, comment on, or check status of tasks.
 ---
 
 <law>
@@ -25,6 +25,7 @@ Match user intent to the correct `/ttt:*` command:
 | Start working on a task | `/ttt:work-on` | "work on next", "start MP-624" |
 | Record an estimate | `/ttt:estimate` | "estimate MP-624 as 6h", "save 2.5h estimate" |
 | Check/change status | `/ttt:status` | "what's my current task", "set MP-624 to blocked" |
+| Add a comment | `/ttt:comment` | "comment on MP-624", "add note to task" |
 | Complete a task | `/ttt:done` | "done", "mark complete", "finish task" |
 
 **When a matching intent is detected, invoke the corresponding `/ttt:*` slash command.**
@@ -43,6 +44,8 @@ ttt work-on MP-624          # Start specific task
 ttt estimate MP-624 6       # Save a 6-hour human estimate
 ttt status                  # Current in-progress task
 ttt status MP-624 --set +1  # Advance status
+ttt comment MP-624 -m "msg" # Add comment to issue
+ttt comment -m "msg"        # Comment on current task
 ttt done -m "summary"       # Complete with message
 ```
 
@@ -55,7 +58,7 @@ ttt done -m "summary"       # Complete with message
 ## Standard Workflow
 
 ```
-ttt sync → ttt work-on next → ttt estimate <id> <hours> → [implement] → git commit → ttt done -m "..."
+ttt sync → ttt work-on next → ttt estimate <id> <hours> → [implement] → git commit → ttt comment -m "notes" → ttt done -m "..."
 ```
 
 ## File Structure

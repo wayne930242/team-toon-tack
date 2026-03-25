@@ -18,6 +18,7 @@ const COMMANDS = [
 	"done",
 	"status",
 	"show",
+	"comment",
 	"config",
 	"help",
 	"version",
@@ -39,6 +40,7 @@ COMMANDS:
   done       Mark current task as completed
   status     Show or modify task status
   show       Show issue details or search issues by filters
+  comment    Add a comment to an issue
   config     Configure settings (status mappings, filters)
   help       Show this help message
   version    Show version
@@ -153,6 +155,10 @@ async function main() {
 			case "show":
 				process.argv = ["node", "show.js", ...commandArgs];
 				await import(`${scriptDir}show.js`);
+				break;
+			case "comment":
+				process.argv = ["node", "comment.js", ...commandArgs];
+				await import(`${scriptDir}comment.js`);
 				break;
 			case "config":
 				process.argv = ["node", "config.js", ...commandArgs];
