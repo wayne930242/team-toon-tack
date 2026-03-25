@@ -89,8 +89,9 @@ Examples:
 			console.log("No in-progress task found.");
 			console.log("\nAll tasks:");
 			for (const t of data.tasks) {
+				const estimate = t.estimate ? ` | ${t.estimate.hours}h` : "";
 				console.log(
-					`  ${getStatusIcon(t.localStatus)} ${t.id}: ${t.title} [${t.localStatus}]`,
+					`  ${getStatusIcon(t.localStatus)} ${t.id}: ${t.title} [${t.localStatus}]${estimate}`,
 				);
 			}
 			process.exit(0);

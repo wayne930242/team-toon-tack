@@ -15,6 +15,7 @@ Optimized task workflow for Claude Code — supports Linear and Trello, saves si
 - **QA Team Support** — Auto-update parent issues in QA team to "Testing" when completing dev tasks (Linear)
 - **Attachment Download** — Auto-download images and files to local `.ttt/output/` for AI vision analysis
 - **Blocked Status** — Set tasks as blocked when waiting on external dependencies
+- **Persistent Estimates** — Store local human-effort estimates that survive future `ttt sync`
 - **Claude Code Plugin** — Install plugin for `/ttt:*` commands and auto-activated skills
 - **Cycle History** — Local `.toon` files preserve cycle data for AI context
 
@@ -76,6 +77,7 @@ In Claude Code (with plugin installed):
 ```
 /ttt:sync              # Fetch all issues/cards for current cycle
 /ttt:work-on next      # Pick highest priority task & start working
+/ttt:estimate MP-123 6 # Save a local 6-hour estimate
 /ttt:done              # Complete task with AI-generated summary
 ```
 
@@ -84,6 +86,7 @@ Or using CLI directly:
 ```bash
 ttt sync
 ttt work-on next
+ttt estimate MP-123 6
 ttt done -m "Completed the task"
 ```
 
@@ -123,6 +126,17 @@ Start working on a task.
 ttt work-on              # Interactive selection
 ttt work-on MP-123       # Specific issue
 ttt work-on next         # Auto-select highest priority
+```
+
+### `ttt estimate`
+
+Save a local human-effort estimate that persists in `.ttt/cycle.toon`.
+
+```bash
+ttt estimate MP-123 6                         # Save a 6-hour estimate
+ttt estimate 2.5                              # Save estimate for current in-progress task
+ttt estimate MP-123 16 --note "API pending"   # Save estimate with a note
+ttt estimate MP-123 --clear                   # Remove saved estimate
 ```
 
 ### `ttt done`
@@ -184,7 +198,7 @@ your-project/
 └── .ttt/
     ├── config.toon     # Team config (gitignore recommended)
     ├── local.toon      # Personal settings (gitignore)
-    ├── cycle.toon      # Current cycle data (auto-generated)
+    ├── cycle.toon      # Current cycle data + local estimates (auto-generated)
     └── output/         # Downloaded attachments (images, files)
 ```
 
@@ -229,6 +243,7 @@ Install the plugin for Claude Code integration:
 |---------|-------------|
 | `/ttt:sync` | Sync issues to local cycle data |
 | `/ttt:work-on` | Start working on a task |
+| `/ttt:estimate` | Save a local human-effort estimate |
 | `/ttt:done` | Mark current task as completed |
 | `/ttt:status` | Show or modify task status |
 | `/ttt:show` | Show issue details or search issues |

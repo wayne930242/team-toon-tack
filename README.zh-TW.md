@@ -15,6 +15,7 @@
 - **QA 團隊支援** — 完成開發任務時自動將 QA 團隊的 parent issue 更新為「Testing」（Linear）
 - **附件下載** — 自動下載圖片和檔案到本地 `.ttt/output/`，供 AI 視覺分析
 - **阻塞狀態** — 等待外部依賴時可設定任務為 blocked
+- **持久化估時** — 把人類工程工時估算寫進本地資料，後續 `ttt sync` 不會洗掉
 - **Claude Code Plugin** — 安裝 plugin 即可使用 `/ttt:*` 指令和自動啟用的技能
 - **Cycle 歷史保存** — 本地 `.toon` 檔案保留 cycle 資料，方便 AI 檢閱
 
@@ -76,6 +77,7 @@ ttt init
 ```
 /ttt:sync              # 取得當前 cycle 所有 issue/card
 /ttt:work-on next      # 挑選最高優先級任務並開始工作
+/ttt:estimate MP-123 6 # 寫入本地 6 小時估時
 /ttt:done              # 完成任務，附上 AI 生成的摘要
 ```
 
@@ -84,6 +86,7 @@ ttt init
 ```bash
 ttt sync
 ttt work-on next
+ttt estimate MP-123 6
 ttt done -m "完成任務"
 ```
 
@@ -123,6 +126,17 @@ ttt sync --update     # 將本地狀態推送到遠端（local 模式用）
 ttt work-on              # 互動選擇
 ttt work-on MP-123       # 指定 issue
 ttt work-on next         # 自動選擇最高優先級
+```
+
+### `ttt estimate`
+
+把人類工程工時估算寫進 `.ttt/cycle.toon`，並在之後的同步中保留下來。
+
+```bash
+ttt estimate MP-123 6                         # 寫入 6 小時估時
+ttt estimate 2.5                              # 對目前進行中的任務寫入 2.5 小時
+ttt estimate MP-123 16 --note "API pending"   # 連同註記一起保存
+ttt estimate MP-123 --clear                   # 移除既有估時
 ```
 
 ### `ttt done`
@@ -184,7 +198,7 @@ your-project/
 └── .ttt/
     ├── config.toon     # 團隊配置（建議 gitignore）
     ├── local.toon      # 個人設定（gitignore）
-    ├── cycle.toon      # 當前 cycle 資料（自動產生）
+    ├── cycle.toon      # 當前 cycle 資料與本地估時（自動產生）
     └── output/         # 下載的附件（圖片、檔案）
 ```
 
@@ -229,6 +243,7 @@ your-project/
 |------|------|
 | `/ttt:sync` | 同步 issue 到本地 |
 | `/ttt:work-on` | 開始處理任務 |
+| `/ttt:estimate` | 寫入本地人力估時 |
 | `/ttt:done` | 標記當前任務完成 |
 | `/ttt:status` | 顯示或修改任務狀態 |
 | `/ttt:show` | 顯示 issue 詳情或搜尋 issue |

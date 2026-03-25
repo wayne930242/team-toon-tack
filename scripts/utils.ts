@@ -151,6 +151,12 @@ export interface Comment {
 	user?: string;
 }
 
+export interface TaskEstimate {
+	hours: number;
+	note?: string;
+	updatedAt: string;
+}
+
 export interface Task {
 	id: string;
 	/** @deprecated Use sourceId instead. Kept for backwards compatibility. */
@@ -177,6 +183,7 @@ export interface Task {
 	url?: string;
 	attachments?: Attachment[];
 	comments?: Comment[];
+	estimate?: TaskEstimate;
 }
 
 export interface CycleData {
@@ -312,4 +319,16 @@ export function getSourceType(config: Config): TaskSourceType {
 // Helper to get sourceId from Task, falling back to linearId for backwards compatibility
 export function getTaskSourceId(task: Task): string {
 	return task.sourceId ?? task.linearId;
+}
+
+export function preserveLocalTaskFields(task: Task, existingTask?: Task): Task {
+	if (!existingTask) {
+		return task;
+	}
+
+	return {
+		...task,
+		branch: existingTask.branch ?? task.branch,
+		estimate: existingTask.estimate ?? task.estimate,
+	};
 }

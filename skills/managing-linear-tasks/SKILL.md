@@ -23,6 +23,7 @@ Match user intent to the correct `/ttt:*` command:
 | Sync/fetch issues | `/ttt:sync` | "sync my issues", "pull from Linear" |
 | Show/search issues | `/ttt:show` | "show MP-624", "list my tasks", "what issues do I have" |
 | Start working on a task | `/ttt:work-on` | "work on next", "start MP-624" |
+| Record an estimate | `/ttt:estimate` | "estimate MP-624 as 6h", "save 2.5h estimate" |
 | Check/change status | `/ttt:status` | "what's my current task", "set MP-624 to blocked" |
 | Complete a task | `/ttt:done` | "done", "mark complete", "finish task" |
 
@@ -39,6 +40,7 @@ ttt show MP-624             # Show issue details
 ttt show --user me          # My issues
 ttt work-on next            # Auto-select highest priority
 ttt work-on MP-624          # Start specific task
+ttt estimate MP-624 6       # Save a 6-hour human estimate
 ttt status                  # Current in-progress task
 ttt status MP-624 --set +1  # Advance status
 ttt done -m "summary"       # Complete with message
@@ -53,7 +55,7 @@ ttt done -m "summary"       # Complete with message
 ## Standard Workflow
 
 ```
-ttt sync → ttt work-on next → [implement] → git commit → ttt done -m "..."
+ttt sync → ttt work-on next → ttt estimate <id> <hours> → [implement] → git commit → ttt done -m "..."
 ```
 
 ## File Structure
@@ -62,7 +64,7 @@ ttt sync → ttt work-on next → [implement] → git commit → ttt done -m "..
 .ttt/
 ├── config.toon     # Team configuration
 ├── local.toon      # Personal settings
-├── cycle.toon      # Current cycle tasks (auto-generated)
+├── cycle.toon      # Current cycle tasks + local estimates (auto-generated)
 └── output/         # Downloaded attachments
 ```
 

@@ -28,6 +28,7 @@ import {
 	loadConfig,
 	loadCycleData,
 	loadLocalConfig,
+	preserveLocalTaskFields,
 	saveConfig,
 	saveCycleData,
 	type Task,
@@ -470,7 +471,9 @@ Examples:
 			}
 		}
 
-		const task: Task = {
+		const existingTask = existingTasksMap.get(issue.identifier);
+		const task: Task = preserveLocalTaskFields(
+			{
 			id: issue.identifier,
 			linearId: issue.id,
 			title: issue.title,
@@ -484,7 +487,9 @@ Examples:
 			url: issue.url,
 			attachments: attachments.length > 0 ? attachments : undefined,
 			comments: comments.length > 0 ? comments : undefined,
-		};
+			},
+			existingTask,
+		);
 
 		tasks.push(task);
 	}
@@ -765,7 +770,9 @@ async function syncTrello(
 			);
 		}
 
-		const task: Task = {
+		const existingTask = existingTasksMap.get(issue.id);
+		const task: Task = preserveLocalTaskFields(
+			{
 			id: issue.id,
 			linearId: issue.sourceId, // For backwards compatibility
 			sourceId: issue.sourceId,
@@ -781,7 +788,9 @@ async function syncTrello(
 			url: issue.url,
 			attachments: attachments.length > 0 ? attachments : undefined,
 			comments: comments.length > 0 ? comments : undefined,
-		};
+			},
+			existingTask,
+		);
 
 		tasks.push(task);
 	}

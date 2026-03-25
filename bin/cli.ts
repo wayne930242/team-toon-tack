@@ -14,6 +14,7 @@ const COMMANDS = [
 	"init",
 	"sync",
 	"work-on",
+	"estimate",
 	"done",
 	"status",
 	"show",
@@ -34,6 +35,7 @@ COMMANDS:
   init       Initialize config files in current directory
   sync       Sync issues from Linear to local cycle.ttt
   work-on    Start working on a task (interactive or by ID)
+  estimate   Store a local human-effort estimate for a task
   done       Mark current task as completed
   status     Show or modify task status
   show       Show issue details or search issues by filters
@@ -52,6 +54,7 @@ EXAMPLES:
   ttt work-on                   # Interactive task selection
   ttt work-on MP-123            # Work on specific issue
   ttt work-on next              # Auto-select highest priority
+  ttt estimate MP-123 6         # Save a 6-hour estimate locally
   ttt done                      # Complete current task
   ttt done -m "Fixed the bug"   # With completion message
   ttt show MP-123               # Show issue from local data
@@ -134,6 +137,10 @@ async function main() {
 			case "work-on":
 				process.argv = ["node", "work-on.js", ...commandArgs];
 				await import(`${scriptDir}work-on.js`);
+				break;
+			case "estimate":
+				process.argv = ["node", "estimate.js", ...commandArgs];
+				await import(`${scriptDir}estimate.js`);
 				break;
 			case "done":
 				process.argv = ["node", "done-job.js", ...commandArgs];

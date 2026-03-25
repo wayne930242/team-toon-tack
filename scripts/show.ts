@@ -31,6 +31,10 @@ function taskToMarkdown(task: Task): string {
 		`- **Labels**: ${task.labels.length > 0 ? task.labels.join(", ") : "-"}`,
 	);
 	lines.push(`- **Assignee**: ${task.assignee || "Unassigned"}`);
+	if (task.estimate) {
+		const note = task.estimate.note ? ` (${task.estimate.note})` : "";
+		lines.push(`- **Estimate**: ${task.estimate.hours}h${note}`);
+	}
 	if (task.url) lines.push(`- **URL**: ${task.url}`);
 	if (task.parentIssueId) lines.push(`- **Parent**: ${task.parentIssueId}`);
 
@@ -87,6 +91,10 @@ function tasksToMarkdownList(tasks: Task[]): string {
 		lines.push(`| Status | ${task.status} |`);
 		lines.push(`| Priority | ${priority} |`);
 		lines.push(`| Assignee | ${assignee} |`);
+		if (task.estimate) {
+			const note = task.estimate.note ? ` (${task.estimate.note})` : "";
+			lines.push(`| Estimate | ${task.estimate.hours}h${note} |`);
+		}
 		lines.push(
 			`| Labels | ${task.labels.length > 0 ? task.labels.join(", ") : "-"} |`,
 		);
@@ -111,10 +119,13 @@ function displayTaskList(tasks: Task[]): void {
 		const priority = PRIORITY_LABELS[task.priority] || "⚪ None";
 		const assignee = task.assignee ? task.assignee.split("@")[0] : "unassigned";
 		const labels = task.labels.length > 0 ? task.labels.join(", ") : "-";
+		const estimate = task.estimate
+			? ` | Estimate: ${task.estimate.hours}h`
+			: "";
 
 		console.log(`${icon} ${task.id}: ${task.title}`);
 		console.log(
-			`   Status: ${task.status} | Priority: ${priority} | Assignee: ${assignee}`,
+			`   Status: ${task.status} | Priority: ${priority} | Assignee: ${assignee}${estimate}`,
 		);
 		console.log(`   Labels: ${labels}`);
 		console.log("─".repeat(80));

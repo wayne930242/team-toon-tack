@@ -7,6 +7,7 @@ import {
 	getPrioritySortIndex,
 	type LocalConfig,
 	loadCycleData,
+	preserveLocalTaskFields,
 	saveCycleData,
 	type Task,
 } from "../utils.js";
@@ -121,7 +122,7 @@ export async function syncSingleIssue(
 	const client = options.client ?? getLinearClient();
 
 	// Fetch issue details using shared function
-	const task = await fetchIssueDetail(issueId, { client });
+	let task = await fetchIssueDetail(issueId, { client });
 
 	if (!task) {
 		console.error(`Issue ${issueId} not found in Linear.`);
@@ -135,6 +136,7 @@ export async function syncSingleIssue(
 		const existingTask = existingData.tasks.find((t) => t.id === issueId);
 		if (existingTask) {
 			task.localStatus = existingTask.localStatus;
+			task = preserveLocalTaskFields(task, existingTask);
 		}
 	}
 
@@ -146,6 +148,11 @@ export async function syncSingleIssue(
 			transitions,
 			localConfig,
 		);
+	}
+
+	if (existingData) {
+		const existingTask = existingData.tasks.find((t) => t.id === issueId);
+		task = preserveLocalTaskFields(task, existingTask);
 	}
 
 	// Update cycle data
