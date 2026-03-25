@@ -71,9 +71,14 @@ Report:
 - Local status vs Linear status
 - Priority and labels
 
+## Remote Fallback
+
+When the specified issue is not in local cycle data, the CLI automatically fetches it from Linear/Trello.
+If a `--set` operation is performed, the remote task is added to local cycle data.
+
 ## Error Handling
 
 | Error | Solution |
 |-------|----------|
 | `No in-progress task` | Specify issue-id or run `ttt work-on` first |
-| `Issue not found` | Run `ttt sync` to refresh local data |
+| `Issue not found` | Issue doesn't exist in remote either — check the ID |

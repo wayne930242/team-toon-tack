@@ -73,6 +73,6 @@ ttt sync → ttt work-on next → ttt estimate <id> <hours> → [implement] → 
 | Problem | Solution |
 |---------|----------|
 | No cycle data | `ttt sync` |
-| Issue not found locally | `ttt show <id> --remote` or `ttt sync <id>` |
+| Issue not found locally | `ttt show <id> --remote` or `ttt sync <id>` (`ttt status` auto-fetches from remote) |
 | API key not set | Set `LINEAR_API_KEY` or `TRELLO_API_KEY` + `TRELLO_TOKEN` |
 | Stale data | `ttt sync` to refresh |
