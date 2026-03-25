@@ -4,6 +4,7 @@ import { displayTaskWithStatus, getStatusIcon } from "./lib/display.js";
 import { getStatusTransitions, mapLocalStatusToLinear } from "./lib/linear.js";
 import { getFirstTodoStatus } from "./lib/status-helpers.js";
 import {
+	type Config,
 	getSourceType,
 	loadConfig,
 	loadCycleData,
@@ -33,6 +34,44 @@ function parseArgs(args: string[]): { issueId?: string; setStatus?: string } {
 	}
 
 	return { issueId, setStatus };
+}
+
+async function fetchTaskFromRemote(
+	issueId: string,
+	config: Config,
+): Promise<Task | undefined> {
+	const adapter = createAdapter(config);
+	const sourceType = getSourceType(config);
+	const issue = await adapter.searchIssue(issueId);
+	if (!issue) return undefined;
+
+	return {
+		id: issue.id,
+		linearId: issue.sourceId,
+		sourceId: issue.sourceId,
+		sourceType,
+		title: issue.title,
+		status: issue.status,
+		localStatus: "pending",
+		assignee: issue.assigneeEmail,
+		priority: issue.priority,
+		labels: issue.labels,
+		description: issue.description,
+		parentIssueId: issue.parentIssueId,
+		url: issue.url,
+		attachments: issue.attachments?.map((a) => ({
+			id: a.id,
+			title: a.title,
+			url: a.url,
+			sourceType: a.sourceType,
+		})),
+		comments: issue.comments?.map((c) => ({
+			id: c.id,
+			body: c.body,
+			createdAt: c.createdAt,
+			user: c.user,
+		})),
+	};
 }
 
 async function status() {
@@ -80,6 +119,7 @@ Examples:
 	// Find task
 	let task: Task | undefined;
 	let issueId = argIssueId;
+	let fromRemote = false;
 
 	if (!issueId) {
 		const inProgressTasks = data.tasks.filter(
@@ -101,8 +141,17 @@ Examples:
 	} else {
 		task = data.tasks.find((t) => t.id === issueId || t.id === `MP-${issueId}`);
 		if (!task) {
-			console.error(`Issue ${issueId} not found in local data.`);
-			process.exit(1);
+			// Fetch from remote
+			console.error(
+				`Issue ${issueId} not in local data. Fetching from remote...`,
+			);
+			task = await fetchTaskFromRemote(issueId, config);
+			if (!task) {
+				console.error(`Issue ${issueId} not found.`);
+				process.exit(1);
+			}
+			issueId = task.id;
+			fromRemote = true;
 		}
 	}
 
@@ -218,6 +267,9 @@ Examples:
 
 		// Save if anything changed
 		if (needsSave) {
+			if (fromRemote) {
+				data.tasks.push(task);
+			}
 			await saveCycleData(data);
 			if (newLocalStatus && newLocalStatus !== oldLocalStatus) {
 				console.log(`Local: ${task.id} ${oldLocalStatus} → ${newLocalStatus}`);
