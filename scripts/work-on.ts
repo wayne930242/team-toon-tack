@@ -46,16 +46,22 @@ Examples:
 
 	const localConfig = await loadLocalConfig();
 
-	// Get current user email for filtering
-	const currentUserEmail = config.users[localConfig.current_user]?.email;
-	const normalizedCurrentUserEmail = currentUserEmail?.toLowerCase();
+	// Get current user email(s) for filtering
+	const userKeys = Array.isArray(localConfig.current_user)
+		? localConfig.current_user
+		: localConfig.current_user
+			? [localConfig.current_user]
+			: [];
+	const currentUserEmails = userKeys
+		.map((key) => config.users[key]?.email?.toLowerCase())
+		.filter((email): email is string => !!email);
 
 	const pendingTasks = data.tasks
 		.filter((t) => {
 			if (t.localStatus !== "pending") return false;
-			if (!normalizedCurrentUserEmail) return true;
+			if (currentUserEmails.length === 0) return true; // No filter = all users
 			if (!t.assignee) return true; // Include unassigned tasks
-			return t.assignee.toLowerCase() === normalizedCurrentUserEmail;
+			return currentUserEmails.includes(t.assignee.toLowerCase());
 		})
 		.sort((a, b) => {
 			const pa = getPrioritySortIndex(a.priority, config.priority_order);

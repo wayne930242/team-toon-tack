@@ -39,29 +39,43 @@ export async function selectTaskSource(
 	return source;
 }
 
-export async function selectUser(
+/**
+ * Select one or more users (team members) or skip.
+ * Returns selected users array. Empty array means "all users" (no filter).
+ */
+export async function selectUsers(
 	users: LinearUser[],
 	options: InitOptions,
-): Promise<LinearUser> {
-	let currentUser = users[0];
+): Promise<LinearUser[]> {
 	if (options.user) {
 		const found = users.find(
 			(u) =>
 				u.email?.toLowerCase() === options.user?.toLowerCase() ||
 				u.displayName?.toLowerCase() === options.user?.toLowerCase(),
 		);
-		if (found) currentUser = found;
-	} else if (options.interactive) {
-		const userId = await select({
-			message: "Select yourself:",
+		return found ? [found] : [users[0]];
+	}
+
+	if (options.interactive) {
+		const userIds = await checkbox({
+			message:
+				"Select team member(s) to track (space to select, enter to confirm, skip for all):",
 			choices: users.map((u) => ({
 				name: `${u.displayName || u.name} (${u.email})`,
 				value: u.id,
 			})),
 		});
-		currentUser = users.find((u) => u.id === userId) || users[0];
+
+		if (userIds.length === 0) {
+			console.log("  ℹ No users selected — will sync all team members' tasks.");
+			return [];
+		}
+
+		return users.filter((u) => userIds.includes(u.id));
 	}
-	return currentUser;
+
+	// Non-interactive: default to first user
+	return [users[0]];
 }
 
 export async function selectLabelFilter(

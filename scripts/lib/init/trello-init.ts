@@ -71,24 +71,31 @@ export async function initTrello(
 	console.log(`  Labels: ${labels.filter((l) => l.name).length}`);
 	console.log(`  Members: ${members.length}`);
 
-	// Select user
-	let currentMember = members[0];
+	// Select user(s) - multi-select or skip
+	let selectedMembers: typeof members = [];
 	if (options.user) {
 		const found = members.find(
 			(m) =>
 				m.username.toLowerCase() === options.user?.toLowerCase() ||
 				m.fullName.toLowerCase() === options.user?.toLowerCase(),
 		);
-		if (found) currentMember = found;
+		selectedMembers = found ? [found] : [members[0]];
 	} else if (options.interactive && members.length > 0) {
-		const memberId = await select({
-			message: "Select yourself:",
+		const memberIds = await checkbox({
+			message:
+				"Select team member(s) to track (space to select, enter to confirm, skip for all):",
 			choices: members.map((m) => ({
 				name: `${m.fullName} (@${m.username})`,
 				value: m.id,
 			})),
 		});
-		currentMember = members.find((m) => m.id === memberId) || members[0];
+		if (memberIds.length === 0) {
+			console.log("  ℹ No users selected — will sync all team members' tasks.");
+		} else {
+			selectedMembers = members.filter((m) => memberIds.includes(m.id));
+		}
+	} else {
+		selectedMembers = [members[0]];
 	}
 
 	// Select status mappings (lists)
@@ -232,13 +239,17 @@ export async function initTrello(
 	};
 
 	// Find keys
-	const currentUserKey =
-		Object.entries(usersConfig).find(
-			([_, u]) => u.id === currentMember.id,
-		)?.[0] || Object.keys(usersConfig)[0];
+	const currentUserKeys = selectedMembers
+		.map(
+			(m) => Object.entries(usersConfig).find(([_, u]) => u.id === m.id)?.[0],
+		)
+		.filter((key): key is string => key !== undefined);
+	// Store as string for single user (backward compat), string[] for multi/none
+	const currentUserValue: string | string[] =
+		currentUserKeys.length === 1 ? currentUserKeys[0] : currentUserKeys;
 
 	const localConfig: LocalConfig = {
-		current_user: currentUserKey,
+		current_user: currentUserValue,
 		team: teamKey,
 		completion_mode: completionMode,
 		labels: defaultLabel,
@@ -263,7 +274,14 @@ export async function initTrello(
 	console.log("Configuration summary:");
 	console.log(`  Source: Trello`);
 	console.log(`  Board: ${selectedBoard.name}`);
-	console.log(`  User: ${currentMember.fullName} (@${currentMember.username})`);
+	if (selectedMembers.length === 0) {
+		console.log("  Users: (all team members)");
+	} else {
+		const userNames = selectedMembers
+			.map((m) => `${m.fullName} (@${m.username})`)
+			.join(", ");
+		console.log(`  User${selectedMembers.length > 1 ? "s" : ""}: ${userNames}`);
+	}
 	console.log(
 		`  Label filters: ${defaultLabel && defaultLabel.length > 0 ? defaultLabel.join(", ") : "(none)"}`,
 	);

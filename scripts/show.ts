@@ -199,9 +199,18 @@ async function searchIssuesFromRemote(filters: SearchFilters): Promise<Task[]> {
 		if (filters.assignee) {
 			const assigneeLower = filters.assignee.toLowerCase();
 			if (assigneeLower === "me") {
-				const userEmail =
-					config.users[localConfig.current_user]?.email?.toLowerCase();
-				if (!userEmail || issue.assigneeEmail?.toLowerCase() !== userEmail) {
+				const userKeys = Array.isArray(localConfig.current_user)
+					? localConfig.current_user
+					: localConfig.current_user
+						? [localConfig.current_user]
+						: [];
+				const userEmails = userKeys
+					.map((key) => config.users[key]?.email?.toLowerCase())
+					.filter((e): e is string => !!e);
+				if (
+					userEmails.length === 0 ||
+					!userEmails.includes(issue.assigneeEmail?.toLowerCase() ?? "")
+				) {
 					continue;
 				}
 			} else if (assigneeLower === "unassigned") {
@@ -266,10 +275,18 @@ async function searchIssuesFromLocal(
 		} else if (assigneeLower === "me") {
 			const localConfig = await loadLocalConfig();
 			const config = await loadConfig();
-			const userEmail =
-				config.users[localConfig.current_user]?.email?.toLowerCase();
-			if (userEmail) {
-				tasks = tasks.filter((t) => t.assignee?.toLowerCase() === userEmail);
+			const userKeys = Array.isArray(localConfig.current_user)
+				? localConfig.current_user
+				: localConfig.current_user
+					? [localConfig.current_user]
+					: [];
+			const userEmails = userKeys
+				.map((key) => config.users[key]?.email?.toLowerCase())
+				.filter((e): e is string => !!e);
+			if (userEmails.length > 0) {
+				tasks = tasks.filter(
+					(t) => t.assignee && userEmails.includes(t.assignee.toLowerCase()),
+				);
 			}
 		} else {
 			tasks = tasks.filter((t) =>

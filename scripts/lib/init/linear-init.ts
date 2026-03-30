@@ -16,6 +16,7 @@ import {
 	buildTeamsConfig,
 	findTeamKey,
 	findUserKey,
+	findUserKeys,
 	type LinearCycle,
 	type LinearLabel,
 	type LinearState,
@@ -35,7 +36,7 @@ import {
 import {
 	selectLabelFilter,
 	selectStatusSource,
-	selectUser,
+	selectUsers,
 } from "./prompts.js";
 import type { InitOptions, InitPaths } from "./types.js";
 
@@ -141,8 +142,8 @@ export async function initLinear(
 	const selectedTeam = await client.team(devTeam.id);
 	const currentCycle = (await selectedTeam.activeCycle) as LinearCycle | null;
 
-	// User selections
-	const currentUser = await selectUser(users, options);
+	// User selections (multi-select or skip)
+	const selectedUsers = await selectUsers(users, options);
 	const defaultLabel = await selectLabelFilter(labels, options);
 	const statusSource = await selectStatusSource(options);
 
@@ -184,11 +185,22 @@ export async function initLinear(
 	config.source = { type: "linear" };
 
 	// Find keys
-	const currentUserKey = findUserKey(config.users, currentUser.id);
+	const currentUserKeys =
+		selectedUsers.length === 0
+			? []
+			: selectedUsers.length === 1
+				? [findUserKey(config.users, selectedUsers[0].id)]
+				: findUserKeys(
+						config.users,
+						selectedUsers.map((u) => u.id),
+					);
+	// Store as string for single user (backward compat), string[] for multi/none
+	const currentUserValue: string | string[] =
+		currentUserKeys.length === 1 ? currentUserKeys[0] : currentUserKeys;
 	const devTeamKey = findTeamKey(config.teams, devTeam.id);
 
 	const localConfig = buildLocalConfig(
-		currentUserKey,
+		currentUserValue,
 		devTeamKey,
 		devTestingStatus,
 		qaPmTeams,
@@ -266,9 +278,14 @@ export async function initLinear(
 	console.log("\n✅ Initialization complete!\n");
 	console.log("Configuration summary:");
 	console.log(`  Dev Team: ${devTeam.name}`);
-	console.log(
-		`  User: ${currentUser.displayName || currentUser.name} (${currentUser.email})`,
-	);
+	if (selectedUsers.length === 0) {
+		console.log("  Users: (all team members)");
+	} else {
+		const userNames = selectedUsers
+			.map((u) => `${u.displayName || u.name} (${u.email})`)
+			.join(", ");
+		console.log(`  User${selectedUsers.length > 1 ? "s" : ""}: ${userNames}`);
+	}
 	console.log(
 		`  Label filters: ${defaultLabel && defaultLabel.length > 0 ? defaultLabel.join(", ") : "(none)"}`,
 	);

@@ -194,7 +194,7 @@ export interface CycleData {
 }
 
 export interface LocalConfig {
-	current_user: string;
+	current_user: string | string[]; // single user key or array of user keys (team mode)
 	team: string; // dev team key from config.teams (single dev team)
 	dev_testing_status?: string; // dev team's testing/review status (optional)
 	qa_pm_teams?: QaPmTeamConfig[]; // multiple QA/PM teams with their testing statuses
@@ -238,18 +238,48 @@ export async function loadLocalConfig(): Promise<LocalConfig> {
 	}
 }
 
-export async function getUserEmail(): Promise<string> {
+/** Get current user keys as an array (normalizes single string to array) */
+export function getCurrentUserKeys(localConfig: LocalConfig): string[] {
+	if (Array.isArray(localConfig.current_user)) {
+		return localConfig.current_user;
+	}
+	return localConfig.current_user ? [localConfig.current_user] : [];
+}
+
+/** Get emails for all configured current users. Returns empty array if no users configured (team-wide mode). */
+export async function getUserEmails(): Promise<string[]> {
 	const localConfig = await loadLocalConfig();
 	const config = await loadConfig();
-	const user = config.users[localConfig.current_user];
-	if (!user) {
-		console.error(
-			`Error: User "${localConfig.current_user}" not found in config.toon`,
-		);
-		console.error(`Available users: ${Object.keys(config.users).join(", ")}`);
+	const userKeys = getCurrentUserKeys(localConfig);
+
+	if (userKeys.length === 0) {
+		return []; // No user filter = all users
+	}
+
+	const emails: string[] = [];
+	for (const key of userKeys) {
+		const user = config.users[key];
+		if (!user) {
+			console.error(`Error: User "${key}" not found in config.toon`);
+			console.error(`Available users: ${Object.keys(config.users).join(", ")}`);
+			process.exit(1);
+		}
+		if (user.email) {
+			emails.push(user.email);
+		}
+	}
+	return emails;
+}
+
+/** @deprecated Use getUserEmails() instead. Returns first user email for backwards compatibility. */
+export async function getUserEmail(): Promise<string> {
+	const emails = await getUserEmails();
+	if (emails.length === 0) {
+		console.error("Error: No current user configured.");
+		console.error("Run `ttt init` to configure users.");
 		process.exit(1);
 	}
-	return user.email;
+	return emails[0];
 }
 
 export function getLinearClient(): LinearClient {

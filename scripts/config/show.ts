@@ -12,8 +12,15 @@ export function showConfig(config: Config, localConfig: LocalConfig): void {
 		console.log(`  ${localConfig.team}`);
 	}
 
-	// User
-	console.log(`\nUser: ${localConfig.current_user}`);
+	// User(s)
+	const userDisplay = Array.isArray(localConfig.current_user)
+		? localConfig.current_user.length > 0
+			? localConfig.current_user.join(", ")
+			: "(all team members)"
+		: localConfig.current_user;
+	console.log(
+		`\nUser${Array.isArray(localConfig.current_user) && localConfig.current_user.length !== 1 ? "s" : ""}: ${userDisplay}`,
+	);
 
 	// Filters
 	console.log("\nFilters:");

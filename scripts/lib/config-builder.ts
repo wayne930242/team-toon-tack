@@ -191,6 +191,15 @@ export function findUserKey(
 	);
 }
 
+export function findUserKeys(
+	usersConfig: Record<string, UserConfig>,
+	userIds: string[],
+): string[] {
+	return userIds
+		.map((id) => Object.entries(usersConfig).find(([_, u]) => u.id === id)?.[0])
+		.filter((key): key is string => key !== undefined);
+}
+
 export function findTeamKey(
 	teamsConfig: Record<string, TeamConfig>,
 	teamId: string,
@@ -202,7 +211,7 @@ export function findTeamKey(
 }
 
 export function buildLocalConfig(
-	currentUserKey: string,
+	currentUserKey: string | string[],
 	devTeamKey: string,
 	devTestingStatus?: string,
 	qaPmTeams?: QaPmTeamConfig[],

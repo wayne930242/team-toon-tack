@@ -17,7 +17,7 @@ export {
 	selectLabelFilter,
 	selectStatusSource,
 	selectTaskSource,
-	selectUser,
+	selectUsers,
 } from "./prompts.js";
 export { initTrello } from "./trello-init.js";
 export { promptForTrelloCredentials } from "./trello-prompts.js";
