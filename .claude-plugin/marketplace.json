@@ -6,14 +6,14 @@
 	},
 	"metadata": {
 		"description": "Task management tools for Claude Code - supports Linear and Trello, efficient workflow without MCP overhead",
-		"version": "1.0.0"
+		"version": "1.0.1"
 	},
 	"plugins": [
 		{
 			"name": "team-toon-tack",
 			"source": "./",
 			"description": "Linear/Trello task sync & management CLI with commands and skills",
-			"version": "2.6.0"
+			"version": "2.6.1"
 		}
 	]
 }
