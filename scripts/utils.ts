@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { LinearClient } from "@linear/sdk";
+// decode uses { strict: false } because encode() produces inline arrays
+// that strict mode rejects (RangeError: Expected 0 inline array items).
 import { decode, encode } from "@toon-format/toon";
 
 // Resolve base directory - supports multiple configuration methods
@@ -219,7 +221,7 @@ export async function fileExists(filePath: string): Promise<boolean> {
 export async function loadConfig(): Promise<Config> {
 	try {
 		const fileContent = await fs.readFile(CONFIG_PATH, "utf-8");
-		return decode(fileContent) as unknown as Config;
+		return decode(fileContent, { strict: false }) as unknown as Config;
 	} catch (error) {
 		console.error(`Error loading config from ${CONFIG_PATH}:`, error);
 		console.error("Run `bun run init` to create configuration files.");
@@ -230,7 +232,7 @@ export async function loadConfig(): Promise<Config> {
 export async function loadLocalConfig(): Promise<LocalConfig> {
 	try {
 		const fileContent = await fs.readFile(LOCAL_PATH, "utf-8");
-		return decode(fileContent) as unknown as LocalConfig;
+		return decode(fileContent, { strict: false }) as unknown as LocalConfig;
 	} catch {
 		console.error(`Error: ${LOCAL_PATH} not found.`);
 		console.error("Run `bun run init` to create local configuration.");
@@ -297,9 +299,14 @@ export function getLinearClient(): LinearClient {
 export async function loadCycleData(): Promise<CycleData | null> {
 	try {
 		await fs.access(CYCLE_PATH);
-		const fileContent = await fs.readFile(CYCLE_PATH, "utf-8");
-		return decode(fileContent) as unknown as CycleData;
 	} catch {
+		return null;
+	}
+	try {
+		const fileContent = await fs.readFile(CYCLE_PATH, "utf-8");
+		return decode(fileContent, { strict: false }) as unknown as CycleData;
+	} catch (error) {
+		console.error(`Warning: Failed to decode ${CYCLE_PATH}: ${error instanceof Error ? error.message : error}`);
 		return null;
 	}
 }
