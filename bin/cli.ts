@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // When running from dist/bin/cli.js, we need to go up two levels to find package.json
@@ -126,43 +126,46 @@ async function main() {
 	}
 
 	// Import and run the appropriate script
-	const scriptDir = new URL("../scripts/", import.meta.url).pathname;
+	const scriptDir = join(__dirname, "..", "scripts");
+	const importScript = (name: string) =>
+		import(pathToFileURL(join(scriptDir, name)).href);
 	try {
 		switch (command) {
 			case "init":
 				process.argv = ["node", "init.js", ...commandArgs];
-				await import(`${scriptDir}init.js`);
+				await importScript("init.js");
 				break;
 			case "sync":
-				await import(`${scriptDir}sync.js`);
+				process.argv = ["node", "sync.js", ...commandArgs];
+				await importScript("sync.js");
 				break;
 			case "work-on":
 				process.argv = ["node", "work-on.js", ...commandArgs];
-				await import(`${scriptDir}work-on.js`);
+				await importScript("work-on.js");
 				break;
 			case "estimate":
 				process.argv = ["node", "estimate.js", ...commandArgs];
-				await import(`${scriptDir}estimate.js`);
+				await importScript("estimate.js");
 				break;
 			case "done":
 				process.argv = ["node", "done-job.js", ...commandArgs];
-				await import(`${scriptDir}done-job.js`);
+				await importScript("done-job.js");
 				break;
 			case "status":
 				process.argv = ["node", "status.js", ...commandArgs];
-				await import(`${scriptDir}status.js`);
+				await importScript("status.js");
 				break;
 			case "show":
 				process.argv = ["node", "show.js", ...commandArgs];
-				await import(`${scriptDir}show.js`);
+				await importScript("show.js");
 				break;
 			case "comment":
 				process.argv = ["node", "comment.js", ...commandArgs];
-				await import(`${scriptDir}comment.js`);
+				await importScript("comment.js");
 				break;
 			case "config":
 				process.argv = ["node", "config.js", ...commandArgs];
-				await import(`${scriptDir}config.js`);
+				await importScript("config.js");
 				break;
 		}
 	} catch (error) {

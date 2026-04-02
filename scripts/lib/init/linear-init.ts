@@ -222,7 +222,7 @@ export async function initLinear(
 	if (configExists && !options.force) {
 		try {
 			const existingContent = await fs.readFile(paths.configPath, "utf-8");
-			const existingConfig = decode(existingContent) as unknown as Config;
+			const existingConfig = decode(existingContent, { strict: false }) as unknown as Config;
 
 			if (existingConfig.cycle_history) {
 				config.cycle_history = existingConfig.cycle_history;
@@ -245,7 +245,7 @@ export async function initLinear(
 	if (localExists && !options.force) {
 		try {
 			const existingContent = await fs.readFile(paths.localPath, "utf-8");
-			const existingLocal = decode(existingContent) as unknown as LocalConfig;
+			const existingLocal = decode(existingContent, { strict: false }) as unknown as LocalConfig;
 
 			if (!options.interactive) {
 				if (existingLocal.current_user)
