@@ -5,7 +5,6 @@ import {
 	getSourceType,
 	loadConfig,
 	loadCycleData,
-	loadLocalConfig,
 	type Task,
 } from "./utils.js";
 
