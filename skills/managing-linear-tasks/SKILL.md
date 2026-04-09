@@ -1,6 +1,6 @@
 ---
 name: managing-linear-tasks
-description: Use when the user mentions Linear or Trello issues, references issue IDs like MP-123, or asks to sync, show, start, complete, comment on, or check status of tasks.
+description: Use when the user mentions Linear or Trello issues, references issue IDs like MP-123, or asks to sync, show, start, complete, create, assign, edit, cancel, comment on, or check status of tasks.
 ---
 
 <law>
@@ -23,6 +23,10 @@ Match user intent to the correct `/ttt:*` command:
 | Sync/fetch issues | `/ttt:sync` | "sync my issues", "pull from Linear" |
 | Show/search issues | `/ttt:show` | "show MP-624", "list my tasks", "what issues do I have" |
 | Start working on a task | `/ttt:work-on` | "work on next", "start MP-624" |
+| Create a new issue | `/ttt:create` | "create issue", "open a ticket", "new task" |
+| Reassign an issue | `/ttt:assign` | "assign MP-624 to john", "reassign to jane" |
+| Edit issue fields | `/ttt:edit` | "rename MP-624", "change priority", "update labels" |
+| Cancel an issue | `/ttt:cancel` | "cancel MP-624", "abandon this task" |
 | Record an estimate | `/ttt:estimate` | "estimate MP-624 as 6h", "save 2.5h estimate" |
 | Check/change status | `/ttt:status` | "what's my current task", "set MP-624 to blocked" |
 | Add a comment | `/ttt:comment` | "comment on MP-624", "add note to task" |
@@ -41,6 +45,11 @@ ttt show MP-624             # Show issue details
 ttt show --user me          # My issues
 ttt work-on next            # Auto-select highest priority
 ttt work-on MP-624          # Start specific task
+ttt create                  # Create new issue (interactive)
+ttt create -t "Title" -p 2  # Quick create with flags
+ttt assign MP-624 -a john   # Reassign issue
+ttt edit MP-624 -t "New"    # Edit title (or -d/-p/-l)
+ttt cancel MP-624           # Cancel an issue
 ttt estimate MP-624 6       # Save a 6-hour human estimate
 ttt status                  # Current in-progress task
 ttt status MP-624 --set +1  # Advance status
