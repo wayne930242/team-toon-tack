@@ -5,6 +5,7 @@
 
 import { LinearClient } from "@linear/sdk";
 import type {
+	CreateIssueOptions,
 	GetIssuesOptions,
 	InitData,
 	SourceAttachment,
@@ -16,6 +17,7 @@ import type {
 	SourceTeam,
 	SourceUser,
 	TaskSourceAdapter,
+	UpdateIssueFields,
 } from "./types.js";
 
 export class LinearAdapter implements TaskSourceAdapter {
@@ -290,6 +292,111 @@ export class LinearAdapter implements TaskSourceAdapter {
 	): Promise<{ success: boolean; error?: string }> {
 		try {
 			await this.client.createComment({ issueId: sourceId, body });
+			return { success: true };
+		} catch (e) {
+			return {
+				success: false,
+				error: e instanceof Error ? e.message : "Unknown error",
+			};
+		}
+	}
+
+	async createIssue(
+		options: CreateIssueOptions,
+	): Promise<{ success: boolean; issue?: SourceIssue; error?: string }> {
+		try {
+			const payload = await this.client.createIssue({
+				teamId: options.teamId,
+				title: options.title,
+				description: options.description,
+				assigneeId: options.assigneeId,
+				priority: options.priority,
+				labelIds: options.labelIds,
+				stateId: options.statusId,
+				parentId: options.parentIssueId,
+				cycleId: options.cycleId,
+			});
+			if (!payload.success) {
+				return {
+					success: false,
+					error: "Linear createIssue returned success=false",
+				};
+			}
+			const created = await payload.issue;
+			if (!created) {
+				return { success: false, error: "No issue returned from createIssue" };
+			}
+			const issue = await this.getIssue(created.id);
+			if (!issue) {
+				return { success: false, error: "Failed to fetch created issue" };
+			}
+			return { success: true, issue };
+		} catch (e) {
+			return {
+				success: false,
+				error: e instanceof Error ? e.message : "Unknown error",
+			};
+		}
+	}
+
+	async updateIssue(
+		sourceId: string,
+		fields: UpdateIssueFields,
+	): Promise<{ success: boolean; error?: string }> {
+		try {
+			const input: Record<string, unknown> = {};
+			if (fields.title !== undefined) input.title = fields.title;
+			if (fields.description !== undefined)
+				input.description = fields.description;
+			if (fields.assigneeId !== undefined) input.assigneeId = fields.assigneeId;
+			if (fields.priority !== undefined) input.priority = fields.priority;
+			if (fields.labelIds !== undefined) input.labelIds = fields.labelIds;
+			if (fields.statusId !== undefined) input.stateId = fields.statusId;
+			if (fields.parentIssueId !== undefined)
+				input.parentId = fields.parentIssueId;
+
+			const payload = await this.client.updateIssue(sourceId, input);
+			if (!payload.success) {
+				return {
+					success: false,
+					error: `Linear updateIssue returned success=false for ${sourceId}`,
+				};
+			}
+			return { success: true };
+		} catch (e) {
+			return {
+				success: false,
+				error: e instanceof Error ? e.message : "Unknown error",
+			};
+		}
+	}
+
+	async cancelIssue(
+		sourceId: string,
+	): Promise<{ success: boolean; error?: string }> {
+		try {
+			// Find the "Cancelled" workflow state for this issue's team
+			const issue = await this.client.issue(sourceId);
+			const team = await issue.team;
+			if (!team) {
+				return { success: false, error: "Could not determine issue team" };
+			}
+			const states = await this.client.workflowStates({
+				filter: { team: { id: { eq: team.id } }, type: { eq: "cancelled" } },
+			});
+			const cancelledState = states.nodes[0];
+			if (!cancelledState) {
+				return { success: false, error: "No 'cancelled' workflow state found" };
+			}
+			const payload = await this.client.updateIssue(sourceId, {
+				stateId: cancelledState.id,
+			});
+			if (!payload.success) {
+				return {
+					success: false,
+					error: "Linear updateIssue returned success=false",
+				};
+			}
 			return { success: true };
 		} catch (e) {
 			return {

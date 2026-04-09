@@ -4,6 +4,7 @@ import { LinearClient } from "@linear/sdk";
 // decode uses { strict: false } because encode() produces inline arrays
 // that strict mode rejects (RangeError: Expected 0 inline array items).
 import { decode, encode } from "@toon-format/toon";
+import type { SourceIssue } from "./lib/adapters/types.js";
 
 // Resolve base directory - supports multiple configuration methods
 function getBaseDir(): string {
@@ -306,7 +307,9 @@ export async function loadCycleData(): Promise<CycleData | null> {
 		const fileContent = await fs.readFile(CYCLE_PATH, "utf-8");
 		return decode(fileContent, { strict: false }) as unknown as CycleData;
 	} catch (error) {
-		console.error(`Warning: Failed to decode ${CYCLE_PATH}: ${error instanceof Error ? error.message : error}`);
+		console.error(
+			`Warning: Failed to decode ${CYCLE_PATH}: ${error instanceof Error ? error.message : error}`,
+		);
 		return null;
 	}
 }
@@ -367,5 +370,82 @@ export function preserveLocalTaskFields(task: Task, existingTask?: Task): Task {
 		...task,
 		branch: existingTask.branch ?? task.branch,
 		estimate: existingTask.estimate ?? task.estimate,
+	};
+}
+
+/**
+ * Update or insert a task in cycle data and save to disk.
+ * If the task exists (matched by id), it is replaced. Otherwise it is appended.
+ */
+export async function upsertTaskInCycleData(
+	task: Task,
+	cycleData: CycleData | null,
+): Promise<CycleData> {
+	if (!cycleData) {
+		console.error("No cycle data found. Run ttt sync first.");
+		process.exit(1);
+	}
+	const idx = cycleData.tasks.findIndex((t) => t.id === task.id);
+	if (idx >= 0) {
+		cycleData.tasks[idx] = preserveLocalTaskFields(task, cycleData.tasks[idx]);
+	} else {
+		cycleData.tasks.push(task);
+	}
+	cycleData.updatedAt = new Date().toISOString();
+	await saveCycleData(cycleData);
+	return cycleData;
+}
+
+/**
+ * Remove a task from cycle data by id and save to disk.
+ */
+export async function removeTaskFromCycleData(
+	taskId: string,
+	cycleData: CycleData | null,
+): Promise<CycleData> {
+	if (!cycleData) {
+		console.error("No cycle data found. Run ttt sync first.");
+		process.exit(1);
+	}
+	cycleData.tasks = cycleData.tasks.filter((t) => t.id !== taskId);
+	cycleData.updatedAt = new Date().toISOString();
+	await saveCycleData(cycleData);
+	return cycleData;
+}
+
+/**
+ * Convert a SourceIssue from an adapter to a local Task.
+ */
+export function sourceIssueToTask(
+	issue: SourceIssue,
+	sourceType: TaskSourceType,
+	localStatus: Task["localStatus"] = "pending",
+): Task {
+	return {
+		id: issue.id,
+		linearId: issue.sourceId,
+		sourceId: issue.sourceId,
+		sourceType,
+		title: issue.title,
+		status: issue.status,
+		localStatus,
+		assignee: issue.assigneeEmail,
+		priority: issue.priority,
+		labels: issue.labels,
+		description: issue.description,
+		parentIssueId: issue.parentIssueId,
+		url: issue.url,
+		attachments: issue.attachments?.map((a) => ({
+			id: a.id,
+			title: a.title,
+			url: a.url,
+			sourceType: a.sourceType,
+		})),
+		comments: issue.comments?.map((c) => ({
+			id: c.id,
+			body: c.body,
+			createdAt: c.createdAt,
+			user: c.user,
+		})),
 	};
 }

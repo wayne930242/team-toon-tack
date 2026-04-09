@@ -5,6 +5,7 @@
 
 import { TrelloClient } from "../trello.js";
 import {
+	type CreateIssueOptions,
 	detectPriorityFromLabels,
 	type GetIssuesOptions,
 	type InitData,
@@ -17,6 +18,7 @@ import {
 	type SourceTeam,
 	type SourceUser,
 	type TaskSourceAdapter,
+	type UpdateIssueFields,
 } from "./types.js";
 
 export class TrelloAdapter implements TaskSourceAdapter {
@@ -330,6 +332,34 @@ export class TrelloAdapter implements TaskSourceAdapter {
 			statuses,
 			labels,
 			currentCycle: undefined, // Trello has no cycle
+		};
+	}
+
+	async createIssue(
+		_options: CreateIssueOptions,
+	): Promise<{ success: boolean; issue?: SourceIssue; error?: string }> {
+		return {
+			success: false,
+			error: "createIssue is not yet supported for Trello",
+		};
+	}
+
+	async updateIssue(
+		_sourceId: string,
+		_fields: UpdateIssueFields,
+	): Promise<{ success: boolean; error?: string }> {
+		return {
+			success: false,
+			error: "updateIssue is not yet supported for Trello",
+		};
+	}
+
+	async cancelIssue(
+		_sourceId: string,
+	): Promise<{ success: boolean; error?: string }> {
+		return {
+			success: false,
+			error: "cancelIssue is not yet supported for Trello",
 		};
 	}
 }

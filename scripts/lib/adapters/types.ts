@@ -119,6 +119,34 @@ export interface GetIssuesOptions {
 }
 
 /**
+ * Options for creating a new issue
+ */
+export interface CreateIssueOptions {
+	teamId: string;
+	title: string;
+	description?: string;
+	assigneeId?: string;
+	priority?: number; // 0-4
+	labelIds?: string[];
+	statusId?: string;
+	parentIssueId?: string; // Linear UUID of parent
+	cycleId?: string;
+}
+
+/**
+ * Fields that can be updated on an existing issue
+ */
+export interface UpdateIssueFields {
+	title?: string;
+	description?: string;
+	assigneeId?: string;
+	priority?: number;
+	labelIds?: string[];
+	statusId?: string;
+	parentIssueId?: string | null; // null to unlink
+}
+
+/**
  * Result of initialization data fetch
  */
 export interface InitData {
@@ -196,6 +224,26 @@ export interface TaskSourceAdapter {
 		sourceId: string,
 		body: string,
 	): Promise<{ success: boolean; error?: string }>;
+
+	/**
+	 * Create a new issue/card
+	 */
+	createIssue(
+		options: CreateIssueOptions,
+	): Promise<{ success: boolean; issue?: SourceIssue; error?: string }>;
+
+	/**
+	 * Update issue fields (title, description, assignee, priority, labels, etc.)
+	 */
+	updateIssue(
+		sourceId: string,
+		fields: UpdateIssueFields,
+	): Promise<{ success: boolean; error?: string }>;
+
+	/**
+	 * Cancel/archive an issue
+	 */
+	cancelIssue(sourceId: string): Promise<{ success: boolean; error?: string }>;
 
 	/**
 	 * Get all initialization data in a single call (optimization)
