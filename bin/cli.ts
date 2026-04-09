@@ -19,6 +19,10 @@ const COMMANDS = [
 	"status",
 	"show",
 	"comment",
+	"create",
+	"assign",
+	"edit",
+	"cancel",
 	"config",
 	"help",
 	"version",
@@ -41,6 +45,10 @@ COMMANDS:
   status     Show or modify task status
   show       Show issue details or search issues by filters
   comment    Add a comment to an issue
+  create     Create a new issue
+  assign     Reassign an issue to a user
+  edit       Edit issue fields (title, description, priority, labels)
+  cancel     Cancel an issue
   config     Configure settings (status mappings, filters)
   help       Show this help message
   version    Show version
@@ -162,6 +170,22 @@ async function main() {
 			case "comment":
 				process.argv = ["node", "comment.js", ...commandArgs];
 				await importScript("comment.js");
+				break;
+			case "create":
+				process.argv = ["node", "create.js", ...commandArgs];
+				await importScript("create.js");
+				break;
+			case "assign":
+				process.argv = ["node", "assign.js", ...commandArgs];
+				await importScript("assign.js");
+				break;
+			case "edit":
+				process.argv = ["node", "edit.js", ...commandArgs];
+				await importScript("edit.js");
+				break;
+			case "cancel":
+				process.argv = ["node", "cancel.js", ...commandArgs];
+				await importScript("cancel.js");
 				break;
 			case "config":
 				process.argv = ["node", "config.js", ...commandArgs];
