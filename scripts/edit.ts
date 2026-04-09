@@ -38,10 +38,16 @@ function parseArgs(args: string[]): EditArgs {
 				result.interactive = false;
 				break;
 			case "-p":
-			case "--priority":
-				result.priority = Number.parseInt(args[++i], 10);
+			case "--priority": {
+				const p = Number.parseInt(args[++i], 10);
+				if (Number.isNaN(p) || p < 0 || p > 4) {
+					console.error("Priority must be 0-4.");
+					process.exit(1);
+				}
+				result.priority = p;
 				result.interactive = false;
 				break;
+			}
 			case "-l":
 			case "--label":
 				result.label = args[++i];
@@ -136,7 +142,13 @@ Examples:
 				const entry = Object.entries(config.labels).find(
 					([, l]) => l.name.toLowerCase() === name.toLowerCase(),
 				);
-				if (entry) ids.push(entry[0]);
+				if (entry) {
+					ids.push(entry[0]);
+				} else {
+					console.error(
+						`Warning: label "${name}" not found in config, skipping.`,
+					);
+				}
 			}
 		}
 		fields.labelIds = ids;
@@ -170,10 +182,11 @@ Examples:
 				}
 				case "description": {
 					const newDesc = await input({
-						message: "New description:",
+						message: "New description (empty to clear):",
 						default: task.description ?? "",
 					});
-					fields.description = newDesc || undefined;
+					// Allow empty string through to clear the description on Linear.
+					fields.description = newDesc;
 					hasChanges = true;
 					break;
 				}
@@ -205,6 +218,8 @@ Examples:
 							choices: labelChoices,
 						});
 						hasChanges = true;
+					} else {
+						console.log("No labels configured. Run ttt sync first.");
 					}
 					break;
 				}
@@ -244,6 +259,10 @@ Examples:
 			);
 			await upsertTaskInCycleData(updatedTask, cycleData);
 			console.log(`   Local cache updated.`);
+		} else {
+			console.error(
+				"Warning: remote update succeeded but failed to refresh local cache. Run `ttt sync` to reconcile.",
+			);
 		}
 	}
 }

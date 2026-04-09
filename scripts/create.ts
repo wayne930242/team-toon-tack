@@ -44,9 +44,15 @@ function parseArgs(args: string[]): CreateArgs {
 				result.assignee = args[++i];
 				break;
 			case "-p":
-			case "--priority":
-				result.priority = Number.parseInt(args[++i], 10);
+			case "--priority": {
+				const p = Number.parseInt(args[++i], 10);
+				if (Number.isNaN(p) || p < 0 || p > 4) {
+					console.error("Priority must be 0-4.");
+					process.exit(1);
+				}
+				result.priority = p;
 				break;
+			}
 			case "-l":
 			case "--label":
 				result.label = args[++i];
@@ -103,7 +109,11 @@ function resolveLabelIds(
 		const entry = Object.entries(config.labels).find(
 			([, l]) => l.name.toLowerCase() === name.toLowerCase(),
 		);
-		if (entry) ids.push(entry[0]);
+		if (entry) {
+			ids.push(entry[0]);
+		} else {
+			console.error(`Warning: label "${name}" not found in config, skipping.`);
+		}
 	}
 	return ids.length > 0 ? ids : undefined;
 }
@@ -162,6 +172,10 @@ Examples:
 	const parentId = parsed.parent;
 
 	if (!title) {
+		if (!parsed.interactive) {
+			console.error("Title is required when --no-interactive is set.");
+			process.exit(1);
+		}
 		title = await input({ message: "Issue title:" });
 		if (!title.trim()) {
 			console.error("Title is required.");

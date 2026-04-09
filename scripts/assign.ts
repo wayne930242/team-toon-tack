@@ -140,7 +140,7 @@ Examples:
 	if (cycleData) {
 		const localTask = cycleData.tasks.find((t) => t.id === task.id);
 		if (localTask) {
-			localTask.assignee = user.email;
+			localTask.assignee = user.email ?? user.displayName;
 			cycleData.updatedAt = new Date().toISOString();
 			await saveCycleData(cycleData);
 			console.log(`   Local cache updated.`);

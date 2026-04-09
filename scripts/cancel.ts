@@ -85,8 +85,8 @@ Examples:
 
 	console.log(`\n✅ ${displayId} cancelled.`);
 
-	if (cycleData) {
-		await removeTaskFromCycleData(displayId, cycleData);
+	if (cycleData && task) {
+		await removeTaskFromCycleData(task.id, cycleData);
 		console.log(`   Removed from local cycle data.`);
 	}
 }
