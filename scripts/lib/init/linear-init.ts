@@ -59,19 +59,20 @@ export async function initLinear(
 	// of which env var name the user selected.
 	process.env.LINEAR_API_KEY = apiKey;
 
-	// Offer to persist to .ttt/.env. Default yes for freshly entered keys,
-	// no for keys already in the system env (user already has them set).
+	// Offer to persist to project-root .env so dotenv-aware tools (and future
+	// ttt runs) can reuse it without relying on the user's shell profile.
+	console.log("\n🔐 Local .env file:");
+	console.log(
+		`  Path: ${paths.envPath}${fromSystemEnv ? " (you already have this key in your shell — this just pins it per-project)" : ""}`,
+	);
 	let saveToEnvFile = false;
 	if (options.interactive) {
 		saveToEnvFile = await confirm({
-			message: fromSystemEnv
-				? `Save ${envName} to ${paths.envPath} for this project?`
-				: `Save ${envName} to ${paths.envPath}?`,
-			default: !fromSystemEnv,
+			message: `Write ${envName} to ${paths.envPath}?`,
+			default: true,
 		});
 	}
 	if (saveToEnvFile) {
-		await fs.mkdir(paths.baseDir, { recursive: true });
 		await writeDotEnv(paths.envPath, { [envName]: apiKey });
 		console.log(`  ✓ Wrote ${envName} to ${paths.envPath}`);
 	}

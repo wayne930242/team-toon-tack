@@ -27,7 +27,9 @@ const CONFIG_PATH = path.join(BASE_DIR, "config.toon");
 const CYCLE_PATH = path.join(BASE_DIR, "cycle.toon");
 const LOCAL_PATH = path.join(BASE_DIR, "local.toon");
 const OUTPUT_PATH = path.join(BASE_DIR, "output");
-const ENV_PATH = path.join(BASE_DIR, ".env");
+// .env lives at project root (cwd), not inside .ttt, so other dotenv-aware
+// tooling can also consume it.
+const ENV_PATH = path.join(process.cwd(), ".env");
 
 export function getPaths() {
 	return {
