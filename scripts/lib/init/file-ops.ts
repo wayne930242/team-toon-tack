@@ -10,7 +10,8 @@ export async function updateGitignore(
 	interactive: boolean,
 ): Promise<void> {
 	const gitignorePath = ".gitignore";
-	const entry = `${tttDir}/`;
+	const tttEntry = `${tttDir}/`;
+	const envEntry = ".env";
 
 	try {
 		let content = "";
@@ -23,38 +24,41 @@ export async function updateGitignore(
 			// .gitignore doesn't exist
 		}
 
-		// Check if already ignored
-		const lines = content.split("\n");
-		const alreadyIgnored = lines.some(
+		const lines = content.split("\n").map((l) => l.trim());
+		const hasTtt = lines.some(
 			(line) =>
-				line.trim() === entry ||
-				line.trim() === tttDir ||
-				line.trim() === `/${entry}` ||
-				line.trim() === `/${tttDir}`,
+				line === tttEntry ||
+				line === tttDir ||
+				line === `/${tttEntry}` ||
+				line === `/${tttDir}`,
 		);
+		const hasEnv = lines.some((line) => line === envEntry || line === "/.env");
 
-		if (alreadyIgnored) {
-			return;
-		}
+		const toAdd: string[] = [];
+		if (!hasTtt) toAdd.push(tttEntry);
+		if (!hasEnv) toAdd.push(envEntry);
 
-		// Ask user in interactive mode
+		if (toAdd.length === 0) return;
+
 		if (interactive) {
 			const addToGitignore = await confirm({
-				message: `Add ${entry} to .gitignore?`,
+				message: `Add ${toAdd.join(" and ")} to .gitignore?`,
 				default: true,
 			});
 			if (!addToGitignore) return;
 		}
 
-		// Add to .gitignore
+		const suffix = `${toAdd.join("\n")}\n`;
 		const newContent = exists
 			? content.endsWith("\n")
-				? `${content}${entry}\n`
-				: `${content}\n${entry}\n`
-			: `${entry}\n`;
+				? `${content}${suffix}`
+				: `${content}\n${suffix}`
+			: suffix;
 
 		await fs.writeFile(gitignorePath, newContent, "utf-8");
-		console.log(`  ✓ Added ${entry} to .gitignore`);
+		for (const entry of toAdd) {
+			console.log(`  ✓ Added ${entry} to .gitignore`);
+		}
 	} catch (_error) {
 		// Silently ignore gitignore errors
 	}

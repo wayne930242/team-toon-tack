@@ -2,7 +2,8 @@
  * Linear-specific prompt functions for init
  */
 
-import { checkbox, password, select } from "@inquirer/prompts";
+import { checkbox, input, password, select } from "@inquirer/prompts";
+import { LinearClient } from "@linear/sdk";
 import type {
 	CompletionMode,
 	QaPmTeamConfig,
@@ -16,20 +17,169 @@ import {
 import { getFirstTodoStatus } from "../status-helpers.js";
 import type { InitOptions } from "./types.js";
 
+export interface ResolvedApiKey {
+	apiKey: string;
+	envName: string; // env var name that stores this key (e.g. LINEAR_API_KEY or LINEAR_API_KEY_WORK)
+	fromSystemEnv: boolean; // true if the value was already in process.env before init
+	organizationName?: string;
+}
+
+interface Candidate {
+	envName: string;
+	apiKey: string;
+	orgName?: string;
+	orgUrlKey?: string;
+	error?: string;
+}
+
+function collectEnvCandidates(): Candidate[] {
+	const candidates: Candidate[] = [];
+	for (const [name, value] of Object.entries(process.env)) {
+		if (!value) continue;
+		if (name === "LINEAR_API_KEY" || name.startsWith("LINEAR_API_KEY_")) {
+			if (value.startsWith("lin_api_")) {
+				candidates.push({ envName: name, apiKey: value });
+			}
+		}
+	}
+	return candidates;
+}
+
+async function probeWorkspace(candidate: Candidate): Promise<void> {
+	try {
+		const client = new LinearClient({ apiKey: candidate.apiKey });
+		const org = await client.organization;
+		candidate.orgName = org.name;
+		candidate.orgUrlKey = org.urlKey;
+	} catch (err) {
+		candidate.error = err instanceof Error ? err.message : String(err);
+	}
+}
+
+function validateApiKey(v: string): true | string {
+	return v.startsWith("lin_api_")
+		? true
+		: 'API key should start with "lin_api_"';
+}
+
+/**
+ * Detect available Linear API keys from process.env, probe each for its
+ * workspace, and let the user pick. Supports adding a new key inline.
+ * Returns the chosen key plus the env var name that holds it.
+ */
 export async function promptForApiKey(
 	options: InitOptions,
-): Promise<string | undefined> {
-	let apiKey = options.apiKey || process.env.LINEAR_API_KEY;
-	if (!apiKey && options.interactive) {
-		apiKey = await password({
-			message: "Enter your Linear API key:",
-			validate: (v) =>
-				v.startsWith("lin_api_")
-					? true
-					: 'API key should start with "lin_api_"',
-		});
+): Promise<ResolvedApiKey | undefined> {
+	// Non-interactive: use --api-key or LINEAR_API_KEY, no selection possible
+	if (!options.interactive) {
+		const apiKey = options.apiKey || process.env.LINEAR_API_KEY;
+		if (!apiKey) return undefined;
+		return {
+			apiKey,
+			envName: "LINEAR_API_KEY",
+			fromSystemEnv: !options.apiKey && !!process.env.LINEAR_API_KEY,
+		};
 	}
-	return apiKey;
+
+	// --api-key flag short-circuits the workspace picker
+	if (options.apiKey) {
+		return {
+			apiKey: options.apiKey,
+			envName: "LINEAR_API_KEY",
+			fromSystemEnv: false,
+		};
+	}
+
+	const envCandidates = collectEnvCandidates();
+
+	if (envCandidates.length > 0) {
+		console.log(
+			`\n🔑 Found ${envCandidates.length} Linear API key${envCandidates.length > 1 ? "s" : ""} in environment. Probing workspaces...`,
+		);
+		await Promise.all(envCandidates.map(probeWorkspace));
+
+		for (const c of envCandidates) {
+			if (c.error) {
+				console.log(`  ✗ ${c.envName} — error: ${c.error}`);
+			} else {
+				console.log(
+					`  ✓ ${c.envName} → ${c.orgName ?? "?"}${c.orgUrlKey ? ` (${c.orgUrlKey})` : ""}`,
+				);
+			}
+		}
+
+		const valid = envCandidates.filter((c) => !c.error);
+		const choices = [
+			...valid.map((c) => ({
+				name: `${c.orgName ?? "(unknown)"}  [${c.envName}]`,
+				value: c.envName,
+				description: c.orgUrlKey ? `${c.orgUrlKey}.linear.app` : undefined,
+			})),
+			{ name: "+ Enter a different API key", value: "__new__" },
+		];
+
+		const chosen = await select({
+			message: "Select workspace:",
+			choices,
+		});
+
+		if (chosen !== "__new__") {
+			const picked = valid.find((c) => c.envName === chosen);
+			if (picked) {
+				return {
+					apiKey: picked.apiKey,
+					envName: picked.envName,
+					fromSystemEnv: true,
+					organizationName: picked.orgName,
+				};
+			}
+		}
+	}
+
+	// No env keys, or user chose to enter a new one
+	const apiKey = await password({
+		message: "Enter your Linear API key:",
+		validate: validateApiKey,
+	});
+
+	const newCandidate: Candidate = {
+		envName: "LINEAR_API_KEY",
+		apiKey,
+	};
+	await probeWorkspace(newCandidate);
+	if (newCandidate.error) {
+		console.error(`  ✗ Failed to fetch workspace: ${newCandidate.error}`);
+		return undefined;
+	}
+	console.log(
+		`  ✓ Workspace: ${newCandidate.orgName}${newCandidate.orgUrlKey ? ` (${newCandidate.orgUrlKey})` : ""}`,
+	);
+
+	// Ask for env var name (default to a slugged workspace name if LINEAR_API_KEY is taken)
+	const defaultName = process.env.LINEAR_API_KEY
+		? `LINEAR_API_KEY_${(
+				newCandidate.orgUrlKey ??
+				newCandidate.orgName ??
+				"ALT"
+			)
+				.toUpperCase()
+				.replace(/[^A-Z0-9]/g, "_")}`
+		: "LINEAR_API_KEY";
+
+	const envName = await input({
+		message: "Env variable name to store this key under:",
+		default: defaultName,
+		validate: (v) =>
+			/^[A-Z_][A-Z0-9_]*$/.test(v) ||
+			"Env var names must be uppercase letters, digits, underscore",
+	});
+
+	return {
+		apiKey,
+		envName,
+		fromSystemEnv: false,
+		organizationName: newCandidate.orgName,
+	};
 }
 
 export async function selectDevTeam(

@@ -219,6 +219,7 @@ export function buildLocalConfig(
 	defaultLabels?: string[],
 	excludeLabels?: string[],
 	statusSource?: "remote" | "local",
+	linearApiKeyEnv?: string,
 ): LocalConfig {
 	return {
 		current_user: currentUserKey,
@@ -231,5 +232,9 @@ export function buildLocalConfig(
 		exclude_labels:
 			excludeLabels && excludeLabels.length > 0 ? excludeLabels : undefined,
 		status_source: statusSource,
+		linear_api_key_env:
+			linearApiKeyEnv && linearApiKeyEnv !== "LINEAR_API_KEY"
+				? linearApiKeyEnv
+				: undefined,
 	};
 }

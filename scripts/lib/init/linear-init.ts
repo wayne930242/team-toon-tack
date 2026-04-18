@@ -3,6 +3,7 @@
  */
 
 import fs from "node:fs/promises";
+import { confirm } from "@inquirer/prompts";
 import { decode, encode } from "@toon-format/toon";
 import {
 	type Config,
@@ -23,6 +24,7 @@ import {
 	type LinearTeam,
 	type LinearUser,
 } from "../config-builder.js";
+import { writeDotEnv } from "../env.js";
 import { formatTodoStatus } from "../status-helpers.js";
 import { showPluginInstallInstructions, updateGitignore } from "./file-ops.js";
 import {
@@ -44,12 +46,34 @@ export async function initLinear(
 	options: InitOptions,
 	paths: InitPaths,
 ): Promise<void> {
-	// Get API key
-	const apiKey = await promptForApiKey(options);
-	if (!apiKey) {
+	// Get API key (workspace-aware)
+	const resolved = await promptForApiKey(options);
+	if (!resolved) {
 		console.error("Error: LINEAR_API_KEY is required.");
 		console.error("Get your API key from: https://linear.app/settings/api");
 		process.exit(1);
+	}
+	const { apiKey, envName, fromSystemEnv } = resolved;
+
+	// Mirror into LINEAR_API_KEY so getLinearClient() picks it up regardless
+	// of which env var name the user selected.
+	process.env.LINEAR_API_KEY = apiKey;
+
+	// Offer to persist to .ttt/.env. Default yes for freshly entered keys,
+	// no for keys already in the system env (user already has them set).
+	let saveToEnvFile = false;
+	if (options.interactive) {
+		saveToEnvFile = await confirm({
+			message: fromSystemEnv
+				? `Save ${envName} to ${paths.envPath} for this project?`
+				: `Save ${envName} to ${paths.envPath}?`,
+			default: !fromSystemEnv,
+		});
+	}
+	if (saveToEnvFile) {
+		await fs.mkdir(paths.baseDir, { recursive: true });
+		await writeDotEnv(paths.envPath, { [envName]: apiKey });
+		console.log(`  ✓ Wrote ${envName} to ${paths.envPath}`);
 	}
 
 	// Create Linear client
@@ -208,6 +232,7 @@ export async function initLinear(
 		defaultLabel,
 		undefined, // excludeLabels
 		statusSource,
+		envName,
 	);
 
 	// Write config files
@@ -222,7 +247,9 @@ export async function initLinear(
 	if (configExists && !options.force) {
 		try {
 			const existingContent = await fs.readFile(paths.configPath, "utf-8");
-			const existingConfig = decode(existingContent, { strict: false }) as unknown as Config;
+			const existingConfig = decode(existingContent, {
+				strict: false,
+			}) as unknown as Config;
 
 			if (existingConfig.cycle_history) {
 				config.cycle_history = existingConfig.cycle_history;
@@ -245,7 +272,9 @@ export async function initLinear(
 	if (localExists && !options.force) {
 		try {
 			const existingContent = await fs.readFile(paths.localPath, "utf-8");
-			const existingLocal = decode(existingContent, { strict: false }) as unknown as LocalConfig;
+			const existingLocal = decode(existingContent, {
+				strict: false,
+			}) as unknown as LocalConfig;
 
 			if (!options.interactive) {
 				if (existingLocal.current_user)
@@ -262,6 +291,8 @@ export async function initLinear(
 					localConfig.exclude_labels = existingLocal.exclude_labels;
 				if (existingLocal.status_source)
 					localConfig.status_source = existingLocal.status_source;
+				if (existingLocal.linear_api_key_env)
+					localConfig.linear_api_key_env = existingLocal.linear_api_key_env;
 			}
 		} catch {
 			// Ignore merge errors
@@ -277,6 +308,11 @@ export async function initLinear(
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
 	console.log("Configuration summary:");
+	if (resolved.organizationName) {
+		console.log(`  Workspace: ${resolved.organizationName} (via ${envName})`);
+	} else {
+		console.log(`  API key env: ${envName}`);
+	}
 	console.log(`  Dev Team: ${devTeam.name}`);
 	if (selectedUsers.length === 0) {
 		console.log("  Users: (all team members)");
@@ -317,11 +353,11 @@ export async function initLinear(
 	}
 
 	console.log("\nNext steps:");
-	if (!process.env.LINEAR_API_KEY) {
-		// Show partial key for confirmation (first 12 chars + masked)
+	const needsShellExport = !saveToEnvFile && !fromSystemEnv;
+	if (needsShellExport) {
 		const maskedKey = `${apiKey.slice(0, 12)}...${"*".repeat(8)}`;
-		console.log("  1. Set LINEAR_API_KEY in your shell profile:");
-		console.log(`     export LINEAR_API_KEY="${maskedKey}"`);
+		console.log(`  1. Set ${envName} in your shell profile:`);
+		console.log(`     export ${envName}="${maskedKey}"`);
 		console.log("  2. Run sync: ttt sync");
 		console.log("  3. Start working: ttt work-on");
 	} else {

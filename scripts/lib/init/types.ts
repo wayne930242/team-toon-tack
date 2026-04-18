@@ -22,6 +22,7 @@ export interface InitPaths {
 	localPath: string;
 	cyclePath: string;
 	outputPath: string;
+	envPath: string;
 }
 
 // Re-export common types used in init

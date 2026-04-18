@@ -27,6 +27,7 @@ const CONFIG_PATH = path.join(BASE_DIR, "config.toon");
 const CYCLE_PATH = path.join(BASE_DIR, "cycle.toon");
 const LOCAL_PATH = path.join(BASE_DIR, "local.toon");
 const OUTPUT_PATH = path.join(BASE_DIR, "output");
+const ENV_PATH = path.join(BASE_DIR, ".env");
 
 export function getPaths() {
 	return {
@@ -35,6 +36,7 @@ export function getPaths() {
 		cyclePath: CYCLE_PATH,
 		localPath: LOCAL_PATH,
 		outputPath: OUTPUT_PATH,
+		envPath: ENV_PATH,
 	};
 }
 
@@ -205,6 +207,7 @@ export interface LocalConfig {
 	exclude_labels?: string[];
 	labels?: string[]; // include only these labels (optional filter, OR logic)
 	status_source?: "remote" | "local"; // 'remote' = update Linear immediately, 'local' = only update local until sync --update
+	linear_api_key_env?: string; // env var name holding the Linear API key for this workspace (default: LINEAR_API_KEY)
 	// Legacy fields (for backwards compatibility)
 	teams?: string[]; // deprecated: use team (single dev team)
 	qa_pm_team?: string; // deprecated: use qa_pm_teams

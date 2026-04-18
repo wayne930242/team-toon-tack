@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { loadDotEnv, resolveLinearApiKey } from "../scripts/lib/env.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // When running from dist/bin/cli.js, we need to go up two levels to find package.json
@@ -126,6 +127,11 @@ async function main() {
 
 	// Set TOON_DIR for scripts to use
 	process.env.TOON_DIR = dir;
+
+	// Load .ttt/.env (if present) and resolve configured Linear API key env
+	// var into LINEAR_API_KEY so downstream code is workspace-aware.
+	await loadDotEnv(join(dir, ".env"));
+	await resolveLinearApiKey(join(dir, "local.toon"));
 
 	if (!COMMANDS.includes(command)) {
 		console.error(`Unknown command: ${command}`);

@@ -34,6 +34,7 @@ async function init() {
 		localPath: paths.localPath,
 		cyclePath: paths.cyclePath,
 		outputPath: paths.outputPath,
+		envPath: paths.envPath,
 	};
 
 	console.log("🚀 Team Toon Tack Initialization\n");
