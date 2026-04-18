@@ -48,30 +48,68 @@ Options:
   --dry-run   Pick task without changing status (preview only)
 ```
 
-## After Execution
+## Workflow — Plan → Test → Code → Review
 
-1. Read the task description and requirements from the output
-2. Check out the suggested branch: `git checkout -b <branch-name>`
-3. Check for project-specific **work-on skill** in `.claude/skills/`
-4. Begin implementation
+Follow this loop for every task.
+Skipping phases is not "pragmatic", it is debt.
 
-## CRITICAL: Task Completion Contract
+### 1. Branch
 
-When the task is completed, you MUST execute:
-
-```
-/ttt:done -m "completion summary"
+```bash
+git checkout -b <suggested-branch-name>
 ```
 
-A task is NOT complete until `/ttt:done` is executed. Do NOT skip this step.
+### 2. Plan
 
-## Work-On Skill Integration
+Scope decides depth.
 
-After starting a task, check for project-specific work guidelines:
+- Unclear requirements or 3+ files touched → invoke `superpowers:brainstorming`, then `superpowers:writing-plans`.
+- Clear and small (≤2 files, obvious change) → state a 2–3 bullet plan inline before coding.
 
-1. Look for `work-on` or `start-work` skills in `.claude/skills/`
-2. If found, follow those guidelines
-3. If not found, suggest creating one with `/ttt:write-work-on-skill`
+Never go straight to code.
+Planning collapses ambiguity before implementation.
+
+### 3. Test First (TDD)
+
+Invoke `superpowers:test-driven-development`.
+
+Red → Green → Refactor per behavior:
+
+1. Write one failing test naming the behavior.
+2. Run test — verify it fails for the expected reason.
+3. Write minimal code to pass.
+4. Run test — verify pass, other tests still green.
+5. Refactor if needed, keep green.
+
+No production code without a failing test first.
+
+### 4. Review (before `/ttt:done`)
+
+Invoke `superpowers:verification-before-completion`.
+
+Run and confirm output:
+
+- Full test suite passes.
+- `npm run lint` / `npm run type` clean (or project-specific commands).
+- Only requested scope changed — no drive-by edits.
+- No debug logs, stubs, TODOs.
+
+Evidence before assertions.
+Do not claim complete without running the commands.
+
+### 5. Complete
+
+```text
+/ttt:done -m "summary"
+```
+
+A task is NOT complete until `/ttt:done` runs.
+This is MANDATORY.
+
+## Project-Specific Skill
+
+Check `.claude/skills/work-on/` or `.claude/skills/start-work/` for project-specific lint / type / test commands and conventions.
+If missing, suggest `/ttt:write-work-on-skill` — it scaffolds a skill following this same 4-phase structure.
 
 ## Error Handling
 

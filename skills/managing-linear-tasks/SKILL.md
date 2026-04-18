@@ -88,3 +88,50 @@ ttt sync → ttt work-on next → ttt estimate <id> <hours> → [implement] → 
 | Issue not found locally | `ttt show <id> --remote` or `ttt sync <id>` (`ttt status` auto-fetches from remote) |
 | API key not set | Set `LINEAR_API_KEY` or `TRELLO_API_KEY` + `TRELLO_TOKEN` |
 | Stale data | `ttt sync` to refresh |
+
+## Common Rationalizations
+
+| Excuse | Reality |
+|--------|---------|
+| "I'll edit `cycle.toon` directly, faster" | `cycle.toon` is auto-generated. Manual edits get overwritten on next `ttt sync`. Always go through the CLI. |
+| "I remember this issue ID, no need to sync" | Remote status, assignee, priority may have changed. Run `ttt sync` or `ttt show <id> --remote` first. |
+| "I'll create the issue in the Linear/Trello UI instead" | Bypassing `ttt create` leaves the new issue outside local cycle data. Use the CLI so it gets tracked. |
+| "Task is obvious, skip `/ttt:done`" | `/ttt:done` syncs local + remote status, posts a completion comment, reads git commit info. Skipping leaves state inconsistent. |
+| "I know what the task needs without reading it" | Fabricated assumptions produce wrong work. Run `ttt show <id>` before starting. |
+| "Fetch issue details via Linear MCP / web UI" | The CLI is authoritative and token-efficient. Use `ttt show` / `ttt sync`, not alternate data paths. |
+
+## Flowchart — Intent Routing
+
+```dot
+digraph ttt_router {
+    rankdir=LR;
+
+    user [label="User mentions\nLinear/Trello", shape=doublecircle];
+    classify [label="Classify intent", shape=diamond];
+
+    sync     [label="/ttt:sync",    shape=box];
+    show     [label="/ttt:show",    shape=box];
+    work_on  [label="/ttt:work-on", shape=box];
+    create   [label="/ttt:create",  shape=box];
+    assign   [label="/ttt:assign",  shape=box];
+    edit     [label="/ttt:edit",    shape=box];
+    cancel   [label="/ttt:cancel",  shape=box];
+    estimate [label="/ttt:estimate", shape=box];
+    status   [label="/ttt:status",  shape=box];
+    comment  [label="/ttt:comment", shape=box];
+    done     [label="/ttt:done",    shape=box];
+
+    user -> classify;
+    classify -> sync     [label="fetch / pull"];
+    classify -> show     [label="show / list"];
+    classify -> work_on  [label="start / next"];
+    classify -> create   [label="create / new"];
+    classify -> assign   [label="assign / reassign"];
+    classify -> edit     [label="rename / change field"];
+    classify -> cancel   [label="cancel / abandon"];
+    classify -> estimate [label="estimate / Nh"];
+    classify -> status   [label="current / set status"];
+    classify -> comment  [label="comment / note"];
+    classify -> done     [label="done / complete"];
+}
+```

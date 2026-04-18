@@ -44,68 +44,71 @@ Look for: `lint`, `type-check`, `test`, `check`, `validate`, `format`
 
 ### 4. Create Skill File
 
-Create `.claude/skills/{{ $1 | default: "work-on" }}/SKILL.md`:
+Create `.claude/skills/{{ $1 | default: "work-on" }}/SKILL.md` using the Plan → Test → Code → Review structure:
 
 ```markdown
 ---
 name: {{ $1 | default: "work-on" }}
-description: Project-specific best practices for starting and completing tasks
+description: Project workflow — Plan → Test → Code → Review. Invoke after ttt work-on picks a task.
 ---
 
-# Work-On Skill
+# Work-On Skill ({{ project-name }})
 
-Best practices for working on tasks in this project.
+Follow Plan → Test → Code → Review for every task.
+Skipping phases is debt, not pragmatism.
 
-## Before Starting
+## 1. Plan
 
-### 1. Validation Checks
+- Unclear scope or 3+ files → use `superpowers:brainstorming` → `superpowers:writing-plans`.
+- Small, clear change → state a 2–3 bullet plan inline before coding.
+
+Branch naming:
+- `feature/<issue-id>-<slug>`
+- `fix/<issue-id>-<slug>`
+- `refactor/<issue-id>-<slug>`
+
+## 2. Test First (TDD)
+
+Invoke `superpowers:test-driven-development`.
+No production code without a failing test first.
+
+Red → Green → Refactor:
+\`\`\`bash
+{{ test-command }}
+\`\`\`
+
+- One behavior per test.
+- Real code, mocks only when unavoidable.
+- Watch each test fail for the expected reason before writing code.
+
+## 3. Code
+
+Minimal code to pass the current test.
+No features beyond the test's scope.
+Match existing style — do not refactor adjacent code.
+
+## 4. Review (before `/ttt:done`)
+
+Invoke `superpowers:verification-before-completion`.
+Run every command and confirm the actual output.
+
 \`\`\`bash
 {{ lint-command }}
 {{ type-check-command }}
+{{ test-command }}
 \`\`\`
 
-### 2. Branch Naming
-- Feature: `feature/<issue-id>-<short-description>`
-- Bugfix: `fix/<issue-id>-<short-description>`
-- Refactor: `refactor/<issue-id>-<short-description>`
+Checklist:
+- [ ] All tests pass (new tests went red → green).
+- [ ] No lint / type errors.
+- [ ] Changes scoped to this task only.
+- [ ] No debug logs, stubs, TODOs, commented-out code.
+- [ ] Commit message: `<type>(<scope>): <description>` — types: feat, fix, refactor, docs, test, chore.
 
-### 3. Environment Setup
-- Ensure dependencies are installed
-- Check for required environment variables
+## 5. Complete
 
-## Code Style
-
-### Formatting
-{{ formatting-rules }}
-
-### Naming Conventions
-{{ naming-conventions }}
-
-### File Structure
-{{ file-structure-notes }}
-
-## Before Completing
-
-### 1. Run All Checks
-\`\`\`bash
-{{ combined-validation-command }}
-\`\`\`
-
-### 2. Commit Message Format
-\`\`\`
-<type>(<scope>): <description>
-
-<body>
-\`\`\`
-
-Types: feat, fix, refactor, docs, test, chore
-
-### 3. Self-Review Checklist
-- [ ] Code compiles without errors
-- [ ] All tests pass
-- [ ] No linting errors
-- [ ] Changes are focused on the task
-- [ ] No debug code or console.logs left
+\`/ttt:done -m "summary"\` — MANDATORY.
+A task is NOT complete until `/ttt:done` runs.
 ```
 
 ### 5. Output
