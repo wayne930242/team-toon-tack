@@ -73,6 +73,7 @@ export async function initLinear(
 		});
 	}
 	if (saveToEnvFile) {
+		await fs.mkdir(paths.baseDir, { recursive: true });
 		await writeDotEnv(paths.envPath, { [envName]: apiKey });
 		console.log(`  ✓ Wrote ${envName} to ${paths.envPath}`);
 	}
