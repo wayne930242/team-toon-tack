@@ -151,59 +151,59 @@ Examples:
 	// Build excluded labels set
 	const excludedLabels = new Set(localConfig.exclude_labels ?? []);
 
-	// Phase 1: Fetch active cycle directly from team
+	// Phase 1: Fetch active cycle directly from team (if the team uses cycles)
 	console.log("Fetching latest cycle...");
 	const team = await client.team(teamId);
 	const activeCycle = await team.activeCycle;
 
-	if (!activeCycle) {
-		console.error("No active cycle found.");
-		process.exit(1);
-	}
+	let cycleId: string | undefined;
+	let cycleName: string;
 
-	const cycleId = activeCycle.id;
-	const cycleName = activeCycle.name ?? `Cycle #${activeCycle.number}`;
-	const newCycleInfo: CycleInfo = {
-		id: cycleId,
-		name: cycleName,
-		start_date: activeCycle.startsAt?.toISOString().split("T")[0] ?? "",
-		end_date: activeCycle.endsAt?.toISOString().split("T")[0] ?? "",
-	};
-
-	// Check if cycle changed and update config with history
 	const existingData = await loadCycleData();
-	const oldCycleId = config.current_cycle?.id ?? existingData?.cycleId;
 
-	if (oldCycleId && oldCycleId !== cycleId) {
-		const oldCycleName =
-			config.current_cycle?.name ?? existingData?.cycleName ?? "Unknown";
-		console.log(`Cycle changed: ${oldCycleName} → ${cycleName}`);
+	if (activeCycle) {
+		cycleId = activeCycle.id;
+		cycleName = activeCycle.name ?? `Cycle #${activeCycle.number}`;
+		const newCycleInfo: CycleInfo = {
+			id: cycleId,
+			name: cycleName,
+			start_date: activeCycle.startsAt?.toISOString().split("T")[0] ?? "",
+			end_date: activeCycle.endsAt?.toISOString().split("T")[0] ?? "",
+		};
 
-		// Move old cycle to history (avoid duplicates)
-		if (config.current_cycle) {
-			config.cycle_history = config.cycle_history ?? [];
-			// Remove if already exists in history
-			config.cycle_history = config.cycle_history.filter(
-				(c) => c.id !== config.current_cycle?.id,
-			);
-			config.cycle_history.unshift(config.current_cycle);
-			// Keep only last 10 cycles
-			if (config.cycle_history.length > 10) {
-				config.cycle_history = config.cycle_history.slice(0, 10);
+		const oldCycleId = config.current_cycle?.id ?? existingData?.cycleId;
+
+		if (oldCycleId && oldCycleId !== cycleId) {
+			const oldCycleName =
+				config.current_cycle?.name ?? existingData?.cycleName ?? "Unknown";
+			console.log(`Cycle changed: ${oldCycleName} → ${cycleName}`);
+
+			if (config.current_cycle) {
+				config.cycle_history = config.cycle_history ?? [];
+				config.cycle_history = config.cycle_history.filter(
+					(c) => c.id !== config.current_cycle?.id,
+				);
+				config.cycle_history.unshift(config.current_cycle);
+				if (config.cycle_history.length > 10) {
+					config.cycle_history = config.cycle_history.slice(0, 10);
+				}
 			}
-		}
 
-		// Update current cycle
-		config.current_cycle = newCycleInfo;
-		await saveConfig(config);
-		console.log("Config updated with new cycle (old cycle saved to history).");
-	} else {
-		// Update current cycle info even if ID unchanged (dates might change)
-		if (!config.current_cycle || config.current_cycle.id !== cycleId) {
 			config.current_cycle = newCycleInfo;
 			await saveConfig(config);
+			console.log(
+				"Config updated with new cycle (old cycle saved to history).",
+			);
+		} else {
+			if (!config.current_cycle || config.current_cycle.id !== cycleId) {
+				config.current_cycle = newCycleInfo;
+				await saveConfig(config);
+			}
+			console.log(`Current cycle: ${cycleName}`);
 		}
-		console.log(`Current cycle: ${cycleName}`);
+	} else {
+		cycleName = "No Cycle";
+		console.log("No active cycle on this team — syncing without cycle filter.");
 	}
 
 	// Phase 2: Fetch workflow states and get status mappings
@@ -309,12 +309,14 @@ Examples:
 			: `${syncStatuses.join("/")} status`;
 		console.log(`Fetching issues (${statusDesc})${labelDesc}...`);
 
-		// Build filter - label is optional
+		// Build filter - label is optional; cycle is skipped if team has no
+		// active cycle (Linear lets teams disable cycles entirely).
 		const issueFilter: Record<string, unknown> = {
 			team: { id: { eq: teamId } },
-			cycle: { id: { eq: cycleId } },
 		};
-		// Only filter by status if not syncing all
+		if (cycleId) {
+			issueFilter.cycle = { id: { eq: cycleId } };
+		}
 		if (!syncAll) {
 			issueFilter.state = { name: { in: syncStatuses } };
 		}
@@ -474,19 +476,19 @@ Examples:
 		const existingTask = existingTasksMap.get(issue.identifier);
 		const task: Task = preserveLocalTaskFields(
 			{
-			id: issue.identifier,
-			linearId: issue.id,
-			title: issue.title,
-			status: state ? state.name : "Unknown",
-			localStatus: localStatus,
-			assignee: assigneeEmail,
-			priority: issue.priority,
-			labels: labelNames,
-			description: issue.description ?? undefined,
-			parentIssueId: parent ? parent.identifier : undefined,
-			url: issue.url,
-			attachments: attachments.length > 0 ? attachments : undefined,
-			comments: comments.length > 0 ? comments : undefined,
+				id: issue.identifier,
+				linearId: issue.id,
+				title: issue.title,
+				status: state ? state.name : "Unknown",
+				localStatus: localStatus,
+				assignee: assigneeEmail,
+				priority: issue.priority,
+				labels: labelNames,
+				description: issue.description ?? undefined,
+				parentIssueId: parent ? parent.identifier : undefined,
+				url: issue.url,
+				attachments: attachments.length > 0 ? attachments : undefined,
+				comments: comments.length > 0 ? comments : undefined,
 			},
 			existingTask,
 		);
@@ -520,7 +522,7 @@ Examples:
 	}
 
 	const newData: CycleData = {
-		cycleId: cycleId,
+		cycleId: cycleId ?? `team:${teamId}`,
 		cycleName: cycleName,
 		updatedAt: new Date().toISOString(),
 		tasks: finalTasks,
@@ -567,7 +569,13 @@ async function syncTrello(
 		attachmentId: string,
 		outputDir: string,
 	) =>
-		downloadTrelloFile(url, issueId, attachmentId, outputDir, trelloCredentials);
+		downloadTrelloFile(
+			url,
+			issueId,
+			attachmentId,
+			outputDir,
+			trelloCredentials,
+		);
 
 	// Create adapter
 	const adapter = createAdapter(config);
@@ -773,21 +781,21 @@ async function syncTrello(
 		const existingTask = existingTasksMap.get(issue.id);
 		const task: Task = preserveLocalTaskFields(
 			{
-			id: issue.id,
-			linearId: issue.sourceId, // For backwards compatibility
-			sourceId: issue.sourceId,
-			sourceType: "trello",
-			title: issue.title,
-			status: issue.status,
-			localStatus,
-			assignee: issue.assigneeEmail,
-			priority: issue.priority,
-			labels: issue.labels,
-			description: issue.description,
-			parentIssueId: issue.parentIssueId,
-			url: issue.url,
-			attachments: attachments.length > 0 ? attachments : undefined,
-			comments: comments.length > 0 ? comments : undefined,
+				id: issue.id,
+				linearId: issue.sourceId, // For backwards compatibility
+				sourceId: issue.sourceId,
+				sourceType: "trello",
+				title: issue.title,
+				status: issue.status,
+				localStatus,
+				assignee: issue.assigneeEmail,
+				priority: issue.priority,
+				labels: issue.labels,
+				description: issue.description,
+				parentIssueId: issue.parentIssueId,
+				url: issue.url,
+				attachments: attachments.length > 0 ? attachments : undefined,
+				comments: comments.length > 0 ? comments : undefined,
 			},
 			existingTask,
 		);
