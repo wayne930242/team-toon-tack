@@ -3,7 +3,7 @@
  */
 
 import fs from "node:fs/promises";
-import { checkbox, select } from "@inquirer/prompts";
+import { checkbox, confirm, select } from "@inquirer/prompts";
 import { encode } from "@toon-format/toon";
 import type {
 	CompletionMode,
@@ -13,6 +13,7 @@ import type {
 	StatusTransitions,
 } from "../../utils.js";
 import type { LinearLabel } from "../config-builder.js";
+import { writeDotEnv } from "../env.js";
 import { formatTodoStatus } from "../status-helpers.js";
 import { TrelloClient } from "../trello.js";
 import { updateGitignore } from "./file-ops.js";
@@ -29,6 +30,31 @@ export async function initTrello(
 		console.error("Error: Trello API key and token are required.");
 		console.error("Get your API key from: https://trello.com/power-ups/admin");
 		process.exit(1);
+	}
+
+	// Mirror into process.env so downstream code sees a consistent view
+	process.env.TRELLO_API_KEY = credentials.apiKey;
+	process.env.TRELLO_TOKEN = credentials.token;
+
+	// Offer to persist to .ttt/.env
+	console.log("\n🔐 Local .env file:");
+	console.log(
+		`  Path: ${paths.envPath}${credentials.fromSystemEnv ? " (pins a project-local copy of your shell env)" : ""}`,
+	);
+	let saveToEnvFile = false;
+	if (options.interactive) {
+		saveToEnvFile = await confirm({
+			message: `Write TRELLO_API_KEY / TRELLO_TOKEN to ${paths.envPath}?`,
+			default: true,
+		});
+	}
+	if (saveToEnvFile) {
+		await fs.mkdir(paths.baseDir, { recursive: true });
+		await writeDotEnv(paths.envPath, {
+			TRELLO_API_KEY: credentials.apiKey,
+			TRELLO_TOKEN: credentials.token,
+		});
+		console.log(`  ✓ Wrote TRELLO_API_KEY / TRELLO_TOKEN to ${paths.envPath}`);
 	}
 
 	const client = new TrelloClient(credentials.apiKey, credentials.token);
@@ -294,9 +320,11 @@ export async function initTrello(
 	console.log(`    Done: ${statusTransitions.done}`);
 
 	console.log("\nNext steps:");
-	if (!process.env.TRELLO_API_KEY || !process.env.TRELLO_TOKEN) {
-		console.log("  1. Set environment variables:");
-		console.log(`     export TRELLO_API_KEY="${credentials.apiKey}"`);
+	const needsShellExport = !saveToEnvFile && !credentials.fromSystemEnv;
+	if (needsShellExport) {
+		const maskedKey = `${credentials.apiKey.slice(0, 8)}...${"*".repeat(8)}`;
+		console.log("  1. Set environment variables in your shell profile:");
+		console.log(`     export TRELLO_API_KEY="${maskedKey}"`);
 		console.log(`     export TRELLO_TOKEN="<your-token>"`);
 		console.log("  2. Run sync: ttt sync");
 		console.log("  3. Start working: ttt work-on");
