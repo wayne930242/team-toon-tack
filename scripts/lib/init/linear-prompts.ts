@@ -2,7 +2,7 @@
  * Linear-specific prompt functions for init
  */
 
-import { checkbox, input, password, select } from "@inquirer/prompts";
+import { checkbox, confirm, input, password, select } from "@inquirer/prompts";
 import { LinearClient } from "@linear/sdk";
 import type {
 	CompletionMode,
@@ -126,12 +126,19 @@ export async function promptForApiKey(
 		if (chosen !== "__new__") {
 			const picked = valid.find((c) => c.envName === chosen);
 			if (picked) {
-				return {
-					apiKey: picked.apiKey,
-					envName: picked.envName,
-					fromSystemEnv: true,
-					organizationName: picked.orgName,
-				};
+				const useExisting = await confirm({
+					message: `Use the existing key from ${picked.envName}? (no = enter a new key instead)`,
+					default: true,
+				});
+				if (useExisting) {
+					return {
+						apiKey: picked.apiKey,
+						envName: picked.envName,
+						fromSystemEnv: true,
+						organizationName: picked.orgName,
+					};
+				}
+				// fall through to password prompt
 			}
 		}
 	}
