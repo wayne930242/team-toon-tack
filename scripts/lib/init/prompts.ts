@@ -2,7 +2,7 @@
  * Generic prompt functions shared between Linear and Trello init
  */
 
-import { checkbox, select } from "@inquirer/prompts";
+import { checkbox, confirm, select } from "@inquirer/prompts";
 import type { TaskSourceType } from "../adapters/types.js";
 import type { LinearLabel, LinearUser } from "../config-builder.js";
 import type { InitOptions } from "./types.js";
@@ -87,6 +87,13 @@ export async function selectLabelFilter(
 	}
 
 	if (options.interactive && labels.length > 0) {
+		const filterByLabels = await confirm({
+			message: "Filter issues by labels? (No = fetch all, ignoring labels)",
+			default: false,
+		});
+		if (!filterByLabels) {
+			return undefined;
+		}
 		const labelChoices = labels.map((l) => ({ name: l.name, value: l.name }));
 		const selectedLabels = await checkbox({
 			message: "Select label filters (space to select, enter to confirm):",

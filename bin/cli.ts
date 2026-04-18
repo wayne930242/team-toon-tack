@@ -130,8 +130,14 @@ async function main() {
 
 	// Load .ttt/.env (if present) and resolve configured Linear API key env
 	// var into LINEAR_API_KEY so downstream code is workspace-aware.
+	// Skip the resolver for `init` so the workspace picker sees the raw
+	// env — otherwise we'd mirror the previously-saved key over LINEAR_API_KEY
+	// and the user's shell-level key would appear to point to the saved
+	// workspace.
 	await loadDotEnv(join(dir, ".env"));
-	await resolveLinearApiKey(join(dir, "local.toon"));
+	if (command !== "init") {
+		await resolveLinearApiKey(join(dir, "local.toon"));
+	}
 
 	if (!COMMANDS.includes(command)) {
 		console.error(`Unknown command: ${command}`);
