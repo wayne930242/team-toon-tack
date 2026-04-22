@@ -300,6 +300,56 @@ export function getLinearClient(): LinearClient {
 	return new LinearClient({ apiKey });
 }
 
+const TRANSIENT_PATTERN =
+	/terminated|socket|ECONN|ETIMEDOUT|ENETUNREACH|ENOTFOUND|EAI_AGAIN|UND_ERR|fetch failed|other side closed|network|timeout|502|503|504/i;
+
+function isTransientError(err: unknown): boolean {
+	if (!err) return false;
+	const e = err as {
+		message?: unknown;
+		cause?: { message?: unknown };
+		raw?: { message?: unknown; cause?: { message?: unknown } };
+		type?: unknown;
+		status?: unknown;
+	};
+	const parts = [
+		typeof e.message === "string" ? e.message : "",
+		typeof e.cause?.message === "string" ? e.cause.message : "",
+		typeof e.raw?.message === "string" ? e.raw.message : "",
+		typeof e.raw?.cause?.message === "string" ? e.raw.cause.message : "",
+		typeof e.type === "string" ? e.type : "",
+	];
+	const status = typeof e.status === "number" ? e.status : 0;
+	if (status >= 500 && status < 600) return true;
+	if (status === 429) return true;
+	return TRANSIENT_PATTERN.test(parts.join(" "));
+}
+
+export async function withRetry<T>(
+	fn: () => Promise<T>,
+	opts: { retries?: number; label?: string } = {},
+): Promise<T> {
+	const retries = opts.retries ?? 4;
+	let lastErr: unknown;
+	for (let attempt = 0; attempt <= retries; attempt++) {
+		try {
+			return await fn();
+		} catch (err) {
+			lastErr = err;
+			if (!isTransientError(err) || attempt === retries) throw err;
+			const delay = Math.min(2 ** attempt * 500, 8000) + Math.random() * 250;
+			const msg = (err as { message?: string })?.message ?? String(err);
+			if (opts.label) {
+				process.stdout.write(
+					`\n  [retry ${attempt + 1}/${retries}] ${opts.label}: ${msg.slice(0, 120)}\n`,
+				);
+			}
+			await new Promise((r) => setTimeout(r, delay));
+		}
+	}
+	throw lastErr;
+}
+
 export async function loadCycleData(): Promise<CycleData | null> {
 	try {
 		await fs.access(CYCLE_PATH);

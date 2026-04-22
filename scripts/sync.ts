@@ -32,6 +32,7 @@ import {
 	saveConfig,
 	saveCycleData,
 	type Task,
+	withRetry,
 } from "./utils.js";
 
 async function downloadEmbeddedImages(
@@ -153,8 +154,13 @@ Examples:
 
 	// Phase 1: Fetch active cycle directly from team (if the team uses cycles)
 	console.log("Fetching latest cycle...");
-	const team = await client.team(teamId);
-	const activeCycle = await team.activeCycle;
+	const team = await withRetry(() => client.team(teamId), {
+		label: "fetch team",
+	});
+	const activeCycle = await withRetry(
+		async () => team.activeCycle ?? undefined,
+		{ label: "fetch active cycle" },
+	);
 
 	let cycleId: string | undefined;
 	let cycleName: string;
@@ -207,9 +213,13 @@ Examples:
 	}
 
 	// Phase 2: Fetch workflow states and get status mappings
-	const workflowStates = await client.workflowStates({
-		filter: { team: { id: { eq: teamId } } },
-	});
+	const workflowStates = await withRetry(
+		() =>
+			client.workflowStates({
+				filter: { team: { id: { eq: teamId } } },
+			}),
+		{ label: "fetch workflow states" },
+	);
 	const stateMap = new Map(workflowStates.nodes.map((s) => [s.name, s.id]));
 
 	// Get status names from config or use defaults
@@ -250,9 +260,13 @@ Examples:
 
 			if (targetStateId) {
 				try {
-					const payload = await client.updateIssue(task.linearId, {
-						stateId: targetStateId,
-					});
+					const payload = await withRetry(
+						() =>
+							client.updateIssue(task.linearId, {
+								stateId: targetStateId,
+							}),
+						{ label: `update ${task.id}` },
+					);
 					if (!payload.success) {
 						throw new Error("Linear mutation returned success=false");
 					}
@@ -291,7 +305,10 @@ Examples:
 	if (singleIssueId) {
 		// Sync single issue by ID
 		console.log(`Fetching issue ${singleIssueId}...`);
-		const searchResult = await client.searchIssues(singleIssueId);
+		const searchResult = await withRetry(
+			() => client.searchIssues(singleIssueId),
+			{ label: `search ${singleIssueId}` },
+		);
 		const matchingIssue = searchResult.nodes.find(
 			(i) => i.identifier === singleIssueId,
 		);
@@ -324,10 +341,14 @@ Examples:
 			issueFilter.labels = { name: { in: filterLabels } };
 		}
 
-		issues = await client.issues({
-			filter: issueFilter,
-			first: 50,
-		});
+		issues = await withRetry(
+			() =>
+				client.issues({
+					filter: issueFilter,
+					first: 50,
+				}),
+			{ label: "fetch issues" },
+		);
 	}
 
 	if (issues.nodes.length === 0) {
@@ -346,12 +367,19 @@ Examples:
 		process.stdout.write(`\r  Processing ${processedCount}/${totalIssues}...`);
 
 		// Fetch full issue to get all relations (searchIssues returns IssueSearchResult which lacks some methods)
-		const issue = await client.issue(issueNode.id);
+		const issueLabel = issueNode.identifier;
+		const issue = await withRetry(() => client.issue(issueNode.id), {
+			label: `fetch ${issueLabel}`,
+		});
 
-		const assignee = await issue.assignee;
+		const assignee = await withRetry(() => Promise.resolve(issue.assignee), {
+			label: `fetch ${issueLabel} assignee`,
+		});
 		const assigneeEmail = assignee?.email;
 
-		const labels = await issue.labels();
+		const labels = await withRetry(() => issue.labels(), {
+			label: `fetch ${issueLabel} labels`,
+		});
 		const labelNames = labels.nodes.map((l: { name: string }) => l.name);
 
 		// Skip if any label is in excluded list
@@ -359,10 +387,18 @@ Examples:
 			continue;
 		}
 
-		const state = await issue.state;
-		const parent = await issue.parent;
-		const attachmentsData = await issue.attachments();
-		const commentsData = await issue.comments();
+		const state = await withRetry(() => Promise.resolve(issue.state), {
+			label: `fetch ${issueLabel} state`,
+		});
+		const parent = await withRetry(() => Promise.resolve(issue.parent), {
+			label: `fetch ${issueLabel} parent`,
+		});
+		const attachmentsData = await withRetry(() => issue.attachments(), {
+			label: `fetch ${issueLabel} attachments`,
+		});
+		const commentsData = await withRetry(() => issue.comments(), {
+			label: `fetch ${issueLabel} comments`,
+		});
 
 		// Clear old images for this issue before downloading new ones
 		await clearIssueImages(outputPath, issue.identifier);
@@ -401,7 +437,9 @@ Examples:
 		// Build comments list
 		const comments: Comment[] = await Promise.all(
 			commentsData.nodes.map(async (c) => {
-				const user = await c.user;
+				const user = await withRetry(() => Promise.resolve(c.user), {
+					label: `fetch ${issueLabel} comment user`,
+				});
 				return {
 					id: c.id,
 					body: c.body,
@@ -452,9 +490,13 @@ Examples:
 					console.log(
 						`Updating ${issue.identifier} to ${statusTransitions.testing} in Linear...`,
 					);
-					const payload = await client.updateIssue(issue.id, {
-						stateId: testingStateId,
-					});
+					const payload = await withRetry(
+						() =>
+							client.updateIssue(issue.id, {
+								stateId: testingStateId,
+							}),
+						{ label: `update ${issue.identifier}` },
+					);
 					if (!payload.success) {
 						throw new Error("Linear mutation returned success=false");
 					}
