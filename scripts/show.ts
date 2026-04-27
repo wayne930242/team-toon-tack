@@ -354,9 +354,11 @@ Examples:
 	// Check if this is a search (has filters) or single issue lookup
 	const hasFilters = Object.keys(filters).length > 0;
 
-	// Find issue ID (argument that doesn't start with -)
+	// Find issue ID: Linear-style (MP-123) or Trello shortLink (8+ alphanumeric)
 	const issueId = args.find(
-		(arg) => !arg.startsWith("-") && arg.match(/^[A-Z]+-\d+$/i),
+		(arg) =>
+			!arg.startsWith("-") &&
+			(arg.match(/^[A-Z]+-\d+$/i) || arg.match(/^[A-Za-z0-9]{8,}$/)),
 	);
 
 	// If no issue ID and no filters, show all local issues

@@ -184,6 +184,12 @@ export class TrelloAdapter implements TaskSourceAdapter {
 		try {
 			const card = await this.client.getCard(issueId);
 			if (!card) return null;
+			if (!Array.isArray(card.labels)) {
+				card.labels = [];
+			}
+			if (!Array.isArray(card.idMembers)) {
+				card.idMembers = [];
+			}
 
 			// Get lists for status name lookup
 			if (!this.listsCache.has(card.idBoard)) {
@@ -242,7 +248,11 @@ export class TrelloAdapter implements TaskSourceAdapter {
 					sourceAttachments.length > 0 ? sourceAttachments : undefined,
 				comments: sourceComments.length > 0 ? sourceComments : undefined,
 			};
-		} catch {
+		} catch (error) {
+			console.warn(
+				`[trello] getIssue(${issueId}) failed:`,
+				error instanceof Error ? error.message : error,
+			);
 			return null;
 		}
 	}
