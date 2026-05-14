@@ -55,8 +55,10 @@ COMMANDS:
   version    Show version
 
 GLOBAL OPTIONS:
-  -d, --dir <path>    Config directory (default: .ttt)
+  --dir <path>        Config directory (default: .ttt)
                       Can also set via TOON_DIR environment variable
+  -d <path>           Shortcut for --dir; ignored for create/edit/comment
+                      (where -d means --description)
 
 EXAMPLES:
   ttt init                      # Initialize .ttt directory
@@ -84,16 +86,28 @@ function printVersion() {
 	console.log(`team-toon-tack v${VERSION}`);
 }
 
-function parseGlobalArgs(args: string[]): {
+// Subcommands where `-d` is a subcommand flag (e.g. --description) — never
+// consume `-d` as the global config-dir flag for these. `--dir` always works.
+const SHORT_D_RESERVED_FOR_SUBCOMMAND: ReadonlySet<string> = new Set([
+	"create",
+	"edit",
+	"comment",
+]);
+
+function parseGlobalArgs(
+	command: string,
+	args: string[],
+): {
 	dir: string;
 	commandArgs: string[];
 } {
 	let dir = process.env.TOON_DIR || resolve(process.cwd(), ".ttt");
 	const commandArgs: string[] = [];
+	const allowShortD = !SHORT_D_RESERVED_FOR_SUBCOMMAND.has(command);
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
-		if (arg === "-d" || arg === "--dir") {
+		if (arg === "--dir" || (allowShortD && arg === "-d")) {
 			dir = resolve(args[++i] || ".");
 		} else {
 			commandArgs.push(arg);
@@ -123,7 +137,7 @@ async function main() {
 
 	const command = args[0] as Command;
 	const restArgs = args.slice(1);
-	const { dir, commandArgs } = parseGlobalArgs(restArgs);
+	const { dir, commandArgs } = parseGlobalArgs(command, restArgs);
 
 	// Set TOON_DIR for scripts to use
 	process.env.TOON_DIR = dir;

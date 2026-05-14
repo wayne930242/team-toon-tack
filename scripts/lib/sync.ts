@@ -114,11 +114,7 @@ export async function syncSingleIssue(
 	issueId: string,
 	options: SyncIssueOptions,
 ): Promise<Task | null> {
-	const {
-		config,
-		localConfig,
-		preserveLocalStatus = true,
-	} = options;
+	const { config, localConfig, preserveLocalStatus = true } = options;
 	const client = options.client ?? getLinearClient();
 
 	// Fetch issue details using shared function

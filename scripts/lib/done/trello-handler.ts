@@ -45,7 +45,8 @@ export async function handleTrelloCompletion(
 		} else {
 			return {
 				success: false,
-				message: result.error || `Failed to move ${task.id} to ${transitions.done}`,
+				message:
+					result.error || `Failed to move ${task.id} to ${transitions.done}`,
 			};
 		}
 

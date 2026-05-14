@@ -139,11 +139,13 @@ Examples:
 		const ids: string[] = [];
 		if (config.labels) {
 			for (const name of names) {
+				const lower = name.toLowerCase();
 				const entry = Object.entries(config.labels).find(
-					([, l]) => l.name.toLowerCase() === name.toLowerCase(),
+					([key, l]) =>
+						key.toLowerCase() === lower || l.name.toLowerCase() === lower,
 				);
 				if (entry) {
-					ids.push(entry[0]);
+					ids.push(entry[1].id);
 				} else {
 					console.error(
 						`Warning: label "${name}" not found in config, skipping.`,
@@ -206,13 +208,11 @@ Examples:
 				}
 				case "labels": {
 					if (config.labels) {
-						const labelChoices = Object.entries(config.labels).map(
-							([id, l]) => ({
-								name: l.name,
-								value: id,
-								checked: task?.labels.includes(l.name) ?? false,
-							}),
-						);
+						const labelChoices = Object.entries(config.labels).map(([, l]) => ({
+							name: l.name,
+							value: l.id,
+							checked: task?.labels.includes(l.name) ?? false,
+						}));
 						fields.labelIds = await checkbox({
 							message: "Select labels:",
 							choices: labelChoices,

@@ -44,10 +44,14 @@ function parseEstimateArgs(args: string[]): EstimateArgs {
 
 function findTask(tasks: Task[], issueId?: string): Task | undefined {
 	if (issueId) {
-		return tasks.find((task) => task.id === issueId || task.id === `MP-${issueId}`);
+		return tasks.find(
+			(task) => task.id === issueId || task.id === `MP-${issueId}`,
+		);
 	}
 
-	const inProgressTasks = tasks.filter((task) => task.localStatus === "in-progress");
+	const inProgressTasks = tasks.filter(
+		(task) => task.localStatus === "in-progress",
+	);
 	if (inProgressTasks.length === 1) {
 		return inProgressTasks[0];
 	}
@@ -55,7 +59,10 @@ function findTask(tasks: Task[], issueId?: string): Task | undefined {
 	return undefined;
 }
 
-async function resolveTask(tasks: Task[], issueId?: string): Promise<Task | undefined> {
+async function resolveTask(
+	tasks: Task[],
+	issueId?: string,
+): Promise<Task | undefined> {
 	const directMatch = findTask(tasks, issueId);
 	if (directMatch) {
 		return directMatch;
@@ -65,7 +72,9 @@ async function resolveTask(tasks: Task[], issueId?: string): Promise<Task | unde
 		return undefined;
 	}
 
-	const inProgressTasks = tasks.filter((task) => task.localStatus === "in-progress");
+	const inProgressTasks = tasks.filter(
+		(task) => task.localStatus === "in-progress",
+	);
 	if (inProgressTasks.length === 0) {
 		return undefined;
 	}

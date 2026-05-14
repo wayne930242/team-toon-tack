@@ -1,7 +1,10 @@
 #!/usr/bin/env bun
 import { input, select } from "@inquirer/prompts";
 import { createAdapter } from "./lib/adapters/index.js";
-import type { CreateIssueOptions } from "./lib/adapters/types.js";
+import type {
+	CreateIssueOptions,
+	TaskSourceAdapter,
+} from "./lib/adapters/types.js";
 import {
 	type Config,
 	getSourceType,
@@ -87,15 +90,49 @@ function resolveAssigneeId(
 	return user.id;
 }
 
-function resolveStatusId(
+async function resolveStatusId(
 	config: Config,
+	adapter: TaskSourceAdapter,
+	teamId: string,
 	statusName?: string,
-): string | undefined {
-	if (!statusName || !config.statuses) return undefined;
-	const entry = Object.entries(config.statuses).find(
-		([, s]) => s.name.toLowerCase() === statusName.toLowerCase(),
+): Promise<string | undefined> {
+	if (!statusName) return undefined;
+
+	// Resolve `status_transitions` aliases (e.g. "todo" → "Todo", "in_progress" → "In Progress")
+	const transitions = config.status_transitions;
+	let targetName = statusName;
+	if (transitions) {
+		const aliasKey = statusName.toLowerCase().replace(/[\s-]+/g, "_");
+		const aliased =
+			aliasKey === "todo"
+				? Array.isArray(transitions.todo)
+					? transitions.todo[0]
+					: transitions.todo
+				: aliasKey === "in_progress"
+					? transitions.in_progress
+					: aliasKey === "done"
+						? transitions.done
+						: aliasKey === "testing"
+							? transitions.testing
+							: aliasKey === "blocked"
+								? transitions.blocked
+								: undefined;
+		if (aliased) targetName = aliased;
+	}
+
+	const statuses = await adapter.getStatuses(teamId);
+	const target = statuses.find(
+		(s) => s.name.toLowerCase() === targetName.toLowerCase(),
 	);
-	return entry ? entry[0] : undefined;
+	if (!target) {
+		console.error(
+			`Status "${statusName}" not found. Available: ${statuses
+				.map((s) => s.name)
+				.join(", ")}`,
+		);
+		process.exit(1);
+	}
+	return target.id;
 }
 
 function resolveLabelIds(
@@ -106,11 +143,14 @@ function resolveLabelIds(
 	const names = labelArg.split(",").map((n) => n.trim());
 	const ids: string[] = [];
 	for (const name of names) {
+		const lower = name.toLowerCase();
+		// Match by config key (e.g. "backend_v3") OR display name (e.g. "Backend-v3")
 		const entry = Object.entries(config.labels).find(
-			([, l]) => l.name.toLowerCase() === name.toLowerCase(),
+			([key, l]) =>
+				key.toLowerCase() === lower || l.name.toLowerCase() === lower,
 		);
 		if (entry) {
-			ids.push(entry[0]);
+			ids.push(entry[1].id);
 		} else {
 			console.error(`Warning: label "${name}" not found in config, skipping.`);
 		}
@@ -119,11 +159,10 @@ function resolveLabelIds(
 }
 
 async function resolveParentSourceId(
-	config: Config,
+	adapter: TaskSourceAdapter,
 	parentIdentifier?: string,
 ): Promise<string | undefined> {
 	if (!parentIdentifier) return undefined;
-	const adapter = createAdapter(config);
 	const parent = await adapter.searchIssue(parentIdentifier);
 	if (!parent) {
 		console.error(`Parent issue "${parentIdentifier}" not found.`);
@@ -223,12 +262,13 @@ Examples:
 
 	console.log("Creating issue...");
 
-	const assigneeId = resolveAssigneeId(config, assigneeKey);
-	const statusId = resolveStatusId(config, statusName);
-	const labelIds = resolveLabelIds(config, labelArg);
-	const parentSourceId = await resolveParentSourceId(config, parentId);
-
 	const adapter = createAdapter(config);
+
+	const assigneeId = resolveAssigneeId(config, assigneeKey);
+	const statusId = await resolveStatusId(config, adapter, teamId, statusName);
+	const labelIds = resolveLabelIds(config, labelArg);
+	const parentSourceId = await resolveParentSourceId(adapter, parentId);
+
 	const currentCycle = await adapter.getCurrentCycle(teamId);
 
 	const options: CreateIssueOptions = {
