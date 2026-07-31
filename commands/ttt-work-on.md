@@ -63,15 +63,13 @@ git checkout -b <suggested-branch-name>
 
 Scope decides depth.
 
-- Unclear requirements or 3+ files touched → invoke `superpowers:brainstorming`, then `superpowers:writing-plans`.
+- Unclear requirements or 3+ files touched → if your environment has a brainstorming/planning skill, use it; otherwise clarify scope with the user and write a short plan before coding.
 - Clear and small (≤2 files, obvious change) → state a 2–3 bullet plan inline before coding.
 
 Never go straight to code.
 Planning collapses ambiguity before implementation.
 
 ### 3. Test First (TDD)
-
-Invoke `superpowers:test-driven-development`.
 
 Red → Green → Refactor per behavior:
 
@@ -85,9 +83,7 @@ No production code without a failing test first.
 
 ### 4. Review (before `/ttt:done`)
 
-Invoke `superpowers:verification-before-completion`.
-
-Run and confirm output:
+Verify before claiming completion — run and confirm output:
 
 - Full test suite passes.
 - `npm run lint` / `npm run type` clean (or project-specific commands).

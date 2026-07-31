@@ -59,7 +59,7 @@ Skipping phases is debt, not pragmatism.
 
 ## 1. Plan
 
-- Unclear scope or 3+ files → use `superpowers:brainstorming` → `superpowers:writing-plans`.
+- Unclear scope or 3+ files → use a brainstorming/planning skill if your environment has one, else clarify scope with the user first.
 - Small, clear change → state a 2–3 bullet plan inline before coding.
 
 Branch naming:
@@ -69,7 +69,6 @@ Branch naming:
 
 ## 2. Test First (TDD)
 
-Invoke `superpowers:test-driven-development`.
 No production code without a failing test first.
 
 Red → Green → Refactor:
@@ -89,7 +88,6 @@ Match existing style — do not refactor adjacent code.
 
 ## 4. Review (before `/ttt:done`)
 
-Invoke `superpowers:verification-before-completion`.
 Run every command and confirm the actual output.
 
 \`\`\`bash
