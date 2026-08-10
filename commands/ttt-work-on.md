@@ -55,8 +55,11 @@ Skipping phases is not "pragmatic", it is debt.
 
 ### 1. Branch
 
+Check current branch and repo convention first (e.g. recent `git log --oneline -10`, existing branch naming pattern).
+If unclear whether to branch or what name to use, ask the user instead of assuming.
+
 ```bash
-git checkout -b <suggested-branch-name>
+git checkout -b <branch-name-matching-user-convention>
 ```
 
 ### 2. Plan
