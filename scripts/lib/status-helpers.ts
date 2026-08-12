@@ -116,7 +116,19 @@ export function resolveLocalStatus(
 	// Remote already advanced past a stale local "pending" cache (e.g. another
 	// checkout/session started the task first) — adopt it, otherwise the task
 	// stays selectable by `work-on next` even though it's already claimed.
-	if (remoteLocalStatus === "in-progress" && existingLocalStatus === "pending") {
+	if (
+		remoteLocalStatus === "in-progress" &&
+		existingLocalStatus === "pending"
+	) {
+		return remoteLocalStatus;
+	}
+
+	// "in-review" is never set by a local command (only by a prior sync), so
+	// it can't be an unconfirmed optimistic write. If remote has since moved
+	// off it (e.g. sent back to in-progress after failing review), that's an
+	// explicit remote change — adopt it instead of leaving the task stuck
+	// showing "in-review" forever.
+	if (existingLocalStatus === "in-review") {
 		return remoteLocalStatus;
 	}
 
