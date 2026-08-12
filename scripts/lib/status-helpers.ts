@@ -113,6 +113,13 @@ export function resolveLocalStatus(
 		return remoteLocalStatus;
 	}
 
+	// Remote already advanced past a stale local "pending" cache (e.g. another
+	// checkout/session started the task first) — adopt it, otherwise the task
+	// stays selectable by `work-on next` even though it's already claimed.
+	if (remoteLocalStatus === "in-progress" && existingLocalStatus === "pending") {
+		return remoteLocalStatus;
+	}
+
 	return existingLocalStatus;
 }
 
