@@ -4,6 +4,7 @@
  */
 
 import { LinearClient } from "@linear/sdk";
+import { fetchIssuesPaged, MAX_FETCHED_ISSUES } from "../linear.js";
 import type {
 	CreateIssueOptions,
 	GetIssuesOptions,
@@ -124,49 +125,31 @@ export class LinearAdapter implements TaskSourceAdapter {
 			filter.assignee = { email: { in: options.assigneeEmails } };
 		}
 
-		const issuesData = await this.client.issues({
+		const page = await fetchIssuesPaged(
+			this.client,
 			filter,
-			first: options.limit ?? 50,
-		});
+			"fetch issues",
+			options.limit ?? MAX_FETCHED_ISSUES,
+		);
 
 		const issues: SourceIssue[] = [];
 		const excludeLabels = new Set(options.excludeLabels ?? []);
 
-		for (const issue of issuesData.nodes) {
-			const state = await issue.state;
-			const assignee = await issue.assignee;
-			const labels = await issue.labels();
+		for (const issue of page.nodes) {
+			// Independent relations - awaiting them in sequence turns a list of
+			// 200 issues into 800 serial round-trips.
+			const [state, assignee, labels, parent] = await Promise.all([
+				issue.state,
+				issue.assignee,
+				issue.labels(),
+				issue.parent,
+			]);
 			const labelNames = labels.nodes.map((l) => l.name);
 
 			// Skip if any label is in excluded list
 			if (labelNames.some((name) => excludeLabels.has(name))) {
 				continue;
 			}
-
-			const parent = await issue.parent;
-			const attachmentsData = await issue.attachments();
-			const commentsData = await issue.comments();
-
-			const attachments: SourceAttachment[] = attachmentsData.nodes.map(
-				(a) => ({
-					id: a.id,
-					title: a.title,
-					url: a.url,
-					sourceType: a.sourceType ?? undefined,
-				}),
-			);
-
-			const comments: SourceComment[] = await Promise.all(
-				commentsData.nodes.map(async (c) => {
-					const user = await c.user;
-					return {
-						id: c.id,
-						body: c.body,
-						createdAt: c.createdAt.toISOString(),
-						user: user?.displayName ?? user?.email,
-					};
-				}),
-			);
 
 			issues.push({
 				id: issue.identifier,
@@ -182,8 +165,8 @@ export class LinearAdapter implements TaskSourceAdapter {
 				url: issue.url,
 				parentIssueId: parent?.identifier,
 				branchName: issue.branchName,
-				attachments: attachments.length > 0 ? attachments : undefined,
-				comments: comments.length > 0 ? comments : undefined,
+				attachments: undefined, // Loaded separately via getIssue()
+				comments: undefined, // Loaded separately via getIssue()
 			});
 		}
 

@@ -8,6 +8,7 @@ import {
 	extractImageUrls,
 	isLinearImageUrl,
 } from "./lib/files.js";
+import { fetchIssuesPaged, MAX_FETCHED_ISSUES } from "./lib/linear.js";
 import {
 	getReviewStatuses,
 	getSyncStatuses,
@@ -35,11 +36,6 @@ import {
 	type Task,
 	withRetry,
 } from "./utils.js";
-
-/** Issues fetched per Linear API page. */
-const ISSUE_PAGE_SIZE = 100;
-/** Hard stop so a runaway filter can't fetch the whole backlog. */
-const MAX_SYNCED_ISSUES = 500;
 
 async function downloadEmbeddedImages(
 	texts: Array<string | undefined>,
@@ -358,33 +354,15 @@ Examples:
 		}
 
 		// Paginate so a large cycle isn't silently truncated to one page.
-		const connection = await withRetry(
-			() =>
-				client.issues({
-					filter: issueFilter,
-					first: ISSUE_PAGE_SIZE,
-				}),
-			{ label: "fetch issues" },
-		);
+		const page = await fetchIssuesPaged(client, issueFilter, "fetch issues");
 
-		while (
-			connection.pageInfo.hasNextPage &&
-			connection.nodes.length < MAX_SYNCED_ISSUES
-		) {
-			const before = connection.nodes.length;
-			await withRetry(() => connection.fetchNext(), {
-				label: "fetch issues page",
-			});
-			if (connection.nodes.length === before) break;
-		}
-
-		if (connection.pageInfo.hasNextPage) {
+		if (page.truncated) {
 			console.warn(
-				`\nWarning: stopped at ${MAX_SYNCED_ISSUES} issues; more matched the filter.`,
+				`\nWarning: stopped at ${MAX_FETCHED_ISSUES} issues; more matched the filter.`,
 			);
 		}
 
-		issues = { nodes: connection.nodes };
+		issues = { nodes: page.nodes };
 	}
 
 	if (issues.nodes.length === 0) {
@@ -771,7 +749,7 @@ async function syncTrello(
 			labelNames: filterLabels,
 			assigneeEmails: userEmails.length > 0 ? userEmails : undefined,
 			excludeLabels: localConfig.exclude_labels,
-			limit: MAX_SYNCED_ISSUES,
+			limit: MAX_FETCHED_ISSUES,
 		});
 	}
 

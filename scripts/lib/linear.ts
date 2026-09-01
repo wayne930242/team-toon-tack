@@ -1,10 +1,48 @@
+import type { Issue, LinearClient } from "@linear/sdk";
 import {
 	type Config,
 	getLinearClient,
 	getTeamId,
 	type StatusTransitions,
+	withRetry,
 } from "../utils.js";
 import { getFirstTodoStatus } from "./status-helpers.js";
+
+/** Issues requested per Linear API page. */
+export const ISSUE_PAGE_SIZE = 100;
+/** Hard stop so a broad filter can't pull an entire backlog. */
+export const MAX_FETCHED_ISSUES = 500;
+
+/**
+ * Fetch every issue matching `filter`, following pagination. Without this a
+ * single `first: n` request silently returns whichever page Linear hands back
+ * first, dropping the rest with no signal. `truncated` reports that `cap` cut
+ * the result short.
+ */
+export async function fetchIssuesPaged(
+	client: LinearClient,
+	filter: Record<string, unknown>,
+	label: string,
+	cap: number = MAX_FETCHED_ISSUES,
+): Promise<{ nodes: Issue[]; truncated: boolean }> {
+	const connection = await withRetry(
+		() => client.issues({ filter, first: ISSUE_PAGE_SIZE }),
+		{ label },
+	);
+
+	while (connection.pageInfo.hasNextPage && connection.nodes.length < cap) {
+		const before = connection.nodes.length;
+		await withRetry(() => connection.fetchNext(), {
+			label: `${label} (next page)`,
+		});
+		if (connection.nodes.length === before) break;
+	}
+
+	return {
+		nodes: connection.nodes.slice(0, cap),
+		truncated: connection.nodes.length > cap || connection.pageInfo.hasNextPage,
+	};
+}
 
 export interface WorkflowStateInfo {
 	id: string;
