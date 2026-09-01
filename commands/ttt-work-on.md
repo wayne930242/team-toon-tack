@@ -5,7 +5,6 @@ arguments:
   - name: issue-id
     description: "Issue ID (e.g., MP-624) or 'next' for auto-select. Defaults to 'next'."
     required: false
-    default: next
   - name: dry-run
     description: Preview selection without changing status
     required: false
@@ -48,67 +47,21 @@ Options:
   --dry-run   Pick task without changing status (preview only)
 ```
 
-## Workflow — Plan → Test → Code → Review
+## After Selection — Delegate the Implementation
 
-Follow this loop for every task.
-Skipping phases is not "pragmatic", it is debt.
+This command picks the task. The implementation workflow belongs to the user.
 
-### 1. Branch
+**Use the user's own workflow whenever one exists** — routing or laws in their root `CLAUDE.md`, the project `CLAUDE.md`, or a `work-on` / `start-work` skill. Follow it as written and add nothing.
 
-Check current branch and repo convention first (e.g. recent `git log --oneline -10`, existing branch naming pattern).
-If unclear whether to branch or what name to use, ask the user instead of assuming.
+**Only when none exists**, run this minimal loop:
 
-```bash
-git checkout -b <branch-name-matching-user-convention>
-```
+- Branch using the repo's existing naming convention.
+- State a short plan before coding; for unclear scope or 3+ files, settle the scope with the user first.
+- Write the failing test first, then the minimal code to pass it.
+- Run lint / type / test and report the real output before claiming completion.
+- Offer `/ttt:write-work-on-skill` to capture this project's commands as a reusable skill.
 
-### 2. Plan
-
-Scope decides depth.
-
-- Unclear requirements or 3+ files touched → if your environment has a brainstorming/planning skill, use it; otherwise clarify scope with the user and write a short plan before coding.
-- Clear and small (≤2 files, obvious change) → state a 2–3 bullet plan inline before coding.
-
-Never go straight to code.
-Planning collapses ambiguity before implementation.
-
-### 3. Test First (TDD)
-
-Red → Green → Refactor per behavior:
-
-1. Write one failing test naming the behavior.
-2. Run test — verify it fails for the expected reason.
-3. Write minimal code to pass.
-4. Run test — verify pass, other tests still green.
-5. Refactor if needed, keep green.
-
-No production code without a failing test first.
-
-### 4. Review (before `/ttt:done`)
-
-Verify before claiming completion — run and confirm output:
-
-- Full test suite passes.
-- `npm run lint` / `npm run type` clean (or project-specific commands).
-- Only requested scope changed — no drive-by edits.
-- No debug logs, stubs, TODOs.
-
-Evidence before assertions.
-Do not claim complete without running the commands.
-
-### 5. Complete
-
-```text
-/ttt:done -m "summary"
-```
-
-A task is NOT complete until `/ttt:done` runs.
-This is MANDATORY.
-
-## Project-Specific Skill
-
-Check `.claude/skills/work-on/` or `.claude/skills/start-work/` for project-specific lint / type / test commands and conventions.
-If missing, suggest `/ttt:write-work-on-skill` — it scaffolds a skill following this same 4-phase structure.
+Either path closes the task with `/ttt:done -m "summary"`.
 
 ## Error Handling
 
