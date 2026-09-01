@@ -150,6 +150,17 @@ export class TrelloAdapter implements TaskSourceAdapter {
 			const firstMemberId = card.idMembers[0];
 			const assignee = firstMemberId ? memberMap.get(firstMemberId) : undefined;
 
+			// Filter by assignee if specified (OR logic)
+			if (options.assigneeEmails && options.assigneeEmails.length > 0) {
+				const email = assignee?.email?.toLowerCase();
+				if (
+					!email ||
+					!options.assigneeEmails.some((e) => e.toLowerCase() === email)
+				) {
+					continue;
+				}
+			}
+
 			// Detect priority from labels
 			const priority = detectPriorityFromLabels(labelNames);
 

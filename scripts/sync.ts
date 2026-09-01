@@ -24,6 +24,7 @@ import {
 	getPrioritySortIndex,
 	getSourceType,
 	getTeamId,
+	getUserEmails,
 	type LocalConfig,
 	loadConfig,
 	loadCycleData,
@@ -34,6 +35,11 @@ import {
 	type Task,
 	withRetry,
 } from "./utils.js";
+
+/** Issues fetched per Linear API page. */
+const ISSUE_PAGE_SIZE = 100;
+/** Hard stop so a runaway filter can't fetch the whole backlog. */
+const MAX_SYNCED_ISSUES = 500;
 
 async function downloadEmbeddedImages(
 	texts: Array<string | undefined>,
@@ -100,6 +106,7 @@ Options:
 What it does:
   - Fetches active cycle from Linear
   - Downloads issues with Todo/In Progress status (or all with --all)
+  - Filters by current_user assignee (all users if none configured)
   - Filters by label if configured
   - Preserves local status for existing tasks
   - Updates config with new cycle info
@@ -295,10 +302,13 @@ Examples:
 	// Phase 4: Fetch current issues with full content
 	const filterLabels = localConfig.labels;
 	const syncStatuses = getSyncStatuses(statusTransitions);
+	const userEmails = await getUserEmails();
 	const labelDesc =
 		filterLabels && filterLabels.length > 0
 			? ` with labels: ${filterLabels.join(", ")}`
 			: "";
+	const assigneeDesc =
+		userEmails.length > 0 ? ` assigned to ${userEmails.join(", ")}` : "";
 
 	let issues: { nodes: Array<{ id: string; identifier: string }> };
 
@@ -324,10 +334,13 @@ Examples:
 		const statusDesc = syncAll
 			? "all statuses"
 			: `${syncStatuses.join("/")} status`;
-		console.log(`Fetching issues (${statusDesc})${labelDesc}...`);
+		console.log(
+			`Fetching issues (${statusDesc})${assigneeDesc}${labelDesc}...`,
+		);
 
-		// Build filter - label is optional; cycle is skipped if team has no
-		// active cycle (Linear lets teams disable cycles entirely).
+		// Build filter - label and assignee are optional; cycle is skipped if
+		// the team has no active cycle (Linear lets teams disable cycles
+		// entirely). No configured user means team-wide sync.
 		const issueFilter: Record<string, unknown> = {
 			team: { id: { eq: teamId } },
 		};
@@ -340,15 +353,38 @@ Examples:
 		if (filterLabels && filterLabels.length > 0) {
 			issueFilter.labels = { name: { in: filterLabels } };
 		}
+		if (userEmails.length > 0) {
+			issueFilter.assignee = { email: { in: userEmails } };
+		}
 
-		issues = await withRetry(
+		// Paginate so a large cycle isn't silently truncated to one page.
+		const connection = await withRetry(
 			() =>
 				client.issues({
 					filter: issueFilter,
-					first: 50,
+					first: ISSUE_PAGE_SIZE,
 				}),
 			{ label: "fetch issues" },
 		);
+
+		while (
+			connection.pageInfo.hasNextPage &&
+			connection.nodes.length < MAX_SYNCED_ISSUES
+		) {
+			const before = connection.nodes.length;
+			await withRetry(() => connection.fetchNext(), {
+				label: "fetch issues page",
+			});
+			if (connection.nodes.length === before) break;
+		}
+
+		if (connection.pageInfo.hasNextPage) {
+			console.warn(
+				`\nWarning: stopped at ${MAX_SYNCED_ISSUES} issues; more matched the filter.`,
+			);
+		}
+
+		issues = { nodes: connection.nodes };
 	}
 
 	if (issues.nodes.length === 0) {
@@ -713,11 +749,14 @@ async function syncTrello(
 		? "all statuses"
 		: `${syncStatuses.join("/")} status`;
 	const filterLabels = localConfig.labels;
+	const userEmails = await getUserEmails();
 	const labelDesc =
 		filterLabels && filterLabels.length > 0
 			? ` with labels: ${filterLabels.join(", ")}`
 			: "";
-	console.log(`Fetching cards (${statusDesc})${labelDesc}...`);
+	const assigneeDesc =
+		userEmails.length > 0 ? ` assigned to ${userEmails.join(", ")}` : "";
+	console.log(`Fetching cards (${statusDesc})${assigneeDesc}${labelDesc}...`);
 
 	let issues: Awaited<ReturnType<typeof adapter.getIssues>>;
 	if (singleIssueId) {
@@ -730,8 +769,9 @@ async function syncTrello(
 			teamId,
 			statusNames: syncAll ? undefined : syncStatuses,
 			labelNames: filterLabels,
+			assigneeEmails: userEmails.length > 0 ? userEmails : undefined,
 			excludeLabels: localConfig.exclude_labels,
-			limit: 100,
+			limit: MAX_SYNCED_ISSUES,
 		});
 	}
 

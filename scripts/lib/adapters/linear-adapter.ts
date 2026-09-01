@@ -120,8 +120,8 @@ export class LinearAdapter implements TaskSourceAdapter {
 			filter.labels = { name: { in: options.labelNames } };
 		}
 
-		if (options.assigneeEmail) {
-			filter.assignee = { email: { eq: options.assigneeEmail } };
+		if (options.assigneeEmails && options.assigneeEmails.length > 0) {
+			filter.assignee = { email: { in: options.assigneeEmails } };
 		}
 
 		const issuesData = await this.client.issues({

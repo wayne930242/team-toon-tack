@@ -8,7 +8,7 @@ Optimized task workflow for Claude Code — supports Linear and Trello, saves si
 
 - **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs MCP
 - **Multi-source Support** — Works with both Linear and Trello
-- **Smart Task Selection** — Auto-pick highest priority unassigned work with `/work-on next`
+- **Smart Task Selection** — Auto-pick your highest priority pending task with `/work-on next`
 - **Multi-team Support** — Sync and filter issues across multiple teams/boards
 - **Flexible Sync Modes** — Choose between remote (immediate sync) or local (offline-first, sync later with `--update`)
 - **Completion Modes** — Four modes for task completion (Linear): simple, strict review, upstream strict, upstream not strict
@@ -110,6 +110,9 @@ ttt init --force                   # Overwrite existing config
 ### `ttt sync`
 
 Sync current cycle issues from Linear/Trello.
+
+Only issues assigned to `current_user` are synced. Leave `current_user` empty in
+`.ttt/local.toon` for a team-wide sync.
 
 ```bash
 ttt sync              # Sync Todo/In Progress issues (fast)

@@ -8,7 +8,7 @@
 
 - **節省 Token** — 本地 cycle 快取避免重複 API 呼叫，比 MCP 省下大量 token
 - **多來源支援** — 支援 Linear 和 Trello
-- **智慧任務挑選** — `/work-on next` 自動選擇最高優先級的未指派工作
+- **智慧任務挑選** — `/work-on next` 自動選擇指派給你的最高優先級待辦任務
 - **多團隊支援** — 跨多個團隊/看板同步與過濾 issue
 - **彈性同步模式** — 選擇 remote（即時同步）或 local（離線優先，稍後用 `--update` 同步）
 - **完成模式** — 四種任務完成模式（Linear）：簡單、嚴格審查、上下游嚴格、上下游非嚴格
@@ -110,6 +110,9 @@ ttt init --force                   # 覆蓋現有配置
 ### `ttt sync`
 
 從 Linear/Trello 同步當前 cycle 的 issue。
+
+只同步指派給 `current_user` 的 issue。若要同步整個團隊，把 `.ttt/local.toon` 的
+`current_user` 留空。
 
 ```bash
 ttt sync              # 同步 Todo/In Progress 狀態的 issue（較快）

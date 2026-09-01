@@ -60,7 +60,7 @@ Examples:
 		.filter((t) => {
 			if (t.localStatus !== "pending") return false;
 			if (currentUserEmails.length === 0) return true; // No filter = all users
-			if (!t.assignee) return true; // Include unassigned tasks
+			if (!t.assignee) return false;
 			return currentUserEmails.includes(t.assignee.toLowerCase());
 		})
 		.sort((a, b) => {

@@ -113,7 +113,7 @@ export interface GetIssuesOptions {
 	cycleId?: string;
 	statusNames?: string[]; // Filter by status names
 	labelNames?: string[]; // Filter by labels (OR logic)
-	assigneeEmail?: string; // Filter by assignee
+	assigneeEmails?: string[]; // Filter by assignee (OR logic)
 	excludeLabels?: string[]; // Exclude issues with these labels
 	limit?: number; // Max number of issues to return
 }
