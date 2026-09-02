@@ -199,7 +199,7 @@ async function main() {
 				break;
 			case "create":
 				process.argv = ["node", "create.js", ...commandArgs];
-				await importScript("create.js");
+				await importScript("create.js").then((module) => module.create());
 				break;
 			case "assign":
 				process.argv = ["node", "assign.js", ...commandArgs];

@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { input, select } from "@inquirer/prompts";
 import { createAdapter } from "./lib/adapters/index.js";
 import type {
@@ -171,9 +173,7 @@ async function resolveParentSourceId(
 	return parent.sourceId;
 }
 
-async function create() {
-	const args = process.argv.slice(2);
-
+export async function create(args = process.argv.slice(2)) {
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(`Usage: ttt create [options]
 
@@ -209,6 +209,10 @@ Examples:
 	const labelArg = parsed.label;
 	const statusName = parsed.status;
 	const parentId = parsed.parent;
+	if (sourceType === "trello" && parentId) {
+		console.error("Parent issues are not supported for Trello cards.");
+		process.exit(1);
+	}
 
 	if (!title) {
 		if (!parsed.interactive) {
@@ -263,9 +267,19 @@ Examples:
 	console.log("Creating issue...");
 
 	const adapter = createAdapter(config);
+	let cycleData = sourceType === "trello" ? await loadCycleData() : null;
+	if (sourceType === "trello" && !cycleData) {
+		console.error("No cycle data found. Run ttt sync before creating a card.");
+		process.exit(1);
+	}
 
 	const assigneeId = resolveAssigneeId(config, assigneeKey);
-	const statusId = await resolveStatusId(config, adapter, teamId, statusName);
+	const statusId = await resolveStatusId(
+		config,
+		adapter,
+		teamId,
+		sourceType === "trello" && !statusName ? "todo" : statusName,
+	);
 	const labelIds = resolveLabelIds(config, labelArg);
 	const parentSourceId = await resolveParentSourceId(adapter, parentId);
 
@@ -293,7 +307,7 @@ Examples:
 	console.log(`\n✅ Created ${issue.id}: ${issue.title}`);
 	if (issue.url) console.log(`   ${issue.url}`);
 
-	const cycleData = await loadCycleData();
+	if (sourceType !== "trello") cycleData = await loadCycleData();
 	if (cycleData) {
 		const task = sourceIssueToTask(issue, sourceType);
 		await upsertTaskInCycleData(task, cycleData);
@@ -301,4 +315,16 @@ Examples:
 	}
 }
 
-create().catch(console.error);
+const entryPath = process.argv[1];
+if (
+	entryPath &&
+	import.meta.url === pathToFileURL(path.resolve(entryPath)).href
+) {
+	create().catch((error) => {
+		console.error(
+			"Failed to create issue:",
+			error instanceof Error ? error.message : error,
+		);
+		process.exitCode = 1;
+	});
+}

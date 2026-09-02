@@ -21,6 +21,13 @@ import {
 	type UpdateIssueFields,
 } from "./types.js";
 
+const PRIORITY_NAMES: Record<number, string> = {
+	1: "urgent",
+	2: "high",
+	3: "medium",
+	4: "low",
+};
+
 export class TrelloAdapter implements TaskSourceAdapter {
 	readonly type = "trello" as const;
 	private client: TrelloClient;
@@ -357,12 +364,96 @@ export class TrelloAdapter implements TaskSourceAdapter {
 	}
 
 	async createIssue(
-		_options: CreateIssueOptions,
+		options: CreateIssueOptions,
 	): Promise<{ success: boolean; issue?: SourceIssue; error?: string }> {
-		return {
-			success: false,
-			error: "createIssue is not yet supported for Trello",
-		};
+		try {
+			const statuses = await this.getStatuses(options.teamId);
+			const targetStatus = options.statusId
+				? statuses.find((status) => status.id === options.statusId)
+				: statuses[0];
+
+			if (!targetStatus) {
+				return {
+					success: false,
+					error: options.statusId
+						? `Trello list ${options.statusId} is not open on board ${options.teamId}`
+						: `Trello board ${options.teamId} has no open lists`,
+				};
+			}
+
+			const labelIds = new Set(options.labelIds ?? []);
+			let knownLabels: SourceLabel[] = [];
+			if (labelIds.size > 0 || (options.priority ?? 0) > 0) {
+				knownLabels = await this.getLabels(options.teamId);
+			}
+
+			if (options.priority && options.priority > 0) {
+				const priorityLabel = knownLabels.find(
+					(label) =>
+						detectPriorityFromLabels([label.name]) === options.priority,
+				);
+				if (!priorityLabel) {
+					return {
+						success: false,
+						error: `Trello board ${options.teamId} has no label matching priority "${PRIORITY_NAMES[options.priority]}"`,
+					};
+				}
+				labelIds.add(priorityLabel.id);
+			}
+
+			const card = await this.client.createCard({
+				name: options.title,
+				idList: targetStatus.id,
+				desc: options.description,
+				idMembers: options.assigneeId ? [options.assigneeId] : undefined,
+				idLabels: labelIds.size > 0 ? [...labelIds] : undefined,
+			});
+
+			if (!card.id || !card.shortLink || !card.name || !card.idList) {
+				return {
+					success: false,
+					error: "Trello created a card but returned an incomplete response",
+				};
+			}
+
+			const labelNames = Array.isArray(card.labels)
+				? card.labels.map((label) => label.name).filter(Boolean)
+				: knownLabels
+						.filter((label) => labelIds.has(label.id))
+						.map((label) => label.name);
+			const status =
+				statuses.find((candidate) => candidate.id === card.idList)?.name ??
+				targetStatus.name;
+			const assigneeId = Array.isArray(card.idMembers)
+				? card.idMembers[0]
+				: options.assigneeId;
+
+			return {
+				success: true,
+				issue: {
+					id: card.shortLink,
+					sourceId: card.id,
+					title: card.name,
+					description: card.desc || undefined,
+					status,
+					statusId: card.idList,
+					assigneeId,
+					assigneeEmail: undefined,
+					priority: detectPriorityFromLabels(labelNames),
+					labels: labelNames,
+					url: card.url,
+					parentIssueId: undefined,
+					branchName: undefined,
+					attachments: undefined,
+					comments: undefined,
+				},
+			};
+		} catch (error) {
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : "Unknown error",
+			};
+		}
 	}
 
 	async updateIssue(
