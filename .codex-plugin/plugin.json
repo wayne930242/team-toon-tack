@@ -1,0 +1,20 @@
+{
+	"name": "team-toon-tack",
+	"version": "3.9.1",
+	"description": "透過 ttt CLI 同步與管理 Linear、Trello 任務。",
+	"author": {
+		"name": "wayne930242"
+	},
+	"repository": "https://github.com/wayne930242/team-toon-tack",
+	"license": "MIT",
+	"skills": "./skills/",
+	"interface": {
+		"displayName": "team-toon-tack",
+		"shortDescription": "同步與管理 Linear、Trello 任務",
+		"longDescription": "透過 ttt CLI 同步任務、查詢狀態、記錄估時，並依使用者要求更新 Linear 與 Trello。",
+		"developerName": "wayne930242",
+		"category": "Productivity",
+		"capabilities": ["Interactive", "Write"],
+		"defaultPrompt": ["使用 ttt 同步並列出我的任務。"]
+	}
+}

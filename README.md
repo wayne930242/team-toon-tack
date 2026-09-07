@@ -67,8 +67,31 @@ During init, you'll be prompted to select your task source (Linear or Trello) an
 
 ```
 /plugin marketplace add wayne930242/team-toon-tack
-/plugin install team-toon-tack@wayne930242
+/plugin install team-toon-tack@ttt-marketplace
 ```
+
+### Codex plugin 安裝（選擇性）
+
+先依上方步驟安裝 `ttt` CLI 並執行 `ttt init`。Plugin 提供任務管理技能，透過 shell 呼叫 CLI。
+
+從 GitHub 安裝：
+
+```bash
+codex plugin marketplace add wayne930242/team-toon-tack
+codex plugin add team-toon-tack@ttt-marketplace
+```
+
+從本地 checkout 安裝，在此 repository 根目錄執行：
+
+```bash
+codex plugin marketplace add "$PWD"
+codex plugin add team-toon-tack@ttt-marketplace
+```
+
+若已註冊同名的 GitHub marketplace，先執行 `codex plugin marketplace remove ttt-marketplace`，再加入本地路徑。
+修改已安裝的同版本內容後，先執行 `codex plugin remove team-toon-tack@ttt-marketplace`，再執行上述 `codex plugin add` 重新安裝。
+
+安裝完成後開啟新的 Codex 對話，使用 `$managing-linear-tasks`，或直接說「使用 ttt 同步並列出我的任務」。Codex 會使用 `ttt sync`、`ttt show` 等 CLI 指令。
 
 ### 3. Daily Workflow
 
@@ -237,7 +260,7 @@ Install the plugin for Claude Code integration:
 
 ```
 /plugin marketplace add wayne930242/team-toon-tack
-/plugin install team-toon-tack@wayne930242
+/plugin install team-toon-tack@ttt-marketplace
 ```
 
 ### Available Commands
@@ -253,7 +276,7 @@ Install the plugin for Claude Code integration:
 
 ### Auto-Activated Skill
 
-The plugin includes a `linear-task-manager` skill that automatically activates when working with tasks, providing workflow guidance and best practices.
+The plugin includes a `managing-linear-tasks` skill that automatically activates when working with tasks, providing workflow guidance and best practices.
 
 ## License
 
