@@ -91,4 +91,7 @@ Examples:
 	}
 }
 
-cancel().catch(console.error);
+cancel().catch((error) => {
+	console.error(error);
+	process.exit(1);
+});

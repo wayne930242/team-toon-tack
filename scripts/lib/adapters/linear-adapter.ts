@@ -358,18 +358,25 @@ export class LinearAdapter implements TaskSourceAdapter {
 		sourceId: string,
 	): Promise<{ success: boolean; error?: string }> {
 		try {
-			// Find the "Cancelled" workflow state for this issue's team
+			// Resolve by statusType, not display name -- teams name this state
+			// "Canceled", "Cancelled", "Done - Cancelled", etc.
 			const issue = await this.client.issue(sourceId);
 			const team = await issue.team;
 			if (!team) {
 				return { success: false, error: "Could not determine issue team" };
 			}
 			const states = await this.client.workflowStates({
-				filter: { team: { id: { eq: team.id } }, type: { eq: "cancelled" } },
+				filter: {
+					team: { id: { eq: team.id } },
+					type: { in: ["canceled", "cancelled"] },
+				},
 			});
 			const cancelledState = states.nodes[0];
 			if (!cancelledState) {
-				return { success: false, error: "No 'cancelled' workflow state found" };
+				return {
+					success: false,
+					error: `No cancelled-type workflow state found for team ${team.id}`,
+				};
 			}
 			const payload = await this.client.updateIssue(sourceId, {
 				stateId: cancelledState.id,
