@@ -327,9 +327,9 @@ export async function initTrello(
 		console.log(`     export TRELLO_API_KEY="${maskedKey}"`);
 		console.log(`     export TRELLO_TOKEN="<your-token>"`);
 		console.log("  2. Run sync: ttt sync");
-		console.log("  3. Start working: ttt work-on");
+		console.log("  3. Claim a ticket: ttt claim");
 	} else {
 		console.log("  1. Run sync: ttt sync");
-		console.log("  2. Start working: ttt work-on");
+		console.log("  2. Claim a ticket: ttt claim");
 	}
 }

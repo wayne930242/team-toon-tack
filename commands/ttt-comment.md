@@ -57,5 +57,5 @@ Report:
 | Error | Solution |
 |-------|----------|
 | `Message is required` | Add `-m "your message"` |
-| `No in-progress task` | Specify issue-id or run `ttt work-on` first |
+| `No in-progress task` | Specify issue-id or run `ttt claim` first |
 | `Issue not found` | Issue doesn't exist in remote either — check the ID |

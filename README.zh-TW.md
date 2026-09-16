@@ -8,7 +8,7 @@
 
 - **節省 Token** — 本地 cycle 快取避免重複 API 呼叫，比 MCP 省下大量 token
 - **多來源支援** — 支援 Linear 和 Trello
-- **智慧任務挑選** — `/work-on next` 自動選擇指派給你的最高優先級待辦任務
+- **批次領票** — `ttt claim` 可一次領一張或多張票，`ttt claim next <n>` 自動領取最高優先級的待辦任務
 - **多團隊支援** — 跨多個團隊/看板同步與過濾 issue
 - **彈性同步模式** — 選擇 remote（即時同步）或 local（離線優先，稍後用 `--update` 同步）
 - **完成模式** — 四種任務完成模式（Linear）：簡單、嚴格審查、上下游嚴格、上下游非嚴格
@@ -99,7 +99,7 @@ codex plugin add team-toon-tack@ttt-marketplace
 
 ```
 /ttt:sync              # 取得當前 cycle 所有 issue/card
-/ttt:work-on next      # 挑選最高優先級任務並開始工作
+/ttt:work-on next      # 領取最高優先級的票並開始工作
 /ttt:estimate MP-123 6 # 寫入本地 6 小時估時
 /ttt:done              # 完成任務，附上 AI 生成的摘要
 ```
@@ -108,7 +108,7 @@ codex plugin add team-toon-tack@ttt-marketplace
 
 ```bash
 ttt sync
-ttt work-on next
+ttt claim next
 ttt estimate MP-123 6
 ttt done -m "完成任務"
 ```
@@ -144,15 +144,22 @@ ttt sync MP-123       # 只同步特定 issue
 ttt sync --update     # 將本地狀態推送到遠端（local 模式用）
 ```
 
-### `ttt work-on`
+### `ttt claim`
 
-開始處理任務。
+領票：把票在本地與遠端來源改成 in-progress。
+別名：`ttt work-on`。
 
 ```bash
-ttt work-on              # 互動選擇
-ttt work-on MP-123       # 指定 issue
-ttt work-on next         # 自動選擇最高優先級
+ttt claim                  # 互動多選
+ttt claim MP-123           # 領一張票
+ttt claim MP-123 MP-124    # 批次領票
+ttt claim next             # 領最高優先級的待辦任務
+ttt claim next 3           # 領最高優先級的前 3 張票
+ttt claim --dry-run        # 預覽，不改狀態
 ```
+
+已完成、審核中、blocked 的票會逐張回報並跳過，不中斷整批。
+批次中出現不存在的 ID 時，整批在動任何票之前中止。
 
 ### `ttt estimate`
 
@@ -268,7 +275,7 @@ your-project/
 | 指令 | 說明 |
 |------|------|
 | `/ttt:sync` | 同步 issue 到本地 |
-| `/ttt:work-on` | 開始處理任務 |
+| `/ttt:work-on` | 領票並開始處理 |
 | `/ttt:estimate` | 寫入本地人力估時 |
 | `/ttt:done` | 標記當前任務完成 |
 | `/ttt:status` | 顯示或修改任務狀態 |

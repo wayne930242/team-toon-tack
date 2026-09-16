@@ -23,7 +23,7 @@ Manage developer task workflows using the `ttt` CLI.
 |-------------|---------|---------|
 | Sync/fetch issues | `ttt sync` | "sync my issues", "pull from Linear" |
 | Show/search issues | `ttt show` | "show MP-624", "list my tasks", "what issues do I have" |
-| Start working on a task | `ttt work-on` | "work on next", "start MP-624" |
+| Claim ticket(s) → in-progress | `ttt claim` | "領票", "work on next", "start MP-624", "claim MP-624 MP-625" |
 | Create a new issue | `ttt create` | "create issue", "open a ticket", "new task" |
 | Reassign an issue | `ttt assign` | "assign MP-624 to john", "reassign to jane" |
 | Edit issue fields | `ttt edit` | "rename MP-624", "change priority", "update labels" |
@@ -44,8 +44,9 @@ ttt sync MP-624             # Sync specific issue
 ttt show                    # List all local issues
 ttt show MP-624             # Show issue details
 ttt show --user me          # My issues
-ttt work-on next            # Auto-select highest priority
-ttt work-on MP-624          # Start specific task
+ttt claim next              # Claim highest priority pending task
+ttt claim next 3            # Claim top 3 pending tasks
+ttt claim MP-624 MP-625     # Batch claim (alias: ttt work-on)
 ttt create                  # Create new issue (interactive)
 ttt create -t "Title" -p 2  # Quick create with flags
 ttt assign MP-624 -a john   # Reassign issue
@@ -68,7 +69,7 @@ ttt done -m "summary"       # Complete with message
 ## Standard Workflow
 
 ```
-ttt sync → ttt work-on next → ttt estimate <id> <hours> → [implement] → git commit → ttt comment -m "notes" → ttt done -m "..."
+ttt sync → ttt claim next → ttt estimate <id> <hours> → [implement] → git commit → ttt comment -m "notes" → ttt done -m "..."
 ```
 
 ## File Structure
@@ -112,7 +113,7 @@ digraph ttt_router {
 
     sync     [label="ttt sync",    shape=box];
     show     [label="ttt show",    shape=box];
-    work_on  [label="ttt work-on", shape=box];
+    claim    [label="ttt claim",   shape=box];
     create   [label="ttt create",  shape=box];
     assign   [label="ttt assign",  shape=box];
     edit     [label="ttt edit",    shape=box];
@@ -125,7 +126,7 @@ digraph ttt_router {
     user -> classify;
     classify -> sync     [label="fetch / pull"];
     classify -> show     [label="show / list"];
-    classify -> work_on  [label="start / next"];
+    classify -> claim    [label="claim / start / next"];
     classify -> create   [label="create / new"];
     classify -> assign   [label="assign / reassign"];
     classify -> edit     [label="rename / change field"];

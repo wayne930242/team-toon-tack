@@ -101,7 +101,7 @@ export function showPluginInstallInstructions(): void {
 		"│     /ttt:sync        - Sync Linear issues                   │",
 	);
 	console.log(
-		"│     /ttt:work-on     - Start working on a task              │",
+		"│     /ttt:work-on     - Claim ticket(s) and work on them     │",
 	);
 	console.log(
 		"│     /ttt:done        - Complete current task                │",

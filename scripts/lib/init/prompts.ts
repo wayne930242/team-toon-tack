@@ -120,7 +120,7 @@ export async function selectStatusSource(
 				name: "Remote (recommended)",
 				value: "remote" as const,
 				description:
-					"Update Linear immediately when you work-on or complete tasks",
+					"Update Linear immediately when you claim or complete tasks",
 			},
 			{
 				name: "Local",

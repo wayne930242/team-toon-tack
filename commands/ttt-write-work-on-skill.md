@@ -49,7 +49,7 @@ Create `.claude/skills/{{ $1 | default: "work-on" }}/SKILL.md` using the Plan �
 ```markdown
 ---
 name: {{ $1 | default: "work-on" }}
-description: Project workflow — Plan → Test → Code → Review. Invoke after ttt work-on picks a task.
+description: Project workflow — Plan → Test → Code → Review. Invoke after ttt claim claims a ticket.
 ---
 
 # Work-On Skill ({{ project-name }})

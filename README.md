@@ -8,7 +8,7 @@ Optimized task workflow for Claude Code — supports Linear and Trello, saves si
 
 - **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs MCP
 - **Multi-source Support** — Works with both Linear and Trello
-- **Smart Task Selection** — Auto-pick your highest priority pending task with `/work-on next`
+- **Batch Ticket Claiming** — Claim one or many tickets at once with `ttt claim`, or auto-pick your highest priority pending tasks with `ttt claim next <n>`
 - **Multi-team Support** — Sync and filter issues across multiple teams/boards
 - **Flexible Sync Modes** — Choose between remote (immediate sync) or local (offline-first, sync later with `--update`)
 - **Completion Modes** — Four modes for task completion (Linear): simple, strict review, upstream strict, upstream not strict
@@ -99,7 +99,7 @@ In Claude Code (with plugin installed):
 
 ```
 /ttt:sync              # Fetch all issues/cards for current cycle
-/ttt:work-on next      # Pick highest priority task & start working
+/ttt:work-on next      # Claim highest priority ticket & start working
 /ttt:estimate MP-123 6 # Save a local 6-hour estimate
 /ttt:done              # Complete task with AI-generated summary
 ```
@@ -108,7 +108,7 @@ Or using CLI directly:
 
 ```bash
 ttt sync
-ttt work-on next
+ttt claim next
 ttt estimate MP-123 6
 ttt done -m "Completed the task"
 ```
@@ -144,15 +144,22 @@ ttt sync MP-123       # Sync specific issue only
 ttt sync --update     # Push local status changes to remote (for local mode)
 ```
 
-### `ttt work-on`
+### `ttt claim`
 
-Start working on a task.
+Claim ticket(s): move them to in-progress locally and on the remote source.
+Alias: `ttt work-on`.
 
 ```bash
-ttt work-on              # Interactive selection
-ttt work-on MP-123       # Specific issue
-ttt work-on next         # Auto-select highest priority
+ttt claim                  # Interactive multi-select
+ttt claim MP-123           # Claim one ticket
+ttt claim MP-123 MP-124    # Batch claim
+ttt claim next             # Claim highest priority pending task
+ttt claim next 3           # Claim top 3 pending tasks
+ttt claim --dry-run        # Preview without changes
 ```
+
+Completed, in-review, and blocked tickets are reported and skipped without
+stopping the rest of the batch. An unknown ID aborts before anything is claimed.
 
 ### `ttt estimate`
 
@@ -268,7 +275,7 @@ Install the plugin for Claude Code integration:
 | Command | Description |
 |---------|-------------|
 | `/ttt:sync` | Sync issues to local cycle data |
-| `/ttt:work-on` | Start working on a task |
+| `/ttt:work-on` | Claim ticket(s) and work on them |
 | `/ttt:estimate` | Save a local human-effort estimate |
 | `/ttt:done` | Mark current task as completed |
 | `/ttt:status` | Show or modify task status |

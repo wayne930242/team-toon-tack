@@ -14,6 +14,7 @@ const VERSION = pkg.version;
 const COMMANDS = [
 	"init",
 	"sync",
+	"claim",
 	"work-on",
 	"estimate",
 	"done",
@@ -40,7 +41,8 @@ USAGE:
 COMMANDS:
   init       Initialize config files in current directory
   sync       Sync issues from Linear to local cycle.ttt
-  work-on    Start working on a task (interactive or by ID)
+  claim      Claim ticket(s) and move them to in-progress
+  work-on    Alias for claim
   estimate   Store a local human-effort estimate for a task
   done       Mark current task as completed
   status     Show or modify task status
@@ -64,9 +66,9 @@ EXAMPLES:
   ttt init                      # Initialize .ttt directory
   ttt init -d ./custom          # Initialize in custom directory
   ttt sync                      # Sync from Linear
-  ttt work-on                   # Interactive task selection
-  ttt work-on MP-123            # Work on specific issue
-  ttt work-on next              # Auto-select highest priority
+  ttt claim                     # Interactive multi-select
+  ttt claim MP-123 MP-124       # Claim several tickets at once
+  ttt claim next 3              # Claim top 3 pending tasks
   ttt estimate MP-123 6         # Save a 6-hour estimate locally
   ttt done                      # Complete current task
   ttt done -m "Fixed the bug"   # With completion message
@@ -173,9 +175,10 @@ async function main() {
 				process.argv = ["node", "sync.js", ...commandArgs];
 				await importScript("sync.js");
 				break;
+			case "claim":
 			case "work-on":
-				process.argv = ["node", "work-on.js", ...commandArgs];
-				await importScript("work-on.js");
+				process.argv = ["node", "claim.js", ...commandArgs];
+				await importScript("claim.js");
 				break;
 			case "estimate":
 				process.argv = ["node", "estimate.js", ...commandArgs];

@@ -1,9 +1,9 @@
 ---
 name: ttt:work-on
-description: Start working on a Linear task
+description: Claim Linear/Trello ticket(s) and work on them
 arguments:
-  - name: issue-id
-    description: "Issue ID (e.g., MP-624) or 'next' for auto-select. Defaults to 'next'."
+  - name: issue-ids
+    description: "One or more issue IDs (e.g., MP-624 MP-625), or 'next' / 'next <n>' for auto-select. Defaults to 'next'."
     required: false
   - name: dry-run
     description: Preview selection without changing status
@@ -11,45 +11,59 @@ arguments:
 ---
 
 <law>
-YOU MUST execute the `ttt work-on` command using the Bash tool.
+YOU MUST execute the `ttt claim` command using the Bash tool.
 DO NOT manually edit cycle.toon or change task status by other means.
-After the task is completed, YOU MUST execute `/ttt:done -m "summary"`. This is MANDATORY.
+After each task is completed, YOU MUST execute `/ttt:done -m "summary"`. This is MANDATORY.
 </law>
 
-# /ttt:work-on — Start Working on a Task
+# /ttt:work-on — Claim a Ticket and Work on It
+
+`ttt claim` is the command; `ttt work-on` is its alias. Claiming moves the ticket
+to in-progress locally and on the remote source.
 
 ## Execution
 
 ```bash
-ttt work-on {{ issue-id | default: "next" }} {{ "--dry-run" if dry-run }}
+ttt claim {{ issue-ids | default: "next" }} {{ "--dry-run" if dry-run }}
 ```
 
 ### Argument Resolution
 
 | Input | Command |
 |-------|---------|
-| (none) | `ttt work-on next` |
-| `next` | `ttt work-on next` |
-| `MP-624` | `ttt work-on MP-624` |
-| `--dry-run` | `ttt work-on next --dry-run` |
-| `MP-624 --dry-run` | `ttt work-on MP-624 --dry-run` |
+| (none) | `ttt claim next` |
+| `next` | `ttt claim next` |
+| `next 3` | `ttt claim next 3` |
+| `MP-624` | `ttt claim MP-624` |
+| `MP-624 MP-625` | `ttt claim MP-624 MP-625` |
+| `--dry-run` | `ttt claim next --dry-run` |
+| `MP-624 --dry-run` | `ttt claim MP-624 --dry-run` |
 
 ## Full CLI Reference
 
 ```
-Usage: ttt work-on [issue-id] [options]
+Usage: ttt claim [issue-id...] [options]
+
+Claim ticket(s): move them to in-progress locally and on the remote source.
+Alias: ttt work-on
 
 Arguments:
-  issue-id    Issue ID (e.g., MP-624) or 'next' for auto-select
-              If omitted, shows interactive selection
+  issue-id    One or more issue IDs (e.g., MP-624 MP-625)
+              'next' claims the highest priority pending task
+              'next <n>' claims the top <n> pending tasks
+              If omitted, shows interactive multi-select
 
 Options:
-  --dry-run   Pick task without changing status (preview only)
+  --dry-run   Pick tickets without changing status (preview only)
 ```
 
-## After Selection — Delegate the Implementation
+Tickets that are already completed, in review, or blocked are reported and
+skipped without stopping the rest of the batch. An unknown ID aborts before
+anything is claimed.
 
-This command picks the task. The implementation workflow belongs to the user.
+## After Claiming — Delegate the Implementation
+
+This command claims the tickets. The implementation workflow belongs to the user.
 
 **Use the user's own workflow whenever one exists** — routing or laws in their root `CLAUDE.md`, the project `CLAUDE.md`, or a `work-on` / `start-work` skill. Follow it as written and add nothing.
 
@@ -61,7 +75,8 @@ This command picks the task. The implementation workflow belongs to the user.
 - Run lint / type / test and report the real output before claiming completion.
 - Offer `/ttt:write-work-on-skill` to capture this project's commands as a reusable skill.
 
-Either path closes the task with `/ttt:done -m "summary"`.
+When several tickets were claimed at once, carry them one at a time and close
+each with `/ttt:done -m "summary"` before starting the next.
 
 ## Error Handling
 

@@ -361,10 +361,10 @@ export async function initLinear(
 		console.log(`  1. Set ${envName} in your shell profile:`);
 		console.log(`     export ${envName}="${maskedKey}"`);
 		console.log("  2. Run sync: ttt sync");
-		console.log("  3. Start working: ttt work-on");
+		console.log("  3. Claim a ticket: ttt claim");
 	} else {
 		console.log("  1. Run sync: ttt sync");
-		console.log("  2. Start working: ttt work-on");
+		console.log("  2. Claim a ticket: ttt claim");
 	}
 
 	// Show Claude Code plugin installation instructions at the end
