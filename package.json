@@ -23,6 +23,7 @@
 		"lint": "biome lint .",
 		"format": "biome check --write .",
 		"type": "tsc --noEmit",
+		"test": "bun test",
 		"prepublishOnly": "npm run build",
 		"release": "npm config set //registry.npmjs.org/:_authToken=$NPM_PUBLISH_KEY && npm publish"
 	},

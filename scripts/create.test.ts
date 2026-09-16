@@ -1,8 +1,8 @@
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { test } from "node:test";
 import { decode, encode } from "@toon-format/toon";
 import "./lib/adapters/trello-adapter.cases.js";
 
@@ -161,10 +161,14 @@ test("non-interactive Trello create adds the one real card to cycle data", async
 			title: "Create governance ticket",
 			status: "Proposed",
 			localStatus: "pending",
+			assignee: null,
 			priority: 0,
 			labels: ["Governance"],
 			description: "Created through ttt",
+			parentIssueId: null,
 			url: "https://trello.com/c/REALCARD/create-governance-ticket",
+			attachments: null,
+			comments: null,
 		});
 	} finally {
 		globalThis.fetch = originalFetch;

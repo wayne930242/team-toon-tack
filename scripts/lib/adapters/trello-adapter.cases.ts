@@ -1,5 +1,5 @@
+import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import { TrelloAdapter } from "./trello-adapter.js";
 
 const originalFetch = globalThis.fetch;
