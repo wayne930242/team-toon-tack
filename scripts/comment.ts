@@ -2,6 +2,7 @@
 import { createAdapter } from "./lib/adapters/index.js";
 import {
 	type Config,
+	findTaskByIssueId,
 	getSourceType,
 	loadConfig,
 	loadCycleData,
@@ -99,9 +100,7 @@ Examples:
 		task = inProgressTask;
 		issueId = task.id;
 	} else {
-		task = data?.tasks.find(
-			(t) => t.id === issueId || t.id === `MP-${issueId}`,
-		);
+		task = data ? findTaskByIssueId(data.tasks, issueId) : undefined;
 		if (!task) {
 			console.error(
 				`Issue ${issueId} not in local data. Fetching from remote...`,

@@ -5,6 +5,7 @@ import { getStatusTransitions, mapLocalStatusToLinear } from "./lib/linear.js";
 import { getFirstTodoStatus } from "./lib/status-helpers.js";
 import {
 	type Config,
+	findTaskByIssueId,
 	getSourceType,
 	loadConfig,
 	loadCycleData,
@@ -139,7 +140,7 @@ Examples:
 		task = inProgressTasks[0];
 		issueId = task.id;
 	} else {
-		task = data.tasks.find((t) => t.id === issueId || t.id === `MP-${issueId}`);
+		task = findTaskByIssueId(data.tasks, issueId);
 		if (!task) {
 			// Fetch from remote
 			console.error(

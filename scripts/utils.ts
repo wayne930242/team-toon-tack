@@ -22,21 +22,20 @@ function getBaseDir(): string {
 	return path.join(process.cwd(), ".ttt");
 }
 
-const BASE_DIR = getBaseDir();
-const CONFIG_PATH = path.join(BASE_DIR, "config.toon");
-const CYCLE_PATH = path.join(BASE_DIR, "cycle.toon");
-const LOCAL_PATH = path.join(BASE_DIR, "local.toon");
-const OUTPUT_PATH = path.join(BASE_DIR, "output");
-const ENV_PATH = path.join(BASE_DIR, ".env");
-
+/**
+ * Resolved on every call, so a TOON_DIR set after this module loads still
+ * applies. Caching it at module load made the base directory depend on import
+ * order.
+ */
 export function getPaths() {
+	const baseDir = getBaseDir();
 	return {
-		baseDir: BASE_DIR,
-		configPath: CONFIG_PATH,
-		cyclePath: CYCLE_PATH,
-		localPath: LOCAL_PATH,
-		outputPath: OUTPUT_PATH,
-		envPath: ENV_PATH,
+		baseDir,
+		configPath: path.join(baseDir, "config.toon"),
+		cyclePath: path.join(baseDir, "cycle.toon"),
+		localPath: path.join(baseDir, "local.toon"),
+		outputPath: path.join(baseDir, "output"),
+		envPath: path.join(baseDir, ".env"),
 	};
 }
 
@@ -223,22 +222,24 @@ export async function fileExists(filePath: string): Promise<boolean> {
 }
 
 export async function loadConfig(): Promise<Config> {
+	const { configPath } = getPaths();
 	try {
-		const fileContent = await fs.readFile(CONFIG_PATH, "utf-8");
+		const fileContent = await fs.readFile(configPath, "utf-8");
 		return decode(fileContent, { strict: false }) as unknown as Config;
 	} catch (error) {
-		console.error(`Error loading config from ${CONFIG_PATH}:`, error);
+		console.error(`Error loading config from ${configPath}:`, error);
 		console.error("Run `bun run init` to create configuration files.");
 		process.exit(1);
 	}
 }
 
 export async function loadLocalConfig(): Promise<LocalConfig> {
+	const { localPath } = getPaths();
 	try {
-		const fileContent = await fs.readFile(LOCAL_PATH, "utf-8");
+		const fileContent = await fs.readFile(localPath, "utf-8");
 		return decode(fileContent, { strict: false }) as unknown as LocalConfig;
 	} catch {
-		console.error(`Error: ${LOCAL_PATH} not found.`);
+		console.error(`Error: ${localPath} not found.`);
 		console.error("Run `bun run init` to create local configuration.");
 		process.exit(1);
 	}
@@ -351,17 +352,18 @@ export async function withRetry<T>(
 }
 
 export async function loadCycleData(): Promise<CycleData | null> {
+	const { cyclePath } = getPaths();
 	try {
-		await fs.access(CYCLE_PATH);
+		await fs.access(cyclePath);
 	} catch {
 		return null;
 	}
 	try {
-		const fileContent = await fs.readFile(CYCLE_PATH, "utf-8");
+		const fileContent = await fs.readFile(cyclePath, "utf-8");
 		return decode(fileContent, { strict: false }) as unknown as CycleData;
 	} catch (error) {
 		console.error(
-			`Warning: Failed to decode ${CYCLE_PATH}: ${error instanceof Error ? error.message : error}`,
+			`Warning: Failed to decode ${cyclePath}: ${error instanceof Error ? error.message : error}`,
 		);
 		return null;
 	}
@@ -369,17 +371,17 @@ export async function loadCycleData(): Promise<CycleData | null> {
 
 export async function saveCycleData(data: CycleData): Promise<void> {
 	const toonString = encode(data);
-	await fs.writeFile(CYCLE_PATH, toonString, "utf-8");
+	await fs.writeFile(getPaths().cyclePath, toonString, "utf-8");
 }
 
 export async function saveConfig(config: Config): Promise<void> {
 	const toonString = encode(config);
-	await fs.writeFile(CONFIG_PATH, toonString, "utf-8");
+	await fs.writeFile(getPaths().configPath, toonString, "utf-8");
 }
 
 export async function saveLocalConfig(config: LocalConfig): Promise<void> {
 	const toonString = encode(config);
-	await fs.writeFile(LOCAL_PATH, toonString, "utf-8");
+	await fs.writeFile(getPaths().localPath, toonString, "utf-8");
 }
 
 // Get first team key from config
@@ -412,6 +414,33 @@ export function getSourceType(config: Config): TaskSourceType {
 // Helper to get sourceId from Task, falling back to linearId for backwards compatibility
 export function getTaskSourceId(task: Task): string {
 	return task.sourceId ?? task.linearId;
+}
+
+/**
+ * Find a task by its display ID.
+ *
+ * A full ID (e.g. "MP-624") matches exactly. A bare number (e.g. "624") matches
+ * the ticket with that number regardless of team prefix; when several teams
+ * share the number the candidates are reported and nothing is returned, so the
+ * caller asks for the full ID instead of acting on a guess.
+ */
+export function findTaskByIssueId(
+	tasks: Task[],
+	issueId: string,
+): Task | undefined {
+	const exact = tasks.find((t) => t.id === issueId);
+	if (exact) return exact;
+
+	if (!/^\d+$/.test(issueId)) return undefined;
+
+	const matches = tasks.filter((t) => t.id.endsWith(`-${issueId}`));
+	if (matches.length === 1) return matches[0];
+	if (matches.length > 1) {
+		console.error(
+			`Ambiguous issue "${issueId}": ${matches.map((t) => t.id).join(", ")}. Use the full ID.`,
+		);
+	}
+	return undefined;
 }
 
 export function preserveLocalTaskFields(task: Task, existingTask?: Task): Task {

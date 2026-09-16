@@ -1,6 +1,11 @@
 #!/usr/bin/env bun
 import { input, select } from "@inquirer/prompts";
-import { loadCycleData, saveCycleData, type Task } from "./utils.js";
+import {
+	findTaskByIssueId,
+	loadCycleData,
+	saveCycleData,
+	type Task,
+} from "./utils.js";
 
 interface EstimateArgs {
 	issueId?: string;
@@ -44,9 +49,7 @@ function parseEstimateArgs(args: string[]): EstimateArgs {
 
 function findTask(tasks: Task[], issueId?: string): Task | undefined {
 	if (issueId) {
-		return tasks.find(
-			(task) => task.id === issueId || task.id === `MP-${issueId}`,
-		);
+		return findTaskByIssueId(tasks, issueId);
 	}
 
 	const inProgressTasks = tasks.filter(

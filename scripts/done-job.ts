@@ -16,6 +16,7 @@ import {
 import { getLatestCommit } from "./lib/git.js";
 import { fetchIssueDetail, syncSingleIssue } from "./lib/sync.js";
 import {
+	findTaskByIssueId,
 	getSourceType,
 	loadConfig,
 	loadCycleData,
@@ -113,9 +114,7 @@ async function doneJob() {
 		}
 
 		// Find task in local data
-		const localTask = data.tasks.find(
-			(t) => t.id === issueId || t.id === `MP-${issueId}`,
-		);
+		const localTask = findTaskByIssueId(data.tasks, issueId);
 		if (!localTask) {
 			console.error(`Issue ${issueId} not found in local data.`);
 			console.error(
