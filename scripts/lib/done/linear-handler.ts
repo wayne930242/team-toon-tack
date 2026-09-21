@@ -12,9 +12,18 @@ import {
 import { updateParentStatus, updateParentToTesting } from "./parent-issue.js";
 import type { CompletionContext, CompletionResult } from "./types.js";
 
+function logParentUnchanged(
+	parentIssueId: string,
+	unfinishedChildren: string[],
+): void {
+	console.log(
+		`Linear: Parent ${parentIssueId} unchanged (unfinished sub-issues: ${unfinishedChildren.join(", ")})`,
+	);
+}
+
 /**
  * Handle simple completion mode
- * Mark task as done, also mark parent as done if exists
+ * Mark task as done, also mark parent as done once all its sub-issues are finished
  */
 async function handleSimpleCompletion(
 	context: CompletionContext,
@@ -43,12 +52,15 @@ async function handleSimpleCompletion(
 	if (task.parentIssueId) {
 		const result = await updateParentStatus(
 			task.parentIssueId,
+			task.id,
 			transitions.done,
 			localConfig.qa_pm_teams,
 			config,
 		);
 		if (result.success) {
 			console.log(`Linear: Parent ${task.parentIssueId} → ${transitions.done}`);
+		} else if (result.unfinishedChildren?.length) {
+			logParentUnchanged(task.parentIssueId, result.unfinishedChildren);
 		}
 	}
 
@@ -90,13 +102,17 @@ async function handleStrictReview(
 		if (task.parentIssueId && localConfig.qa_pm_teams?.length) {
 			const result = await updateParentToTesting(
 				task.parentIssueId,
+				task.id,
 				localConfig.qa_pm_teams,
 				config,
+				devTestingStatus,
 			);
 			if (result.success) {
 				console.log(
 					`Linear: Parent ${task.parentIssueId} → ${result.testingStatus}`,
 				);
+			} else if (result.unfinishedChildren?.length) {
+				logParentUnchanged(task.parentIssueId, result.unfinishedChildren);
 			}
 		}
 
@@ -153,12 +169,16 @@ async function handleUpstreamCompletion(
 	// Try to update parent to testing
 	let parentUpdateSuccess = false;
 	let parentTestingStatus: string | undefined;
+	// Parent is valid but waits for its other sub-issues; it moves when the last one completes
+	let parentAwaitingSiblings = false;
 
 	if (task.parentIssueId && localConfig.qa_pm_teams?.length) {
 		const result = await updateParentToTesting(
 			task.parentIssueId,
+			task.id,
 			localConfig.qa_pm_teams,
 			config,
+			devTestingStatus,
 		);
 		parentUpdateSuccess = result.success;
 		parentTestingStatus = result.testingStatus;
@@ -167,11 +187,19 @@ async function handleUpstreamCompletion(
 			console.log(
 				`Linear: Parent ${task.parentIssueId} → ${parentTestingStatus}`,
 			);
+		} else if (result.unfinishedChildren?.length) {
+			parentAwaitingSiblings = true;
+			logParentUnchanged(task.parentIssueId, result.unfinishedChildren);
 		}
 	}
 
 	// Fallback logic for upstream_strict
-	if (isStrict && !parentUpdateSuccess && devTestingStatus) {
+	if (
+		isStrict &&
+		!parentUpdateSuccess &&
+		!parentAwaitingSiblings &&
+		devTestingStatus
+	) {
 		// No parent or parent update failed, fallback to testing
 		const fallbackSuccess = await updateIssueStatus(
 			task.linearId,

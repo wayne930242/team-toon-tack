@@ -29,4 +29,6 @@ export interface ParentUpdateResult {
 	success: boolean;
 	status?: string;
 	testingStatus?: string;
+	/** Other sub-issues still open; the parent was left unchanged */
+	unfinishedChildren?: string[];
 }
