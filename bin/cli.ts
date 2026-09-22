@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadDotEnv, resolveLinearApiKey } from "../scripts/lib/env.js";
+import { findAncestorWithTtt } from "../scripts/utils.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // When running from dist/bin/cli.js, we need to go up two levels to find package.json
@@ -57,7 +58,8 @@ COMMANDS:
   version    Show version
 
 GLOBAL OPTIONS:
-  --dir <path>        Config directory (default: .ttt)
+  --dir <path>        Config directory (default: nearest ancestor .ttt,
+                      searched upward from cwd, stopping at $HOME)
                       Can also set via TOON_DIR environment variable
   -d <path>           Shortcut for --dir; ignored for create/edit/comment
                       (where -d means --description)
@@ -100,23 +102,47 @@ function parseGlobalArgs(
 	command: string,
 	args: string[],
 ): {
-	dir: string;
+	/** Resolved config dir, or null when no explicit override applies and no
+	 * ancestor `.ttt` was found - downstream scripts run their own search so
+	 * their error message can report the exact range they tried. */
+	dir: string | null;
 	commandArgs: string[];
 } {
-	let dir = process.env.TOON_DIR || resolve(process.cwd(), ".ttt");
+	let explicitDir: string | undefined;
 	const commandArgs: string[] = [];
 	const allowShortD = !SHORT_D_RESERVED_FOR_SUBCOMMAND.has(command);
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 		if (arg === "--dir" || (allowShortD && arg === "-d")) {
-			dir = resolve(args[++i] || ".");
+			explicitDir = resolve(args[++i] || ".");
 		} else {
 			commandArgs.push(arg);
 		}
 	}
 
-	return { dir, commandArgs };
+	// --dir wins over everything, then TOON_DIR/LINEAR_TOON_DIR, then an
+	// upward search from cwd for the nearest ancestor holding `.ttt`.
+	if (explicitDir) return { dir: explicitDir, commandArgs };
+	if (process.env.TOON_DIR) {
+		return { dir: resolve(process.env.TOON_DIR), commandArgs };
+	}
+	if (process.env.LINEAR_TOON_DIR) {
+		return { dir: resolve(process.env.LINEAR_TOON_DIR), commandArgs };
+	}
+
+	// `init` always targets cwd/.ttt: reusing a discovered ancestor would let
+	// it silently rewrite a shared monorepo-root config from inside a
+	// worktree instead of creating (or reporting) one where the user stands.
+	if (command === "init") {
+		return { dir: resolve(process.cwd(), ".ttt"), commandArgs };
+	}
+
+	const found = findAncestorWithTtt(process.cwd());
+	return {
+		dir: found.dir !== null ? join(found.dir, ".ttt") : null,
+		commandArgs,
+	};
 }
 
 async function main() {
@@ -141,8 +167,12 @@ async function main() {
 	const restArgs = args.slice(1);
 	const { dir, commandArgs } = parseGlobalArgs(command, restArgs);
 
-	// Set TOON_DIR for scripts to use
-	process.env.TOON_DIR = dir;
+	// Set TOON_DIR for scripts to use. When no explicit override applies and
+	// the upward search found nothing, leave it unset so the invoked script's
+	// own resolution reports the exact range it searched.
+	if (dir !== null) {
+		process.env.TOON_DIR = dir;
+	}
 
 	// Load .ttt/.env (if present) and resolve configured Linear API key env
 	// var into LINEAR_API_KEY so downstream code is workspace-aware.
@@ -150,9 +180,11 @@ async function main() {
 	// env — otherwise we'd mirror the previously-saved key over LINEAR_API_KEY
 	// and the user's shell-level key would appear to point to the saved
 	// workspace.
-	await loadDotEnv(join(dir, ".env"));
-	if (command !== "init") {
-		await resolveLinearApiKey(join(dir, "local.toon"));
+	if (dir !== null) {
+		await loadDotEnv(join(dir, ".env"));
+		if (command !== "init") {
+			await resolveLinearApiKey(join(dir, "local.toon"));
+		}
 	}
 
 	if (!COMMANDS.includes(command)) {

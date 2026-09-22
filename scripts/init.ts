@@ -25,7 +25,9 @@ async function init() {
 	}
 
 	const options = parseArgs(args);
-	const paths = getPaths();
+	// `init` always targets cwd/.ttt, never a discovered ancestor - see
+	// getPaths' doc comment.
+	const paths = getPaths({ search: false });
 
 	// Convert paths to InitPaths format
 	const initPaths: InitPaths = {

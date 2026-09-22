@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { LinearClient } from "@linear/sdk";
 // decode uses { strict: false } because encode() produces inline arrays
@@ -6,29 +8,85 @@ import { LinearClient } from "@linear/sdk";
 import { decode, encode } from "@toon-format/toon";
 import type { SourceIssue } from "./lib/adapters/types.js";
 
+export interface AncestorSearch {
+	/** Directory the search started from (the process cwd). */
+	from: string;
+	/** Last directory checked before the search gave up ($HOME or the filesystem root). */
+	to: string;
+}
+
+/**
+ * Walk up from `startDir` looking for a `.ttt` directory, stopping at $HOME
+ * or the filesystem root, whichever comes first, so the search never escapes
+ * the user's home tree. Returns the directory that holds `.ttt` (not the
+ * `.ttt` path itself), or `null` with the searched range when none is found.
+ */
+export function findAncestorWithTtt(
+	startDir: string,
+): { dir: string } | { dir: null; search: AncestorSearch } {
+	const home = process.env.HOME || os.homedir();
+	let dir = startDir;
+	for (;;) {
+		if (existsSync(path.join(dir, ".ttt"))) {
+			return { dir };
+		}
+		if (dir === home) break;
+		const parent = path.dirname(dir);
+		if (parent === dir) break; // filesystem root
+		dir = parent;
+	}
+	return { dir: null, search: { from: startDir, to: dir } };
+}
+
 // Resolve base directory - supports multiple configuration methods
-function getBaseDir(): string {
-	// 1. Check for TOON_DIR environment variable (set by CLI or user)
+function resolveBaseDir(searchAncestors: boolean): {
+	baseDir: string;
+	search: AncestorSearch | null;
+} {
+	// 1. Check for TOON_DIR environment variable (set by CLI or user) - wins
+	// over the upward search, same as an explicit --dir.
 	if (process.env.TOON_DIR) {
-		return path.resolve(process.env.TOON_DIR);
+		return { baseDir: path.resolve(process.env.TOON_DIR), search: null };
 	}
 
 	// 2. Check for legacy LINEAR_TOON_DIR environment variable
 	if (process.env.LINEAR_TOON_DIR) {
-		return path.resolve(process.env.LINEAR_TOON_DIR);
+		return { baseDir: path.resolve(process.env.LINEAR_TOON_DIR), search: null };
 	}
 
-	// 3. Default: .ttt directory in current working directory
-	return path.join(process.cwd(), ".ttt");
+	const cwd = process.cwd();
+
+	// 3. `init` (and anything else that opts out) always targets cwd/.ttt:
+	// reusing a discovered ancestor would let it silently rewrite a shared
+	// monorepo-root config from inside a worktree.
+	if (!searchAncestors) {
+		return { baseDir: path.join(cwd, ".ttt"), search: null };
+	}
+
+	// 4. Walk up from cwd to the nearest ancestor holding `.ttt` (monorepo
+	// root, typically), so commands work from nested submodules/worktrees.
+	const found = findAncestorWithTtt(cwd);
+	if (found.dir !== null) {
+		return { baseDir: path.join(found.dir, ".ttt"), search: null };
+	}
+
+	// 5. Nothing found anywhere up the chain - fall back to cwd/.ttt so the
+	// caller's error message can report the exact directory it tried, plus
+	// the range it searched.
+	return { baseDir: path.join(cwd, ".ttt"), search: found.search };
 }
 
 /**
  * Resolved on every call, so a TOON_DIR set after this module loads still
  * applies. Caching it at module load made the base directory depend on import
  * order.
+ *
+ * Pass `{ search: false }` to opt out of the upward ancestor search (used by
+ * `init`, which must always target cwd/.ttt regardless of what a parent
+ * directory holds).
  */
-export function getPaths() {
-	const baseDir = getBaseDir();
+export function getPaths(opts: { search?: boolean } = {}) {
+	const { baseDir, search } = resolveBaseDir(opts.search ?? true);
 	return {
 		baseDir,
 		configPath: path.join(baseDir, "config.toon"),
@@ -36,6 +94,8 @@ export function getPaths() {
 		localPath: path.join(baseDir, "local.toon"),
 		outputPath: path.join(baseDir, "output"),
 		envPath: path.join(baseDir, ".env"),
+		/** Set only when no ancestor `.ttt` was found, for error messages. */
+		search,
 	};
 }
 
@@ -221,25 +281,35 @@ export async function fileExists(filePath: string): Promise<boolean> {
 	}
 }
 
+function reportSearchRange(search: AncestorSearch | null): void {
+	if (search) {
+		console.error(
+			`No .ttt directory found from ${search.from} up to ${search.to}.`,
+		);
+	}
+}
+
 export async function loadConfig(): Promise<Config> {
-	const { configPath } = getPaths();
+	const { configPath, search } = getPaths();
 	try {
 		const fileContent = await fs.readFile(configPath, "utf-8");
 		return decode(fileContent, { strict: false }) as unknown as Config;
 	} catch (error) {
 		console.error(`Error loading config from ${configPath}:`, error);
+		reportSearchRange(search);
 		console.error("Run `bun run init` to create configuration files.");
 		process.exit(1);
 	}
 }
 
 export async function loadLocalConfig(): Promise<LocalConfig> {
-	const { localPath } = getPaths();
+	const { localPath, search } = getPaths();
 	try {
 		const fileContent = await fs.readFile(localPath, "utf-8");
 		return decode(fileContent, { strict: false }) as unknown as LocalConfig;
 	} catch {
 		console.error(`Error: ${localPath} not found.`);
+		reportSearchRange(search);
 		console.error("Run `bun run init` to create local configuration.");
 		process.exit(1);
 	}
