@@ -12,6 +12,17 @@ import {
 import { updateParentStatus, updateParentToTesting } from "./parent-issue.js";
 import type { CompletionContext, CompletionResult } from "./types.js";
 
+/** Linear calls the completion handlers make; injectable so tests need no network. */
+export interface CompletionDeps {
+	updateIssueStatus: typeof updateIssueStatus;
+	updateParentToTesting: typeof updateParentToTesting;
+}
+
+const defaultDeps: CompletionDeps = { updateIssueStatus, updateParentToTesting };
+
+const STRICT_FALLBACK_HINT =
+	'completion_mode is upstream_strict; set it to "upstream_not_strict" or "simple" (ttt config) to keep Done';
+
 function logParentUnchanged(
 	parentIssueId: string,
 	unfinishedChildren: string[],
@@ -144,9 +155,10 @@ async function handleStrictReview(
  * Handle upstream completion modes (upstream_strict and upstream_not_strict)
  * Mark as done, then update parent to testing
  */
-async function handleUpstreamCompletion(
+export async function handleUpstreamCompletion(
 	context: CompletionContext,
 	isStrict: boolean,
+	deps: CompletionDeps = defaultDeps,
 ): Promise<CompletionResult> {
 	const { task, config, localConfig } = context;
 	const transitions = getStatusTransitions(config);
@@ -155,8 +167,37 @@ async function handleUpstreamCompletion(
 	const devTestingStatus =
 		localConfig.dev_testing_status || transitions.testing;
 
+	const canUpdateParent = Boolean(
+		task.parentIssueId && localConfig.qa_pm_teams?.length,
+	);
+
+	// upstream_strict with nothing to hand off to ends in testing anyway, so go
+	// there directly instead of writing Done and overwriting it a moment later
+	if (isStrict && !canUpdateParent && devTestingStatus) {
+		const reason = task.parentIssueId
+			? "qa_pm_teams is not configured"
+			: "no parent issue";
+		const success = await deps.updateIssueStatus(
+			task.linearId,
+			devTestingStatus,
+			config,
+			localConfig.team,
+		);
+		if (success) {
+			console.log(
+				`Linear: ${task.id} → ${devTestingStatus} (${reason}; ${STRICT_FALLBACK_HINT})`,
+			);
+			return { success: true, status: devTestingStatus };
+		}
+		return {
+			success: false,
+			status: task.status,
+			message: `Failed to move ${task.id} to ${devTestingStatus}`,
+		};
+	}
+
 	// First, mark as done
-	const doneSuccess = await updateIssueStatus(
+	const doneSuccess = await deps.updateIssueStatus(
 		task.linearId,
 		transitions.done,
 		config,
@@ -172,11 +213,11 @@ async function handleUpstreamCompletion(
 	// Parent is valid but waits for its other sub-issues; it moves when the last one completes
 	let parentAwaitingSiblings = false;
 
-	if (task.parentIssueId && localConfig.qa_pm_teams?.length) {
-		const result = await updateParentToTesting(
+	if (task.parentIssueId && canUpdateParent) {
+		const result = await deps.updateParentToTesting(
 			task.parentIssueId,
 			task.id,
-			localConfig.qa_pm_teams,
+			localConfig.qa_pm_teams ?? [],
 			config,
 			devTestingStatus,
 		);
@@ -200,8 +241,8 @@ async function handleUpstreamCompletion(
 		!parentAwaitingSiblings &&
 		devTestingStatus
 	) {
-		// No parent or parent update failed, fallback to testing
-		const fallbackSuccess = await updateIssueStatus(
+		// Parent could not be moved to testing, fallback to testing
+		const fallbackSuccess = await deps.updateIssueStatus(
 			task.linearId,
 			devTestingStatus,
 			config,
@@ -209,7 +250,7 @@ async function handleUpstreamCompletion(
 		);
 		if (fallbackSuccess) {
 			console.log(
-				`Linear: ${task.id} → ${devTestingStatus} (fallback, no valid parent)`,
+				`Linear: ${task.id} → ${devTestingStatus} (fallback: parent ${task.parentIssueId} could not be moved to testing - its team is not in qa_pm_teams or the update failed; ${STRICT_FALLBACK_HINT})`,
 			);
 			return { success: true, status: devTestingStatus };
 		}

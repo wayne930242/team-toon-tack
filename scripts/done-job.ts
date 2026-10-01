@@ -13,6 +13,10 @@ import {
 	parseArgs,
 	printHelp,
 } from "./lib/done/index.js";
+import {
+	describeNotInProgress,
+	syncUntilStatus,
+} from "./lib/done/status-check.js";
 import { getLatestCommit } from "./lib/git.js";
 import { fetchIssueDetail, syncSingleIssue } from "./lib/sync.js";
 import {
@@ -37,6 +41,8 @@ async function doneJob() {
 		issueId: argIssueId,
 		message: argMessage,
 		fromRemote,
+		commit: commitRef,
+		repo,
 	} = parseArgs(args);
 	let issueId = argIssueId;
 
@@ -77,7 +83,9 @@ async function doneJob() {
 			(t) => t.localStatus === "in-progress",
 		);
 
-		if (inProgressTasks.length === 0) {
+		// With an explicit issue ID, fall through so the status guard below can
+		// say why that ticket cannot be completed
+		if (inProgressTasks.length === 0 && !issueId) {
 			console.log("沒有進行中的任務");
 			process.exit(0);
 		}
@@ -124,17 +132,21 @@ async function doneJob() {
 		}
 
 		if (localTask.localStatus !== "in-progress") {
-			console.log(
-				`⚠️ 任務 ${localTask.id} 不在進行中狀態 (目前: ${localTask.localStatus})`,
-			);
+			console.error(describeNotInProgress(localTask));
 			process.exit(1);
 		}
 
 		task = localTask;
 	}
 
-	// Get latest commit
-	const commit = getLatestCommit();
+	// Get the commit to record: HEAD by default, or the one named with --commit
+	const commit = getLatestCommit({ ref: commitRef, cwd: repo });
+	if ((commitRef || repo) && !commit) {
+		console.error(
+			`Cannot read commit ${commitRef ?? "HEAD"} from ${repo ?? "the current directory"}. Nothing was changed.`,
+		);
+		process.exit(1);
+	}
 
 	// Get AI summary message
 	let promptMessage = argMessage || "";
@@ -184,11 +196,17 @@ async function doneJob() {
 
 	// Sync full issue data from remote (including new comment)
 	if (sourceType === "linear") {
-		const syncedTask = await syncSingleIssue(task.id, {
-			config,
-			localConfig,
-			preserveLocalStatus: false, // Let remote status determine local status
-		});
+		// Let remote status determine local status; wait out read-after-write lag
+		// so a stale read is not recorded as the local state
+		const syncedTask = await syncUntilStatus(
+			() =>
+				syncSingleIssue(task.id, {
+					config,
+					localConfig,
+					preserveLocalStatus: false,
+				}),
+			completionResult?.status,
+		);
 
 		if (syncedTask) {
 			console.log(
@@ -200,7 +218,7 @@ async function doneJob() {
 				syncedTask.status !== completionResult.status
 			) {
 				console.error(
-					`Remote status verification failed for ${task.id}: expected ${completionResult.status}, got ${syncedTask.status}.`,
+					`Remote status verification failed for ${task.id}: expected ${completionResult.status}, got ${syncedTask.status}. Another actor (e.g. a Git integration or automation) may have changed it; check the issue in Linear.`,
 				);
 				process.exit(1);
 			}
@@ -235,4 +253,7 @@ async function doneJob() {
 	console.log(`\n🎉 任務完成！`);
 }
 
-doneJob().catch(console.error);
+doneJob().catch((error) => {
+	console.error(error instanceof Error ? error.message : error);
+	process.exitCode = 1;
+});

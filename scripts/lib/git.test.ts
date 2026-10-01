@@ -66,3 +66,64 @@ test("getLatestCommit reflects the process cwd, not some other repo", async () =
 		rmSync(inner.dir, { recursive: true, force: true });
 	}
 });
+
+test("getLatestCommit({ ref, cwd }) describes that commit of that repo, not HEAD of the process cwd", async () => {
+	const { getLatestCommit } = await import("./git.js");
+	const repo = makeGitRepo("explicit");
+
+	try {
+		const firstHash = execSync("git rev-parse HEAD~1", {
+			cwd: repo.dir,
+			encoding: "utf-8",
+		}).trim();
+
+		// The test process runs from the ttt repo, so cwd must be honoured.
+		const commit = getLatestCommit({ ref: firstHash, cwd: repo.dir });
+
+		assert.equal(commit?.fullHash, firstHash);
+		assert.equal(commit?.message, "explicit first commit");
+		assert.equal(getLatestCommit({ cwd: repo.dir })?.fullHash, repo.headHash);
+	} finally {
+		rmSync(repo.dir, { recursive: true, force: true });
+	}
+});
+
+test("getLatestCommit with a ref diffs that commit against its parent only", async () => {
+	const { getLatestCommit } = await import("./git.js");
+	const repo = makeGitRepo("stat");
+
+	try {
+		// A later uncommitted edit must not leak into an older commit's stat.
+		writeFileSync(path.join(repo.dir, "other.txt"), "uncommitted\n");
+		execSync("git add other.txt", { cwd: repo.dir });
+
+		const commit = getLatestCommit({ ref: repo.headHash, cwd: repo.dir });
+
+		assert.match(commit?.diffStat ?? "", /file\.txt/);
+		assert.doesNotMatch(commit?.diffStat ?? "", /other\.txt/);
+	} finally {
+		rmSync(repo.dir, { recursive: true, force: true });
+	}
+});
+
+test("getLatestCommit returns null for an unknown ref and keeps a root commit", async () => {
+	const { getLatestCommit } = await import("./git.js");
+	const repo = makeGitRepo("root");
+
+	try {
+		assert.equal(
+			getLatestCommit({ ref: "deadbeefnotacommit", cwd: repo.dir }),
+			null,
+		);
+
+		const rootHash = execSync("git rev-list --max-parents=0 HEAD", {
+			cwd: repo.dir,
+			encoding: "utf-8",
+		}).trim();
+		const root = getLatestCommit({ ref: rootHash, cwd: repo.dir });
+		assert.equal(root?.fullHash, rootHash);
+		assert.equal(root?.diffStat, "");
+	} finally {
+		rmSync(repo.dir, { recursive: true, force: true });
+	}
+});

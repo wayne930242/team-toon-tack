@@ -9,6 +9,10 @@ export interface DoneArgs {
 	issueId?: string;
 	message?: string;
 	fromRemote: boolean;
+	/** Commit-ish to record instead of HEAD */
+	commit?: string;
+	/** Git repository to read the commit from */
+	repo?: string;
 }
 
 export interface CompletionContext {
