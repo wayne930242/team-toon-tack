@@ -5,6 +5,7 @@ import { input, select } from "@inquirer/prompts";
 import { createAdapter } from "./lib/adapters/index.js";
 import type {
 	CreateIssueOptions,
+	SourceLabel,
 	TaskSourceAdapter,
 } from "./lib/adapters/types.js";
 import {
@@ -137,26 +138,64 @@ async function resolveStatusId(
 	return target.id;
 }
 
-function resolveLabelIds(
+/**
+ * Resolve `-l` names to label ids. Config is checked first (key or display
+ * name); anything it does not know is looked up live in the source, so a
+ * label added after `ttt init` still works.
+ */
+export async function resolveLabelIds(
 	config: Config,
-	labelArg?: string,
-): string[] | undefined {
-	if (!labelArg || !config.labels) return undefined;
-	const names = labelArg.split(",").map((n) => n.trim());
+	labelArg: string | undefined,
+	fetchSourceLabels: () => Promise<SourceLabel[]>,
+): Promise<string[] | undefined> {
+	if (!labelArg) return undefined;
+	const names = labelArg
+		.split(",")
+		.map((n) => n.trim())
+		.filter(Boolean);
 	const ids: string[] = [];
+	const unresolved: string[] = [];
+
 	for (const name of names) {
 		const lower = name.toLowerCase();
 		// Match by config key (e.g. "backend_v3") OR display name (e.g. "Backend-v3")
-		const entry = Object.entries(config.labels).find(
+		const entry = Object.entries(config.labels ?? {}).find(
 			([key, l]) =>
 				key.toLowerCase() === lower || l.name.toLowerCase() === lower,
 		);
 		if (entry) {
 			ids.push(entry[1].id);
 		} else {
-			console.error(`Warning: label "${name}" not found in config, skipping.`);
+			unresolved.push(name);
 		}
 	}
+
+	if (unresolved.length > 0) {
+		let sourceLabels: SourceLabel[] | undefined;
+		try {
+			sourceLabels = await fetchSourceLabels();
+		} catch {
+			// Fall through to the config-only warning below
+		}
+
+		for (const name of unresolved) {
+			const found = sourceLabels?.find(
+				(l) => l.name.toLowerCase() === name.toLowerCase(),
+			);
+			if (found) {
+				ids.push(found.id);
+			} else if (sourceLabels) {
+				console.error(
+					`Warning: label "${name}" not found in config or in the source, skipping. Available: ${sourceLabels.map((l) => l.name).join(", ")}`,
+				);
+			} else {
+				console.error(
+					`Warning: label "${name}" not found in config (source lookup failed), skipping.`,
+				);
+			}
+		}
+	}
+
 	return ids.length > 0 ? ids : undefined;
 }
 
@@ -280,7 +319,9 @@ Examples:
 		teamId,
 		sourceType === "trello" && !statusName ? "todo" : statusName,
 	);
-	const labelIds = resolveLabelIds(config, labelArg);
+	const labelIds = await resolveLabelIds(config, labelArg, () =>
+		adapter.getLabels(teamId),
+	);
 	const parentSourceId = await resolveParentSourceId(adapter, parentId);
 
 	const currentCycle = await adapter.getCurrentCycle(teamId);

@@ -123,3 +123,45 @@ test("LinearAdapter.cancelIssue fails loudly instead of silently succeeding when
 		globalThis.fetch = originalFetch;
 	}
 });
+
+test("LinearAdapter.getLabels asks for team and workspace labels, up to a full page", async () => {
+	const originalFetch = globalThis.fetch;
+	let variables: Record<string, unknown> | undefined;
+	globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+		const body = JSON.parse(String(init?.body));
+		if (!String(body.query).includes("query issueLabels(")) {
+			throw new Error(
+				`Unmocked Linear query: ${String(body.query).slice(0, 80)}`,
+			);
+		}
+		variables = body.variables;
+		return jsonResponse({
+			issueLabels: {
+				__typename: "IssueLabelConnection",
+				nodes: [
+					{
+						__typename: "IssueLabel",
+						id: "label-bug",
+						name: "Bug",
+						color: "#eb5757",
+					},
+				],
+				pageInfo: { __typename: "PageInfo", hasNextPage: false },
+			},
+		});
+	}) as typeof fetch;
+
+	try {
+		const labels = await new LinearAdapter().getLabels("team-1");
+
+		assert.deepEqual(variables?.filter, {
+			or: [{ team: { id: { eq: "team-1" } } }, { team: { null: true } }],
+		});
+		assert.equal(variables?.first, 250);
+		assert.deepEqual(labels, [
+			{ id: "label-bug", name: "Bug", color: "#eb5757" },
+		]);
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});

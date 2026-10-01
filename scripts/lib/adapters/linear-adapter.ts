@@ -78,8 +78,13 @@ export class LinearAdapter implements TaskSourceAdapter {
 	}
 
 	async getLabels(teamId: string): Promise<SourceLabel[]> {
+		// Workspace-level labels have no team, so a team-only filter misses them
+		// even though they can be attached to this team's issues
 		const labelsData = await this.client.issueLabels({
-			filter: { team: { id: { eq: teamId } } },
+			filter: {
+				or: [{ team: { id: { eq: teamId } } }, { team: { null: true } }],
+			},
+			first: 250,
 		});
 		return labelsData.nodes.map((label) => ({
 			id: label.id,
