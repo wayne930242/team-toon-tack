@@ -1,6 +1,6 @@
 ---
 name: managing-linear-tasks
-description: Use when the user mentions Linear or Trello issues, references issue IDs like MP-123, or asks to sync, show, start, complete, create, assign, edit, cancel, comment on, or check status of tasks.
+description: Use when the user mentions Linear or Trello issues, mentions `ttt`, references issue IDs like MP-123, or asks to sync, show, start, complete, create, assign, edit, cancel, comment on, or check status of tasks.
 ---
 
 ## 執行方式
