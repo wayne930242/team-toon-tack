@@ -22,13 +22,15 @@ interface SearchFilters {
 	priority?: number;
 }
 
-function taskToMarkdown(task: Task): string {
+function taskToMarkdown(task: Task, includeLocal = true): string {
 	const lines: string[] = [];
 	const priority = PRIORITY_LABELS[task.priority] || "None";
 
 	lines.push(`## ${task.id}: ${task.title}`);
 	lines.push("");
-	lines.push(`- **Status**: ${task.status} (Local: ${task.localStatus})`);
+	lines.push(
+		`- **Status**: ${task.status}${includeLocal ? ` (Local: ${task.localStatus})` : ""}`,
+	);
 	lines.push(`- **Priority**: ${priority}`);
 	lines.push(
 		`- **Labels**: ${task.labels.length > 0 ? task.labels.join(", ") : "-"}`,
@@ -483,18 +485,20 @@ Examples:
 		}
 
 		// Check local data for local status
+		let hasLocal = false;
 		const data = await loadCycleData();
 		if (data) {
 			const localTask = data.tasks.find((t) => t.id === issueId);
 			if (localTask) {
 				task.localStatus = localTask.localStatus;
+				hasLocal = true;
 			}
 		}
 
 		if (exportMarkdown) {
-			console.log(taskToMarkdown(task));
+			console.log(taskToMarkdown(task, hasLocal));
 		} else {
-			displayTaskFull(task, "📋");
+			displayTaskFull(task, "📋", { status: { local: hasLocal } });
 		}
 		return;
 	}
@@ -518,7 +522,7 @@ Examples:
 	if (exportMarkdown) {
 		console.log(taskToMarkdown(task));
 	} else {
-		displayTaskFull(task, "📋");
+		displayTaskFull(task, "📋", { status: { local: true } });
 	}
 }
 

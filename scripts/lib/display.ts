@@ -32,10 +32,28 @@ export function displayTaskHeader(task: Task, icon?: string): void {
 	console.log(separator);
 }
 
-export function displayTaskInfo(task: Task): void {
+export interface TaskDisplayOptions {
+	/** Print the source status (and local status when `local` is set) and assignee even if empty */
+	status?: { local: boolean };
+}
+
+export function formatStatusLine(task: Task, includeLocal: boolean): string {
+	return includeLocal
+		? `Status: ${task.status} (Local: ${task.localStatus})`
+		: `Status: ${task.status}`;
+}
+
+export function displayTaskInfo(
+	task: Task,
+	options: TaskDisplayOptions = {},
+): void {
+	if (options.status) {
+		console.log(formatStatusLine(task, options.status.local));
+	}
 	console.log(`Priority: ${PRIORITY_LABELS[task.priority] || "None"}`);
 	console.log(`Labels: ${task.labels.join(", ")}`);
 	if (task.assignee) console.log(`Assignee: ${task.assignee}`);
+	else if (options.status) console.log("Assignee: Unassigned");
 	if (task.estimate) {
 		const suffix = task.estimate.note ? ` (${task.estimate.note})` : "";
 		console.log(`Estimate: ${task.estimate.hours}h${suffix}`);
@@ -95,9 +113,13 @@ export function displayTaskFooter(): void {
 	console.log(`\n${"─".repeat(50)}`);
 }
 
-export function displayTaskFull(task: Task, icon?: string): void {
+export function displayTaskFull(
+	task: Task,
+	icon?: string,
+	options: TaskDisplayOptions = {},
+): void {
 	displayTaskHeader(task, icon);
-	displayTaskInfo(task);
+	displayTaskInfo(task, options);
 	displayTaskDescription(task);
 	displayTaskAttachments(task);
 	displayTaskComments(task);
