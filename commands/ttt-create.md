@@ -45,7 +45,7 @@ Options:
   -d, --description <text> Description
   -a, --assignee <key>     Assignee user key from config
   -p, --priority <0-4>     Priority (0=none, 1=urgent, 2=high, 3=medium, 4=low)
-  -l, --label <names>      Label names (comma-separated)
+  -l, --label <names>      Label names (comma-separated; config first, then looked up live in Linear)
   -s, --status <name>      Initial status name
   --parent <id>            Parent issue identifier (e.g., MP-100)
   --no-interactive         Skip interactive prompts

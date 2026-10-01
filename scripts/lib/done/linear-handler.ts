@@ -18,7 +18,10 @@ export interface CompletionDeps {
 	updateParentToTesting: typeof updateParentToTesting;
 }
 
-const defaultDeps: CompletionDeps = { updateIssueStatus, updateParentToTesting };
+const defaultDeps: CompletionDeps = {
+	updateIssueStatus,
+	updateParentToTesting,
+};
 
 const STRICT_FALLBACK_HINT =
 	'completion_mode is upstream_strict; set it to "upstream_not_strict" or "simple" (ttt config) to keep Done';

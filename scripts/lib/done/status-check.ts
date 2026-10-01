@@ -10,7 +10,9 @@ import type { Task } from "../../utils.js";
  * the message names the two ways forward.
  */
 export function describeNotInProgress(task: Pick<Task, "id" | "localStatus">) {
-	const lines = [`⚠️ 任務 ${task.id} 不在進行中狀態 (目前: ${task.localStatus})`];
+	const lines = [
+		`⚠️ 任務 ${task.id} 不在進行中狀態 (目前: ${task.localStatus})`,
+	];
 
 	if (task.localStatus === "completed" || task.localStatus === "in-review") {
 		lines.push(
@@ -51,7 +53,10 @@ export async function syncUntilStatus(
 	let task = await sync();
 	for (
 		let attempt = 1;
-		task && expectedStatus && task.status !== expectedStatus && attempt < attempts;
+		task &&
+		expectedStatus &&
+		task.status !== expectedStatus &&
+		attempt < attempts;
 		attempt++
 	) {
 		await sleep(delayMs);

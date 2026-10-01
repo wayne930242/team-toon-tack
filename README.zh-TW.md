@@ -58,7 +58,7 @@ ttt init
 |------|------|
 | `simple` | 任務標記為 Done，parent 也標記為 Done。未設定 QA 團隊時的預設值。 |
 | `strict_review` | 任務標記到開發團隊的 testing 狀態，parent 標記到 QA 團隊的 testing 狀態。 |
-| `upstream_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent，fallback 到開發團隊的 testing 狀態。設定 QA 團隊時的預設值。 |
+| `upstream_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent，fallback 到開發團隊的 testing 狀態（此時任務直接進 testing，不會先寫 Done）。設定 QA 團隊時的預設值。 |
 | `upstream_not_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent 不做 fallback。 |
 
 > **注意**：Trello 因不支援 parent issue，一律使用簡單完成模式。
@@ -181,9 +181,13 @@ ttt done                         # 若只有一個進行中，自動選擇
 ttt done MP-123                  # 指定 issue
 ttt done -m "修復了錯誤"           # 附上完成說明
 ttt done MP-123 --from-remote    # 從遠端取得（略過本地資料檢查）
+ttt done MP-123 --commit 1a2b3c4 # 記錄指定 commit，而非目前 HEAD
+ttt done MP-123 --commit 1a2b3c4 --repo ~/projects/app   # ...從另一個 repository 讀取
 ```
 
-當 issue 存在於遠端但未同步到本地資料時，使用 `--from-remote`（或 `-r`）。
+當 issue 存在於遠端但未同步到本地資料，或 ticket 仍是 Todo、想不經 `ttt claim`（不多一次 In Progress 轉換）直接完成時，使用 `--from-remote`（或 `-r`）。不加此參數時，`ttt done` 只接受進行中的任務。
+
+要關閉 commit 早已合併的 ticket，用 `--commit <sha>`（commit 在另一個 checkout 時再加 `--repo <path>`）。未指定時記錄目前的 HEAD。
 
 ### `ttt status`
 

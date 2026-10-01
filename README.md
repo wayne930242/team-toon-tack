@@ -58,7 +58,7 @@ During init, you'll be prompted to select your task source (Linear or Trello) an
 |------|----------|
 | `simple` | Mark task as Done + parent as Done. Default when no QA team configured. |
 | `strict_review` | Mark task to dev testing + parent to QA testing. |
-| `upstream_strict` | Mark task as Done + parent to Testing. Falls back to dev testing if no parent. Default when QA team configured. |
+| `upstream_strict` | Mark task as Done + parent to Testing. Falls back to dev testing if no parent (the task then goes straight to testing, without a Done step). Default when QA team configured. |
 | `upstream_not_strict` | Mark task as Done + parent to Testing. No fallback if no parent. |
 
 > **Note:** Trello always uses simple completion mode as it doesn't support parent issues.
@@ -181,9 +181,13 @@ ttt done                         # Auto-select if only one in-progress
 ttt done MP-123                  # Specific issue
 ttt done -m "Fixed the bug"      # With completion message
 ttt done MP-123 --from-remote    # Fetch from remote (bypasses local data check)
+ttt done MP-123 --commit 1a2b3c4 # Record this commit instead of HEAD
+ttt done MP-123 --commit 1a2b3c4 --repo ~/projects/app   # ...read from another repository
 ```
 
-Use `--from-remote` (or `-r`) when the issue exists in remote but not in local sync data.
+Use `--from-remote` (or `-r`) when the issue exists in remote but not in local sync data, or when the ticket is still Todo and you want to complete it without `ttt claim` (no extra In Progress transition). `ttt done` without it only accepts in-progress tasks.
+
+Use `--commit <sha>` (and `--repo <path>` when the commit lives in another checkout) to close a ticket whose commit was merged earlier. Without it, the current HEAD is recorded.
 
 ### `ttt status`
 

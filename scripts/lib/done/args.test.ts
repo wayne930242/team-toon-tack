@@ -32,5 +32,8 @@ test("parseArgs leaves commit and repo unset by default", () => {
 
 test("parseArgs rejects --commit or --repo without a value", () => {
 	assert.throws(() => parseArgs(["MP-1", "--commit"]), /--commit requires/);
-	assert.throws(() => parseArgs(["--repo", "--from-remote"]), /--repo requires/);
+	assert.throws(
+		() => parseArgs(["--repo", "--from-remote"]),
+		/--repo requires/,
+	);
 });

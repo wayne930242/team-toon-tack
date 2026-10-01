@@ -58,6 +58,8 @@ ttt status MP-624 --set +1  # Advance status
 ttt comment MP-624 -m "msg" # Add comment to issue
 ttt comment -m "msg"        # Comment on current task
 ttt done -m "summary"       # Complete with message
+ttt done MP-624 --commit <sha> [--repo <path>]  # Close a ticket with an earlier commit
+ttt done MP-624 --from-remote  # Complete a Todo ticket without claiming it first
 ```
 
 ## Prerequisites

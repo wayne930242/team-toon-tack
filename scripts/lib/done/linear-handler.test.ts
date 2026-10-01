@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, test } from "bun:test";
 import assert from "node:assert/strict";
 import type { Config, LocalConfig, Task } from "../../utils.js";
-import { type CompletionDeps, handleUpstreamCompletion } from "./linear-handler.js";
+import {
+	type CompletionDeps,
+	handleUpstreamCompletion,
+} from "./linear-handler.js";
 import type { CompletionContext, ParentUpdateResult } from "./types.js";
 
 const config = {
@@ -93,7 +96,10 @@ test("upstream_strict with a parent that cannot move falls back and explains the
 });
 
 test("upstream_strict keeps Done when the parent moves to testing", async () => {
-	const { deps, writes } = fakeDeps({ success: true, testingStatus: "Testing" });
+	const { deps, writes } = fakeDeps({
+		success: true,
+		testingStatus: "Testing",
+	});
 
 	const result = await handleUpstreamCompletion(
 		context({ parentIssueId: "PM-9" }, { qa_pm_teams: qaPm }),
