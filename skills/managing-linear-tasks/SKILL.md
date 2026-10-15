@@ -44,9 +44,12 @@ ttt sync MP-624             # Sync specific issue
 ttt show                    # List all local issues
 ttt show MP-624             # Show issue details
 ttt show --user me          # My issues
+ttt show --remote --status Backlog --creator me  # Backlog tickets I created (any cycle)
+ttt show --remote --status Backlog --user me     # Backlog tickets assigned to me
 ttt claim next              # Claim highest priority pending task
 ttt claim next 3            # Claim top 3 pending tasks
 ttt claim MP-624 MP-625     # Batch claim (alias: ttt work-on)
+ttt claim MP-700            # Not in local data (e.g. Backlog)? Fetched from remote, then claimed
 ttt create                  # Create new issue (interactive)
 ttt create -t "Title" -p 2  # Quick create with flags
 ttt assign MP-624 -a john   # Reassign issue

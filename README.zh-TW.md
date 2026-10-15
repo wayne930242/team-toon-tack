@@ -159,7 +159,10 @@ ttt claim --dry-run        # 預覽，不改狀態
 ```
 
 已完成、審核中、blocked 的票會逐張回報並跳過，不中斷整批。
-批次中出現不存在的 ID 時，整批在動任何票之前中止。
+本地資料沒有的 ID（例如不在 cycle 內的 Backlog 票）會從來源抓回、存進本地，再照一般流程領票；
+加 `--dry-run` 時只顯示、不存入。本地與來源都找不到的 ID，整批在動任何票之前中止。
+已關閉（完成或取消）的票會回報並跳過。
+注意：完整的 `ttt sync` 會依目前 cycle 重寫本地資料，不在 cycle 內的票下次同步後會消失（仍可用 `ttt done <id> --from-remote` 完成）。
 
 ### `ttt estimate`
 
@@ -213,7 +216,17 @@ ttt show --label frontend      # 依標籤過濾
 ttt show --status "In Progress" --user me   # 我進行中的 issue
 ttt show --priority 1          # 顯示緊急 issue
 ttt show --export              # 輸出為 markdown 格式
+ttt show --remote --status Backlog --creator me   # 我建立的 Backlog 票
+ttt show --remote --status Backlog --user me      # 指派給我的 Backlog 票
+ttt show --remote --any-cycle --creator me        # 我建立、不限 cycle 的票
 ```
+
+兩個選項可把 `--remote` 搜尋範圍放寬到 `ttt sync` 之外（都必須搭配 `--remote`，否則直接報錯，不會默默忽略）：
+
+- `--creator <me|email|name>`：依建立者過濾（僅 Linear；Trello 卡片沒有建立者，會報錯）。
+  未指定 `--user` 時會解除指派對象的限制，因此你建給別人或未指派的票也找得到。
+- `--any-cycle`：不限目前 cycle。`--status Backlog` 會自動帶上它，因為 Backlog 票通常不屬於任何 cycle。
+  Trello 沒有 cycle，所以在 Trello 上沒有作用。
 
 ### `ttt config`
 

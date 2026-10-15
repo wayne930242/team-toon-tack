@@ -20,6 +20,12 @@ arguments:
   - name: remote
     description: Fetch from Linear API instead of local data
     required: false
+  - name: creator
+    description: "Filter by creator ('me', email, or name). Needs remote; Linear only"
+    required: false
+  - name: any-cycle
+    description: Search outside the current cycle. Needs remote
+    required: false
   - name: export
     description: Output as markdown format
     required: false
@@ -43,6 +49,8 @@ ttt show {{ issue-id }} \
   {{ "--status \"" + status + "\"" if status }} \
   {{ "--user " + user if user }} \
   {{ "--priority " + priority if priority }} \
+  {{ "--creator " + creator if creator }} \
+  {{ "--any-cycle" if any-cycle }} \
   {{ "--remote" if remote }} \
   {{ "--export" if export }}
 ```
@@ -58,6 +66,9 @@ ttt show --label frontend                   # Filter by label
 ttt show --status "In Progress" --user me   # My in-progress issues
 ttt show --priority 1                       # All urgent issues
 ttt show --export                           # Export all as markdown
+ttt show --remote --status Backlog --creator me   # Backlog tickets I created
+ttt show --remote --status Backlog --user me      # Backlog tickets assigned to me
+ttt show --remote --any-cycle --creator me        # My tickets in any cycle
 ```
 
 ## Full CLI Reference
@@ -75,7 +86,13 @@ Options:
   --status <status>     Filter by status
   --user <email>        Filter by assignee ("me", "unassigned", or email)
   --priority <n>        Filter by priority (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low)
+  --creator <who>       Filter by creator ("me", email, or name). Needs --remote,
+                        Linear only. Without --user, the assignee scope is lifted
+  --any-cycle           Search outside the current cycle. Needs --remote
 ```
+
+`--status Backlog` implies `--any-cycle`. `--creator` and `--any-cycle` fail
+without `--remote` instead of being ignored, and `--creator` fails on Trello.
 
 ## After Execution
 

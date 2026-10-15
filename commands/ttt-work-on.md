@@ -52,14 +52,18 @@ Arguments:
               'next' claims the highest priority pending task
               'next <n>' claims the top <n> pending tasks
               If omitted, shows interactive multi-select
+              An ID missing from local data (e.g. a Backlog ticket outside
+              the cycle) is fetched from the source, stored locally, and
+              claimed like any other
 
 Options:
   --dry-run   Pick tickets without changing status (preview only)
 ```
 
 Tickets that are already completed, in review, or blocked are reported and
-skipped without stopping the rest of the batch. An unknown ID aborts before
-anything is claimed.
+skipped without stopping the rest of the batch. An ID found neither locally nor
+at the source aborts before anything is claimed. Find Backlog tickets first with
+`ttt show --remote --status Backlog --creator me` (or `--user me`), then claim by ID.
 
 ## After Claiming — Delegate the Implementation
 

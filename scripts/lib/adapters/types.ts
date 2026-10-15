@@ -106,14 +106,24 @@ export interface SourceIssue {
 // ============================================
 
 /**
+ * Who created an issue. `emails` matches exactly (OR logic); `match` is a
+ * case-insensitive substring over the creator's name, display name and email.
+ */
+export interface CreatorFilter {
+	emails?: string[];
+	match?: string;
+}
+
+/**
  * Options for fetching issues
  */
 export interface GetIssuesOptions {
 	teamId: string;
-	cycleId?: string;
+	cycleId?: string; // Omit to search outside any cycle scope
 	statusNames?: string[]; // Filter by status names
 	labelNames?: string[]; // Filter by labels (OR logic)
 	assigneeEmails?: string[]; // Filter by assignee (OR logic)
+	creator?: CreatorFilter; // Filter by creator (not supported by every source)
 	excludeLabels?: string[]; // Exclude issues with these labels
 	limit?: number; // Max number of issues to return
 }

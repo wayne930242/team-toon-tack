@@ -112,6 +112,11 @@ export class TrelloAdapter implements TaskSourceAdapter {
 	}
 
 	async getIssues(options: GetIssuesOptions): Promise<SourceIssue[]> {
+		if (options.creator) {
+			throw new Error(
+				"Trello cards do not expose a creator, so a creator filter is not supported.",
+			);
+		}
 		const cards = await this.client.getBoardCards(options.teamId);
 
 		// Ensure lists are cached

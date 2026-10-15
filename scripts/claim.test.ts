@@ -72,7 +72,11 @@ function readStatuses(dir: string): Record<string, string> {
 async function runClaim(dir: string, args: string[]) {
 	const proc = Bun.spawn(
 		["bun", path.join(import.meta.dirname, "claim.ts"), ...args],
-		{ env: { ...process.env, TOON_DIR: dir }, stdout: "pipe", stderr: "pipe" },
+		{
+			env: { ...process.env, TOON_DIR: dir, LINEAR_API_KEY: "" },
+			stdout: "pipe",
+			stderr: "pipe",
+		},
 	);
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),
@@ -137,4 +141,126 @@ test("ttt claim --dry-run leaves every ticket untouched", async () => {
 		"MP-2": "pending",
 		"MP-3": "completed",
 	});
+});
+
+/** Remote-source workspace: claiming reaches the fake Linear API. */
+function makeRemoteWorkspace(): string {
+	const dir = makeWorkspace();
+	writeFileSync(
+		path.join(dir, "local.toon"),
+		encode({ current_user: "me", team: "dev", status_source: "remote" }),
+	);
+	return dir;
+}
+
+async function runClaimRemote(dir: string, args: string[]) {
+	const log = path.join(dir, "requests.jsonl");
+	writeFileSync(log, "");
+	const proc = Bun.spawn(
+		[
+			"bun",
+			"--preload",
+			path.join(import.meta.dirname, "test-support/linear-mock.ts"),
+			path.join(import.meta.dirname, "claim.ts"),
+			...args,
+		],
+		{
+			env: {
+				...process.env,
+				TOON_DIR: dir,
+				LINEAR_API_KEY: "test-key",
+				MOCK_LINEAR_LOG: log,
+			},
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+	const [stdout, stderr] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	await proc.exited;
+	const requests = readFileSync(log, "utf8")
+		.split("\n")
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as { name: string; variables: unknown });
+	return { stdout, stderr, exitCode: proc.exitCode, requests };
+}
+
+test("ttt claim fetches a ticket missing from local data, stores it, and moves it to In Progress", async () => {
+	const dir = makeRemoteWorkspace();
+
+	const { stdout, exitCode, requests } = await runClaimRemote(dir, ["MP-7"]);
+
+	assert.equal(exitCode, 0);
+	assert.deepEqual(readStatuses(dir)["MP-7"], "in-progress");
+	assert.equal(
+		readStatuses(dir)["MP-1"],
+		"pending",
+		"existing tasks stay untouched",
+	);
+	assert.match(stdout, /Linear: MP-7 → In Progress/);
+	const update = requests.find((r) => r.name === "updateIssue");
+	assert.deepEqual(
+		(update?.variables as { id?: string; input?: { stateId?: string } })?.input,
+		{ stateId: "s-progress" },
+	);
+});
+
+test("ttt claim --dry-run on a remote-only ticket stores nothing", async () => {
+	const dir = makeRemoteWorkspace();
+
+	const { stdout, exitCode } = await runClaimRemote(dir, ["MP-7", "--dry-run"]);
+
+	assert.equal(exitCode, 0);
+	assert.match(stdout, /MP-7/);
+	assert.equal(readStatuses(dir)["MP-7"], undefined);
+});
+
+async function runClaimRemoteInState(
+	dir: string,
+	args: string[],
+	state: string,
+) {
+	process.env.MOCK_LINEAR_ISSUE_STATE = state;
+	try {
+		return await runClaimRemote(dir, args);
+	} finally {
+		delete process.env.MOCK_LINEAR_ISSUE_STATE;
+	}
+}
+
+test("ttt claim skips a remote-only ticket that is already canceled", async () => {
+	const dir = makeRemoteWorkspace();
+
+	const { stdout, requests } = await runClaimRemoteInState(
+		dir,
+		["MP-7"],
+		"s-canceled",
+	);
+
+	assert.match(stdout, /MP-7 已完成/);
+	assert.equal(readStatuses(dir)["MP-7"], undefined);
+	assert.equal(
+		requests.some((r) => r.name === "updateIssue"),
+		false,
+		"a closed ticket must not be reopened",
+	);
+});
+
+test("ttt claim stores a remote-only ticket that is already in progress without touching the source", async () => {
+	const dir = makeRemoteWorkspace();
+
+	const { stdout, requests } = await runClaimRemoteInState(
+		dir,
+		["MP-7"],
+		"s-progress",
+	);
+
+	assert.match(stdout, /MP-7 已在進行中/);
+	assert.equal(readStatuses(dir)["MP-7"], "in-progress");
+	assert.equal(
+		requests.some((r) => r.name === "updateIssue"),
+		false,
+	);
 });

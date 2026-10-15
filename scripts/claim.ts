@@ -3,6 +3,8 @@ import type { SourceStatus, TaskSourceAdapter } from "./lib/adapters/index.js";
 import { createAdapter } from "./lib/adapters/index.js";
 import { displayTaskFull, PRIORITY_LABELS } from "./lib/display.js";
 import { getStatusTransitions } from "./lib/linear.js";
+import { sourceIssueToTask } from "./lib/remote-task.js";
+import { mapRemoteToLocalStatus } from "./lib/status-helpers.js";
 import {
 	type Config,
 	type CycleData,
@@ -30,6 +32,9 @@ Arguments:
               'next' claims the highest priority pending task
               'next <n>' claims the top <n> pending tasks
               If omitted, shows interactive multi-select
+              An ID missing from local data (e.g. a Backlog ticket outside
+              the cycle) is fetched from the source, stored locally, and
+              claimed like any other
 
 Options:
   --dry-run   Pick tickets without changing status (preview only)
@@ -124,15 +129,68 @@ function selectNext(
 	return ids;
 }
 
-/** Resolve the requested tickets, exiting if any ID is unknown. */
-function resolveTasks(data: CycleData, issueIds: string[]): Task[] {
+/**
+ * Fetch a ticket that local data does not hold. Returns null when the source
+ * is unreachable or has no such ticket; the caller aborts the batch.
+ */
+async function fetchRemoteTask(
+	issueId: string,
+	config: Config,
+	localConfig: LocalConfig,
+): Promise<Task | null> {
+	try {
+		const adapter = createAdapter(config);
+		const issue = await adapter.searchIssue(issueId);
+		if (!issue) return null;
+		const task = sourceIssueToTask(issue, getSourceType(config));
+		task.localStatus = mapRemoteToLocalStatus(
+			task.status,
+			getStatusTransitions(config),
+			localConfig,
+		);
+		// Closed states are named per team ("Canceled", "Duplicate", ...), so
+		// the configured done name alone misses them; the state type does not.
+		const teamId = config.teams[localConfig.team]?.id;
+		if (task.localStatus === "pending" && teamId) {
+			const statuses = await adapter.getStatuses(teamId);
+			const type = statuses.find((s) => s.name === task.status)?.type;
+			if (type === "completed" || type === "canceled") {
+				task.localStatus = "completed";
+			}
+		}
+		return task;
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(`Could not look up ${issueId} remotely: ${message}`);
+		return null;
+	}
+}
+
+/**
+ * Resolve the requested tickets, exiting if any ID is unknown both locally
+ * and at the source. `fetched` holds the tickets that came from the source so
+ * the caller can store them once it knows they will be claimed.
+ */
+async function resolveTasks(
+	data: CycleData,
+	issueIds: string[],
+	config: Config,
+	localConfig: LocalConfig,
+): Promise<{ tasks: Task[]; fetched: Set<Task> }> {
 	const tasks: Task[] = [];
+	const fetched = new Set<Task>();
 	const missing: string[] = [];
 
 	for (const issueId of issueIds) {
-		const task = findTaskByIssueId(data.tasks, issueId);
-		if (task) {
-			tasks.push(task);
+		const local = findTaskByIssueId(data.tasks, issueId);
+		if (local) {
+			tasks.push(local);
+			continue;
+		}
+		const remote = await fetchRemoteTask(issueId, config, localConfig);
+		if (remote) {
+			tasks.push(remote);
+			fetched.add(remote);
 		} else {
 			missing.push(issueId);
 		}
@@ -140,11 +198,11 @@ function resolveTasks(data: CycleData, issueIds: string[]): Task[] {
 
 	if (missing.length > 0) {
 		console.error(
-			`Issue ${missing.join(", ")} not found in current cycle. No ticket claimed.`,
+			`Issue ${missing.join(", ")} not found in local data or at the source (use the full ID, e.g. MP-123). No ticket claimed.`,
 		);
 		process.exit(1);
 	}
-	return tasks;
+	return { tasks, fetched };
 }
 
 function decide(task: Task): ClaimOutcome {
@@ -290,7 +348,8 @@ async function claim() {
 	const issueIds = await resolveIssueIds(positional, pendingTasks);
 
 	// Availability Check — resolve the whole batch before mutating anything
-	const outcomes = resolveTasks(data, issueIds).map(decide);
+	const resolved = await resolveTasks(data, issueIds, config, localConfig);
+	const outcomes = resolved.tasks.map(decide);
 	const toClaim = pickTasks(outcomes, (a) => a === "claim");
 	const toDisplay = pickTasks(outcomes, (a) => a !== "skip");
 
@@ -298,8 +357,20 @@ async function claim() {
 		process.exit(0);
 	}
 
-	if (toClaim.length > 0 && !dryRun) {
-		await applyClaims(toClaim, data, config, localConfig);
+	// Fetched tickets are stored when they are claimed or already in progress,
+	// so a later `ttt done` finds them; a dry run or a skipped ticket leaves
+	// local data untouched.
+	if (!dryRun) {
+		const toStore = outcomes
+			.filter((o) => resolved.fetched.has(o.task) && o.action !== "skip")
+			.map((o) => o.task);
+		data.tasks.push(...toStore);
+
+		if (toClaim.length > 0) {
+			await applyClaims(toClaim, data, config, localConfig);
+		} else if (toStore.length > 0) {
+			await saveCycleData(data);
+		}
 	}
 
 	// Display task info

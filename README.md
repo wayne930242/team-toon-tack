@@ -159,7 +159,14 @@ ttt claim --dry-run        # Preview without changes
 ```
 
 Completed, in-review, and blocked tickets are reported and skipped without
-stopping the rest of the batch. An unknown ID aborts before anything is claimed.
+stopping the rest of the batch. An ID that local data does not hold (for example
+a Backlog ticket outside the cycle) is fetched from the source, stored locally,
+and claimed like any other; with `--dry-run` it is shown but not stored. An ID
+found neither locally nor at the source aborts before anything is claimed.
+A ticket that is already closed (done or canceled) is reported and skipped. Note
+that a full `ttt sync` rewrites local data from the current cycle, so a stored
+ticket outside it drops out on the next sync (`ttt done <id> --from-remote`
+still completes it).
 
 ### `ttt estimate`
 
@@ -213,7 +220,21 @@ ttt show --label frontend      # Filter by label
 ttt show --status "In Progress" --user me   # My in-progress issues
 ttt show --priority 1          # Show urgent issues
 ttt show --export              # Export as markdown
+ttt show --remote --status Backlog --creator me   # Backlog tickets I created
+ttt show --remote --status Backlog --user me      # Backlog tickets assigned to me
+ttt show --remote --any-cycle --creator me        # My tickets in any cycle
 ```
+
+Two options widen a `--remote` search beyond what `ttt sync` stores (both need
+`--remote`; otherwise the command fails instead of ignoring them):
+
+- `--creator <me|email|name>` filters by who created the issue (Linear only;
+  Trello cards expose no creator, so it fails there). Without `--user`, the
+  assignee scope is lifted, so tickets you created for others or left
+  unassigned show up.
+- `--any-cycle` searches outside the current cycle. `--status Backlog` implies
+  it, because backlog tickets usually belong to no cycle. Trello has no cycles,
+  so there it changes nothing.
 
 ### `ttt config`
 

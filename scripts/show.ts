@@ -1,10 +1,15 @@
-import { createAdapter } from "./lib/adapters/index.js";
+import {
+	type CreatorFilter,
+	createAdapter,
+	type SourceStatus,
+} from "./lib/adapters/index.js";
 import {
 	displayTaskFull,
 	getStatusIcon,
 	PRIORITY_LABELS,
 } from "./lib/display.js";
 import { getStatusTransitions } from "./lib/linear.js";
+import { sourceIssueToTask } from "./lib/remote-task.js";
 import { getSyncStatuses } from "./lib/status-helpers.js";
 import {
 	getSourceType,
@@ -20,6 +25,8 @@ interface SearchFilters {
 	status?: string;
 	assignee?: string;
 	priority?: number;
+	creator?: string;
+	anyCycle?: boolean;
 }
 
 function taskToMarkdown(task: Task, includeLocal = true): string {
@@ -147,33 +154,7 @@ async function fetchIssueFromRemote(issueId: string): Promise<Task | null> {
 		return null;
 	}
 
-	return {
-		id: issue.id,
-		linearId: issue.sourceId,
-		sourceId: issue.sourceId,
-		sourceType,
-		title: issue.title,
-		status: issue.status,
-		localStatus: "pending",
-		assignee: issue.assigneeEmail,
-		priority: issue.priority,
-		labels: issue.labels,
-		description: issue.description,
-		parentIssueId: issue.parentIssueId,
-		url: issue.url,
-		attachments: issue.attachments?.map((a) => ({
-			id: a.id,
-			title: a.title,
-			url: a.url,
-			sourceType: a.sourceType,
-		})),
-		comments: issue.comments?.map((c) => ({
-			id: c.id,
-			body: c.body,
-			createdAt: c.createdAt,
-			user: c.user,
-		})),
-	};
+	return sourceIssueToTask(issue, sourceType);
 }
 
 /**
@@ -203,6 +184,38 @@ function resolveAssigneeScope(
 		return { kind: "unassigned" };
 	}
 	return { kind: "match", needle: value };
+}
+
+/**
+ * Turn `--creator` into an API filter. "me" resolves to the configured
+ * current_user emails, an address matches exactly, anything else is a
+ * case-insensitive substring over the creator's name and email.
+ */
+function resolveCreatorFilter(
+	requested: string,
+	userEmails: string[],
+): CreatorFilter | { error: string } {
+	const value = requested.trim();
+	if (value.toLowerCase() === "me") {
+		return userEmails.length > 0
+			? { emails: userEmails }
+			: {
+					error:
+						'--creator me needs a current_user with an email. Run "ttt init" or pass an email/name.',
+				};
+	}
+	if (value.includes("@")) return { emails: [value] };
+	return value ? { match: value } : { error: "--creator needs a value." };
+}
+
+/**
+ * Backlog tickets usually sit outside every cycle, so asking for a backlog
+ * status lifts the cycle scope instead of silently returning nothing.
+ */
+function statusImpliesNoCycle(matched: SourceStatus[]): boolean {
+	return matched.some(
+		(s) => s.type === "backlog" || s.name.toLowerCase().includes("backlog"),
+	);
 }
 
 /** True when the scope reaches outside what `ttt sync` stored locally. */
@@ -273,6 +286,7 @@ function expandNames(needle: string, available: string[]): string[] | null {
 async function searchIssuesFromRemote(
 	filters: SearchFilters,
 	scope: AssigneeScope,
+	creator?: CreatorFilter,
 ): Promise<Task[]> {
 	const config = await loadConfig();
 	const localConfig = await loadLocalConfig();
@@ -292,6 +306,7 @@ async function searchIssuesFromRemote(
 	let statusNames: string[] | undefined = getSyncStatuses(
 		getStatusTransitions(config),
 	);
+	let noCycleScope = !!filters.anyCycle;
 	if (filters.status) {
 		const statuses = await adapter.getStatuses(teamId);
 		const expanded = expandNames(
@@ -300,6 +315,11 @@ async function searchIssuesFromRemote(
 		);
 		if (!expanded) return [];
 		statusNames = expanded;
+		if (
+			statusImpliesNoCycle(statuses.filter((s) => expanded.includes(s.name)))
+		) {
+			noCycleScope = true;
+		}
 	}
 
 	let labelNames: string[] | undefined;
@@ -315,10 +335,11 @@ async function searchIssuesFromRemote(
 
 	const issues = await adapter.getIssues({
 		teamId,
-		cycleId: config.current_cycle?.id,
+		cycleId: noCycleScope ? undefined : config.current_cycle?.id,
 		statusNames,
 		labelNames,
 		assigneeEmails: scope.kind === "user" ? scope.emails : undefined,
+		creator,
 	});
 
 	const tasks: Task[] = issues.map((issue) => ({
@@ -371,11 +392,16 @@ Options:
   --status <status> Filter by status
   --user <email>    Filter by assignee (use "me" for yourself, "unassigned" for no assignee)
   --priority <n>    Filter by priority (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low)
+  --creator <who>   Filter by creator: "me", an email, or a name (needs --remote,
+                    Linear only). Without --user, the assignee scope is lifted so
+                    tickets you created for others or left unassigned show up.
+  --any-cycle       Search outside the current cycle (needs --remote)
 
 Searches are scoped the same way ttt sync is: current cycle, current_user,
 and Todo/In Progress. --status and --user replace the corresponding scope.
-The local cache only holds current_user's issues, so searching another
-assignee needs --remote.
+--status Backlog also lifts the cycle scope, since backlog tickets usually
+belong to no cycle. The local cache only holds current_user's issues, so
+searching another assignee needs --remote.
 
 Examples:
   ttt show                       # Show all issues in local cycle data
@@ -386,6 +412,9 @@ Examples:
   ttt show --status "In Progress" --user me   # My in-progress issues
   ttt show --priority 1          # Show all urgent issues
   ttt show --user tony --remote  # Someone else's issues (needs --remote)
+  ttt show --remote --status Backlog --creator me   # Backlog tickets I created
+  ttt show --remote --status Backlog --user me      # Backlog tickets assigned to me
+  ttt show --remote --any-cycle --creator me        # My tickets in any cycle
   ttt show --export              # Export all issues as markdown`);
 		process.exit(0);
 	}
@@ -408,6 +437,16 @@ Examples:
 			filters.assignee = args[++i];
 		} else if (arg === "--priority" && args[i + 1]) {
 			filters.priority = parseInt(args[++i], 10);
+		} else if (arg === "--creator") {
+			const value = args[i + 1];
+			if (!value || value.startsWith("-")) {
+				console.error("--creator needs a value: me, an email, or a name.");
+				process.exit(1);
+			}
+			filters.creator = args[++i];
+		} else if (arg === "--any-cycle") {
+			filters.anyCycle = true;
+			continue;
 		} else {
 			continue;
 		}
@@ -422,19 +461,53 @@ Examples:
 			(arg.match(/^[A-Z]+-\d+$/i) || arg.match(/^[A-Za-z0-9]{8,}$/)),
 	);
 
+	const remoteOnlyFlag = filters.creator
+		? "--creator"
+		: filters.anyCycle
+			? "--any-cycle"
+			: undefined;
+	if (remoteOnlyFlag && (!useRemote || issueId)) {
+		console.error(
+			issueId
+				? `${remoteOnlyFlag} only applies to searches, not to a single issue.`
+				: `${remoteOnlyFlag} needs --remote: the local cache holds neither creators nor issues outside the cycle.`,
+		);
+		process.exit(1);
+	}
+
 	// List mode: no specific issue ID. Filters are optional; --remote runs the
 	// same query live instead of reading the cache.
 	if (!issueId) {
 		const userEmails = await getUserEmails();
-		const scope = resolveAssigneeScope(filters.assignee, userEmails);
+		// A creator search is about tickets nobody may have assigned to the user,
+		// so it must not inherit the default current_user assignee scope.
+		const scope =
+			filters.creator && !filters.assignee
+				? ({ kind: "any" } as AssigneeScope)
+				: resolveAssigneeScope(filters.assignee, userEmails);
 		let tasks: Task[];
 
 		if (useRemote) {
 			const config = await loadConfig();
 			const sourceType = getSourceType(config);
 			const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+			let creator: CreatorFilter | undefined;
+			if (filters.creator) {
+				if (sourceType === "trello") {
+					console.error(
+						"--creator is not supported for Trello: cards do not expose a creator.",
+					);
+					process.exit(1);
+				}
+				const resolved = resolveCreatorFilter(filters.creator, userEmails);
+				if ("error" in resolved) {
+					console.error(resolved.error);
+					process.exit(1);
+				}
+				creator = resolved;
+			}
 			console.error(`Searching issues from ${sourceName}...`);
-			tasks = await searchIssuesFromRemote(filters, scope);
+			tasks = await searchIssuesFromRemote(filters, scope, creator);
 		} else {
 			const data = await loadCycleData();
 			if (!data) {

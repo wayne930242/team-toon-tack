@@ -130,6 +130,21 @@ export class LinearAdapter implements TaskSourceAdapter {
 			filter.assignee = { email: { in: options.assigneeEmails } };
 		}
 
+		if (options.creator?.emails && options.creator.emails.length > 0) {
+			filter.creator = {
+				email: { in: options.creator.emails },
+			};
+		} else if (options.creator?.match) {
+			const needle = options.creator.match;
+			filter.creator = {
+				or: [
+					{ name: { containsIgnoreCase: needle } },
+					{ displayName: { containsIgnoreCase: needle } },
+					{ email: { containsIgnoreCase: needle } },
+				],
+			};
+		}
+
 		const page = await fetchIssuesPaged(
 			this.client,
 			filter,
