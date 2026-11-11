@@ -5,6 +5,7 @@ import {
 	adoptCarried,
 	adoptImported,
 	applyReturnNotice,
+	assertReturnable,
 	buildReturnNotice,
 	closeIfComplete,
 	dropTicket,
@@ -483,5 +484,51 @@ test("a return notice lands on a handed-off copy once, and does not undo a carry
 	assert.throws(
 		() => applyReturnNotice(newOrder("app/other", box), notice, box),
 		/is for order app\/2026-11-11-a/,
+	);
+});
+
+test("carrying a ticket back keeps this order's own history where the source has none", () => {
+	const dest = newOrder("app/2026-11-12-a", box);
+	addTickets(dest, ["MP-1"], box);
+	setTicket(
+		dest,
+		"MP-1",
+		{
+			branch: "agent/MP-1",
+			mr: "!900",
+			head: "1a2b3c4",
+			review: "P0/P1=0",
+			tests: ["bun test = pass"],
+		},
+		box,
+	);
+	dropTicket(dest, "MP-1", "later", box);
+	const source = newOrder("app/2026-11-12-b", box);
+	addTickets(source, ["MP-1"], box);
+	setTicket(source, "MP-1", { head: "2b3c4d5" }, box);
+
+	assert.deepEqual(adoptCarried(dest, source.id, source.tickets, mac), [
+		"MP-1",
+	]);
+	const back = dest.tickets[0];
+	assert.equal(back.state, "in-progress");
+	assert.equal(back.head, "2b3c4d5", "the source's newer head wins");
+	assert.equal(back.branch, "agent/MP-1");
+	assert.equal(back.mr, "!900");
+	assert.equal(back.review, "P0/P1=0");
+	assert.deepEqual(
+		back.tests.map((r) => r.sha),
+		["1a2b3c4"],
+	);
+	assert.equal(back.carried_from?.order, source.id);
+});
+
+test("return refuses a dropped ticket and names why it left", () => {
+	const order = newOrder("app/2026-11-12-c", box);
+	addTickets(order, ["MP-1"], box);
+	dropTicket(order, "MP-1", "carried to app/2026-11-12-d", box);
+	assert.throws(
+		() => assertReturnable(order, ["MP-1"]),
+		/dropped .*carried to app\/2026-11-12-d/,
 	);
 });

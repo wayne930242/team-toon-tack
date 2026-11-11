@@ -415,9 +415,15 @@ function requireHeld(order: WorkOrder, ticketId: string): OrderTicket {
 export function assertReturnable(order: WorkOrder, ticketIds: string[]): void {
 	assertWritable(order);
 	for (const id of ticketIds) {
-		if (requireHeld(order, id).state === "done") {
+		const ticket = requireHeld(order, id);
+		if (ticket.state === "done") {
 			throw new OrderError(
 				`${id} is already done in order ${order.id}; it cannot be returned.`,
+			);
+		}
+		if (ticket.state === "dropped") {
+			throw new OrderError(
+				`${id} was dropped from order ${order.id}${ticket.reason ? ` (${ticket.reason})` : ""}; return it from the order that holds it now.`,
 			);
 		}
 	}
@@ -555,8 +561,22 @@ export function adoptCarried(
 				`${source.id} is already done in order ${dest.id}; it cannot be carried there.`,
 			);
 		} else if (hasLeft(existing)) {
-			// Back in this order, with the history of where it has been since
-			dest.tickets[index] = fresh();
+			// Back in this order, with the history of where it has been since;
+			// what the source lacks comes from this order's own earlier record
+			const back = fresh();
+			back.branch ??= existing.branch;
+			back.mr ??= existing.mr;
+			back.head ??= existing.head;
+			if (back.review === undefined && existing.review !== undefined) {
+				back.review = existing.review;
+				if (existing.review_head) back.review_head = existing.review_head;
+			}
+			const known = new Set(back.tests.map(runKey));
+			back.tests = [
+				...back.tests,
+				...existing.tests.filter((run) => !known.has(runKey(run))),
+			];
+			dest.tickets[index] = back;
 		} else if (existing.carried_from?.order === sourceId) {
 			continue;
 		} else {
