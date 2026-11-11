@@ -260,14 +260,13 @@ export class LinearAdapter implements TaskSourceAdapter {
 				(i) => i.identifier === identifier,
 			);
 
-			if (!matchingIssue) {
-				return null;
-			}
-
-			return this.getIssue(matchingIssue.id);
+			if (matchingIssue) return this.getIssue(matchingIssue.id);
 		} catch {
-			return null;
+			// Fall through to the direct lookup
 		}
+		// Full-text search misses tickets it has not indexed yet, or ranks them
+		// out of its first page; Linear also resolves an identifier directly.
+		return this.getIssue(identifier);
 	}
 
 	async updateIssueStatus(

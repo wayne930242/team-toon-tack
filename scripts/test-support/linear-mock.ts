@@ -75,7 +75,9 @@ function findByUuid(
 	state: MockState,
 	id: string | undefined,
 ): [string, MockIssue] | undefined {
-	return Object.entries(state.issues).find(([key]) => uuid(key) === id);
+	return Object.entries(state.issues).find(
+		([key]) => uuid(key) === id || key === id,
+	);
 }
 
 const page = (name: string, nodes: unknown[]) => ({
@@ -134,7 +136,12 @@ function respond(
 		);
 	}
 	if (query.includes("query searchIssues(")) {
-		const nodes = allIssues();
+		// MOCK_LINEAR_SEARCH_MISS hides tickets from full-text search, as an
+		// index that has not caught up does
+		const hidden = (process.env.MOCK_LINEAR_SEARCH_MISS ?? "").split(",");
+		const nodes = allIssues().filter(
+			(node) => !hidden.includes((node as { identifier: string }).identifier),
+		);
 		return {
 			searchIssues: {
 				__typename: "IssueSearchPayload",

@@ -203,8 +203,12 @@ test("a work order carries a batch from claim on the box to Done on the Mac", as
 		"the parent waits for its other sub-issue",
 	);
 
-	// Rerun: only MP-2 is touched, then the order closes
-	const rerun = await order(mac, ["close", ORDER], asMac);
+	// Rerun: only MP-2 is touched, then the order closes; MP-2 is missing from
+	// full-text search and is found by its identifier
+	const rerun = await order(mac, ["close", ORDER], {
+		...asMac,
+		MOCK_LINEAR_SEARCH_MISS: "MP-2",
+	});
 	assert.equal(rerun.exitCode, 0, rerun.stderr);
 	assert.doesNotMatch(rerun.stdout, /MP-1/);
 	assert.match(rerun.stdout, /✅ MP-2 → Done/);
