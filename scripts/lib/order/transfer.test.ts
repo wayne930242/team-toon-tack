@@ -57,6 +57,19 @@ test("an exported block comes back unchanged out of an MR description", () => {
 	assert.deepEqual(pickOrderBlock(description), original);
 });
 
+test("a description whose newlines were stored as <br> still yields the block", () => {
+	const original = order();
+	const description = ["## Train", "", renderOrderBlock(original), ""]
+		.join("\n")
+		.replace(/\n/g, "<br>");
+
+	assert.deepEqual(pickOrderBlock(description), original);
+	assert.deepEqual(
+		pickOrderBlock(description.replace(/<br>/g, "<br />")),
+		original,
+	);
+});
+
 test("the block survives being indented inside a list", () => {
 	const original = order();
 	const indented = renderOrderBlock(original)

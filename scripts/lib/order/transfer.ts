@@ -50,7 +50,12 @@ export function extractOrderBlocks(text: string): WorkOrder[] {
 
 /** The one order to import from `text`; `id` picks among several. */
 export function pickOrderBlock(text: string, id?: string): WorkOrder {
-	const blocks = extractOrderBlocks(text);
+	let blocks = extractOrderBlocks(text);
+	// Some writers (a git push option, a one-line API body) store the newlines
+	// of a description as <br>; read such a text as if they were newlines
+	if (blocks.length === 0 && /<br\s*\/?>/i.test(text)) {
+		blocks = extractOrderBlocks(text.replace(/<br\s*\/?>/gi, "\n"));
+	}
 	if (blocks.length === 0) {
 		throw new OrderError(
 			`No work order block found. Expected a fenced block starting with \`\`\`${ORDER_BLOCK_TAG}, as printed by 'ttt order export <id>'.`,
