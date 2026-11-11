@@ -24,7 +24,10 @@ export function parseArgs(args: string[]): DoneArgs {
 			}
 			if (arg === "--commit") commit = value;
 			else repo = value;
-		} else if (!arg.startsWith("-") && !issueIds.includes(arg)) {
+		} else if (
+			!arg.startsWith("-") &&
+			!issueIds.some((id) => id.toUpperCase() === arg.toUpperCase())
+		) {
 			issueIds.push(arg);
 		}
 	}

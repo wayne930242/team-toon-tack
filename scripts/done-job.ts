@@ -91,14 +91,29 @@ async function pickInProgressTask(data: CycleData): Promise<string> {
 }
 
 /**
+ * The status the completion mode moves a ticket to, when it is not the done
+ * status: strict_review stops at testing. (upstream_strict also stops there
+ * when the parent cannot take it; that is not known before the run.)
+ */
+function completionTarget(
+	config: Config,
+	localConfig: LocalConfig,
+): string | undefined {
+	if (getSourceType(config) !== "linear") return undefined;
+	if (localConfig.completion_mode !== "strict_review") return undefined;
+	return localConfig.dev_testing_status || getStatusTransitions(config).testing;
+}
+
+/**
  * Find the ticket to complete. A ticket that is already done is reported, not
  * completed again, so a batch can be rerun after a partial failure.
  */
 async function resolveTask(
 	issueId: string,
-	run: Pick<DoneRun, "config" | "data" | "fromRemote">,
+	run: Pick<DoneRun, "config" | "localConfig" | "data" | "fromRemote">,
 ): Promise<{ task: Task } | { outcome: DoneOutcome }> {
 	const doneStatus = getStatusTransitions(run.config).done;
+	const target = completionTarget(run.config, run.localConfig);
 
 	// --from-remote mode: fetch directly from Linear
 	if (run.fromRemote) {
@@ -110,12 +125,12 @@ async function resolveTask(
 				outcome: failed(issueId, `Issue ${issueId} not found in Linear.`),
 			};
 		}
-		if (remoteTask.status === doneStatus) {
+		if (remoteTask.status === doneStatus || remoteTask.status === target) {
 			return {
 				outcome: {
 					id: remoteTask.id,
 					kind: "already-done",
-					status: doneStatus,
+					status: remoteTask.status,
 				},
 			};
 		}
@@ -138,7 +153,7 @@ async function resolveTask(
 			),
 		};
 	}
-	if (localTask.localStatus === "completed") {
+	if (localTask.localStatus === "completed" || localTask.status === target) {
 		return {
 			outcome: {
 				id: localTask.id,
@@ -311,9 +326,22 @@ async function doneJob() {
 	const outcomes: DoneOutcome[] = [];
 	const pending: { index: number; task: Task }[] = [];
 	for (const [index, issueId] of issueIds.entries()) {
-		const resolved = await resolveTask(issueId, { config, data, fromRemote });
+		const resolved = await resolveTask(issueId, {
+			config,
+			localConfig,
+			data,
+			fromRemote,
+		});
 		if ("task" in resolved) pending.push({ index, task: resolved.task });
 		else outcomes[index] = resolved.outcome;
+	}
+	// A wrong ID in the batch stops it before any ticket moves
+	const unresolved = outcomes.filter((o) => o?.kind === "failed");
+	if (unresolved.length > 0) {
+		console.error(
+			`Cannot complete ${unresolved.map((o) => o.id).join(", ")}. Nothing was changed.`,
+		);
+		process.exit(1);
 	}
 
 	// Get AI summary message, shared by every ticket in the run

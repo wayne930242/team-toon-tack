@@ -65,8 +65,9 @@ Options:
 ## Several Tickets
 
 With several IDs each ticket gets a result line (`✅ done`, `⏭️ already done`, `❌ failed`).
+An ID that is unknown or not in progress stops the run before any ticket moves.
 One failing ticket does not stop the rest, and the exit code is non-zero when any failed.
-A ticket that is already done is skipped, so the same command can be rerun after a partial failure.
+A ticket that is already done (under `strict_review`: already at the testing status) is skipped, so the same command can be rerun after a partial failure.
 For a train batch tracked in a work order, close it with `/ttt:order` (`ttt order close`) instead.
 
 ## Before Running

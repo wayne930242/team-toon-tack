@@ -43,3 +43,10 @@ test("parseArgs collects several issue IDs in order, without duplicates", () => 
 	assert.deepEqual(parsed.issueIds, ["MP-2", "MP-1", "MP-3"]);
 	assert.equal(parsed.message, "merged");
 });
+
+test("parseArgs drops an ID repeated in another case", () => {
+	assert.deepEqual(parseArgs(["MP-1", "mp-1", "MP-2"]).issueIds, [
+		"MP-1",
+		"MP-2",
+	]);
+});

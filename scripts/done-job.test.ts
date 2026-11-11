@@ -215,3 +215,46 @@ test("ttt done on one already completed ticket reports it and exits 0", async ()
 	assert.match(stdout, /MP-1 already Todo \(skipped\)/);
 	assert.equal(stderr, "");
 });
+
+test("ttt done with an ID that does not resolve changes nothing", async () => {
+	const workspace = makeLinearWorkspace(
+		{ "MP-1": { state: "s-progress" }, "MP-9": { state: "s-progress" } },
+		{ localIds: ["MP-1"] },
+	);
+
+	const { stderr, exitCode, requests } = await runCli(
+		workspace,
+		"done-job.ts",
+		["MP-1", "MP-9", "-m", "merged"],
+	);
+
+	assert.equal(exitCode, 1);
+	assert.match(stderr, /MP-9 not found in local data/);
+	assert.match(stderr, /Nothing was changed/);
+	assert.equal(
+		requests.some((r) => /update|create/i.test(r.name)),
+		false,
+	);
+	assert.equal(readRemote(workspace)["MP-1"].status, "In Progress");
+});
+
+test("ttt done under strict_review skips a ticket already at the testing status", async () => {
+	const workspace = makeLinearWorkspace(
+		{ "MP-1": { state: "s-review" }, "MP-2": { state: "s-progress" } },
+		{ localConfig: { completion_mode: "strict_review" } },
+	);
+
+	const { stdout, exitCode, requests } = await runCli(
+		workspace,
+		"done-job.ts",
+		["MP-1", "MP-2", "-m", "merged"],
+	);
+
+	assert.equal(exitCode, 0, stdout);
+	assert.match(stdout, /⏭️ MP-1 already In Review \(skipped\)/);
+	assert.match(stdout, /✅ MP-2 → In Review/);
+	assert.deepEqual(
+		requests.filter((r) => r.name === "updateIssue").map((r) => r.variables.id),
+		["uuid-MP-2"],
+	);
+});
