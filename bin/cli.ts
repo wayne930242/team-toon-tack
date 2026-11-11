@@ -27,6 +27,8 @@ const COMMANDS = [
 	"edit",
 	"cancel",
 	"order",
+	"skills",
+	"skill",
 	"config",
 	"help",
 	"version",
@@ -55,6 +57,8 @@ COMMANDS:
   edit       Edit issue fields (title, description, priority, labels)
   cancel     Cancel an issue
   order      Work orders: carry a train batch of tickets from claim to Done
+  skills     List the agent skills bundled with this version
+  skill      Print a bundled skill: ttt skill <name> [page]
   config     Configure settings (status mappings, filters)
   help       Show this help message
   version    Show version
@@ -79,6 +83,7 @@ EXAMPLES:
   ttt done MP-123 MP-124        # Complete several tickets in one run
   ttt claim MP-123 --order auto # Claim into the project's open work order
   ttt order close app/2026-11-11-a --merged 1a2b3c4   # Batch → Done after merge
+  ttt skill managing-linear-tasks   # Agent instructions matching this version
   ttt show MP-123               # Show issue from local data
   ttt show --label frontend     # Search local issues by label
   ttt show --status "In Progress"  # Filter by status
@@ -256,6 +261,11 @@ async function main() {
 			case "order":
 				process.argv = ["node", "order.js", ...commandArgs];
 				await importScript("order.js");
+				break;
+			case "skills":
+			case "skill":
+				process.argv = ["node", "skill.js", ...commandArgs];
+				await importScript("skill.js");
 				break;
 			case "config":
 				process.argv = ["node", "config.js", ...commandArgs];

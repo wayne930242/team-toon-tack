@@ -16,7 +16,8 @@
 		".claude-plugin",
 		".codex-plugin",
 		"commands",
-		"skills"
+		"skills",
+		"bundled-skills"
 	],
 	"scripts": {
 		"build": "tsc",
