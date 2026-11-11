@@ -11,11 +11,20 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { markInReview, sealOrder, setTicket } from "./model.js";
+import {
+	handOff,
+	markInReview,
+	returnTickets,
+	sealOrder,
+	setTicket,
+} from "./model.js";
 import {
 	addClaimedTickets,
+	annotateOrder,
+	carryTickets,
 	checkClaimTarget,
 	defaultProject,
+	findTicketSource,
 	listOrders,
 	loadOrder,
 	openOrder,
@@ -218,4 +227,69 @@ test("taking over a stale lock leaves no stray files", async () => {
 		readdirSync(path.join(dir, "orders/app")).filter((f) => f.startsWith(".")),
 		[],
 	);
+});
+
+test("carry refuses a ticket another order of the project holds, and a returned one is free to claim", async () => {
+	const target = { order: "auto", project: "app" };
+	// Order a: MP-1 returned, MP-2 in review, sealed
+	const first = await addClaimedTickets(target, ["MP-1", "MP-2"], stamp);
+	const a = await updateOrder(first.order.id, (o) => {
+		markInReview(o, ["MP-1", "MP-2"], stamp);
+		sealOrder(o, "5d6e7f8", stamp);
+		returnTickets(o, ["MP-1"], "pulled", stamp);
+	});
+	const [returned, held] = a.tickets;
+	// Order b took MP-1 again, without its history, and was sealed too
+	const second = await addClaimedTickets(target, ["MP-1"], stamp);
+	assert.equal(second.order.id, "app/2026-11-11-b", "returned: free to claim");
+	await updateOrder(second.order.id, (o) => {
+		markInReview(o, ["MP-1"], stamp);
+		sealOrder(o, "6e7f8a9", stamp);
+	});
+	assert.equal(
+		(await findTicketSource("app", "MP-1", null))?.id,
+		"app/2026-11-11-b",
+		"the newest order that holds the ticket",
+	);
+	assert.equal(
+		(await findTicketSource("app", "MP-1", "app/2026-11-11-b"))?.id,
+		a.id,
+	);
+
+	await assert.rejects(
+		carryTickets(target, [{ sourceId: a.id, ticket: returned }], stamp),
+		/MP-1 already in order app\/2026-11-11-b/,
+	);
+	assert.equal((await listOrders("app")).length, 2, "no order was opened");
+
+	// The source's own hold does not count
+	const carried = await carryTickets(
+		target,
+		[{ sourceId: a.id, ticket: held }],
+		stamp,
+	);
+	assert.equal(carried.order.id, "app/2026-11-11-c");
+	assert.deepEqual(carried.carried, ["MP-2"]);
+	assert.equal(carried.created, true);
+});
+
+test("a note on a handed-off copy keeps its revision; on a writable copy it counts", async () => {
+	const { order } = await addClaimedTickets(
+		{ order: "auto", project: "app" },
+		["MP-1"],
+		stamp,
+	);
+	const touch = (o: { reviewer?: string }) => {
+		o.reviewer = `${o.reviewer ?? ""}x`;
+		return true;
+	};
+
+	const writable = await annotateOrder(order.id, touch);
+	assert.equal(writable.rev, order.rev + 1);
+	assert.equal((await annotateOrder(order.id, () => false)).rev, writable.rev);
+
+	const handed = await updateOrder(order.id, (o) => handOff(o, stamp));
+	const noted = await annotateOrder(order.id, touch);
+	assert.equal(noted.rev, handed.rev);
+	assert.equal((await loadOrder(order.id)).reviewer, "xx");
 });

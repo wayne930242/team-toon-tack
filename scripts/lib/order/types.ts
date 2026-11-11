@@ -14,9 +14,31 @@ export const TICKET_STATES = [
 	"in-progress",
 	"in-review",
 	"dropped",
+	"returned",
 	"done",
 ] as const;
+/**
+ * dropped: the order's writer left the ticket out of the batch. returned: the
+ * writer (normally the integrator) handed it back to its coordinator. Neither
+ * is completed by `close`, and neither holds the ticket: another order may
+ * take it.
+ */
 export type OrderTicketState = (typeof TICKET_STATES)[number];
+
+/** Who did something to a ticket, when, and why. */
+export interface OrderTicketNote {
+	at: string;
+	by: string;
+	reason: string;
+}
+
+/** Where a carried ticket's history came from. */
+export interface OrderCarriedFrom {
+	/** The source order's id */
+	order: string;
+	at: string;
+	by: string;
+}
 
 /** One passed or failed test run recorded for a ticket. */
 export interface OrderTestRun {
@@ -36,9 +58,35 @@ export interface OrderTicket {
 	head?: string;
 	/** Review verdict, e.g. "P0/P1=0 @1a2b3c4" */
 	review?: string;
+	/**
+	 * Head the review verdict was recorded on. When `head` has moved since,
+	 * the review is stale. Absent in orders written before 3.14.
+	 */
+	review_head?: string;
 	tests: OrderTestRun[];
 	/** Why the ticket was dropped from the batch */
 	reason?: string;
+	/** Set by `return`: the writer handed the ticket back */
+	returned?: OrderTicketNote;
+	/** Set by `rework`: the last time the ticket went from review back to work */
+	reworked?: OrderTicketNote;
+	/** Set by `carry`: the order this ticket's history was carried from */
+	carried_from?: OrderCarriedFrom;
+}
+
+/**
+ * What `return` prints for the coordinator: the returned tickets with their
+ * full records. It travels as its own fenced block and never changes who
+ * writes the order.
+ */
+export interface ReturnNotice {
+	/** The order the tickets were returned from */
+	order: string;
+	/** The writer's revision when the notice was printed */
+	rev: number;
+	by: string;
+	at: string;
+	tickets: OrderTicket[];
 }
 
 export interface OrderTrain {

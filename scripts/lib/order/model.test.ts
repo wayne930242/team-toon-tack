@@ -2,10 +2,14 @@ import { test } from "bun:test";
 import assert from "node:assert/strict";
 import {
 	addTickets,
+	adoptCarried,
 	adoptImported,
+	applyReturnNotice,
+	buildReturnNotice,
 	closeIfComplete,
 	dropTicket,
 	handOff,
+	markCarriedAway,
 	markInReview,
 	markTicketDone,
 	newOrder,
@@ -14,6 +18,9 @@ import {
 	parseTestRun,
 	reclaim,
 	recordMerge,
+	returnTickets,
+	reviewStaleness,
+	reworkTicket,
 	sealOrder,
 	setTicket,
 	setTrain,
@@ -275,4 +282,206 @@ test("validateOrder rejects text that is not a work order", () => {
 		assert.throws(() => validateOrder(value), OrderError, what);
 	}
 	assert.throws(() => validateOrder("just text"), OrderError);
+});
+
+test("a returned ticket keeps its record, never blocks seal or close, and returns only once", () => {
+	const order = newOrder("app/2026-11-11-a", box);
+	addTickets(order, ["MP-1", "MP-2"], box);
+	setTicket(order, "MP-2", { mr: "!813", head: "1a2b3c4" }, box);
+	markInReview(order, ["MP-1", "MP-2"], box);
+	sealOrder(order, "5d6e7f8", box);
+
+	assert.deepEqual(returnTickets(order, ["MP-2"], "pair not ready", mac), [
+		"MP-2",
+	]);
+	const later = { by: "integ@mac", at: "2026-11-11T06:00:00.000Z" };
+	assert.deepEqual(returnTickets(order, ["MP-2"], "again", later), []);
+	const returned = order.tickets[1];
+	assert.equal(returned.state, "returned");
+	assert.deepEqual(returned.returned, { ...mac, reason: "pair not ready" });
+	assert.equal(returned.mr, "!813");
+	assert.throws(() => returnTickets(order, ["MP-9"], "x", mac), /not in order/);
+	assert.throws(() => returnTickets(order, ["MP-1"], " ", mac), /--reason/);
+	assert.throws(
+		() => setTicket(order, "MP-2", { mr: "!1" }, mac),
+		/was returned.*ttt order carry/,
+	);
+	assert.throws(
+		() => markInReview(order, ["MP-2"], mac),
+		/returned.*cannot go to review/,
+	);
+
+	// Sealing again accepts it like a dropped ticket
+	sealOrder(order, "6e7f8a9", mac);
+	recordMerge(order, "9a8b7c6", undefined, mac);
+	markTicketDone(order, "MP-1", "Done", mac);
+	assert.equal(closeIfComplete(order, mac), true);
+	assert.equal(returned.state, "returned");
+	assert.throws(
+		() => returnTickets(sealedDone(), ["MP-1"], "x", mac),
+		/already done/,
+	);
+});
+
+function sealedDone(): WorkOrder {
+	const order = sealedOrder();
+	recordMerge(order, "9a8b7c6", undefined, mac);
+	markTicketDone(order, "MP-1", "Done", mac);
+	return order;
+}
+
+test("rework reopens a sealed order and clears its gated head; a merged order refuses", () => {
+	const order = sealedOrder();
+
+	assert.equal(reworkTicket(order, "MP-1", "gate red", mac), true);
+	assert.equal(order.stage, "open");
+	assert.equal(order.train.gated_head, undefined);
+	assert.equal(order.tickets[0].state, "in-progress");
+	assert.deepEqual(order.tickets[0].reworked, { ...mac, reason: "gate red" });
+	assert.match(order.log.at(-1)?.event ?? "", /gated head 5d6e7f8 cleared/);
+	// Asking again changes nothing
+	assert.equal(reworkTicket(order, "MP-1", "gate red", mac), false);
+	assert.throws(() => sealOrder(order, "6e7f8a9", mac), /still in progress/);
+
+	// In an open order only the ticket moves
+	assert.equal(reworkTicket(order, "MP-2", "review fix", mac), true);
+	assert.equal(order.stage, "open");
+
+	const merged = sealedOrder();
+	recordMerge(merged, "9a8b7c6", undefined, mac);
+	assert.throws(
+		() => reworkTicket(merged, "MP-1", "late", mac),
+		/already merged.*ttt order return/,
+	);
+	const dropped = sealedOrder();
+	dropTicket(dropped, "MP-2", "x", mac);
+	assert.throws(
+		() => reworkTicket(dropped, "MP-2", "x", mac),
+		/only a ticket in review/,
+	);
+});
+
+test("a review is stale once the head it was recorded on moves, however the SHAs are abbreviated", () => {
+	const order = newOrder("app/2026-11-11-a", box);
+	addTickets(order, ["MP-1"], box);
+	const ticket = setTicket(
+		order,
+		"MP-1",
+		{ head: "1a2b3c4d5e6f", review: "P0/P1=0" },
+		box,
+	);
+	assert.equal(ticket.review_head, "1a2b3c4d5e6f");
+	assert.equal(reviewStaleness(ticket), undefined);
+
+	setTicket(order, "MP-1", { head: "1a2b3c4" }, box);
+	assert.equal(reviewStaleness(ticket), undefined, "the same commit, shorter");
+
+	setTicket(order, "MP-1", { head: "2b3c4d5" }, box);
+	assert.deepEqual(reviewStaleness(ticket), {
+		reviewed: "1a2b3c4d5e6f",
+		head: "2b3c4d5",
+	});
+	assert.match(order.log.at(-1)?.event ?? "", /review stale/);
+
+	setTicket(order, "MP-1", { review: "P0/P1=0 again" }, box);
+	assert.equal(reviewStaleness(ticket), undefined);
+});
+
+test("carry fills in a ticket claimed without its history, revives one that left, and refuses a done one", () => {
+	const source = newOrder("app/2026-11-11-a", box);
+	addTickets(source, ["MP-1", "MP-2", "MP-3"], box);
+	for (const id of ["MP-1", "MP-2", "MP-3"]) {
+		setTicket(
+			source,
+			id,
+			{
+				branch: `agent/${id}`,
+				mr: "!812",
+				head: "1a2b3c4",
+				review: "P0/P1=0",
+				tests: ["bun test = pass"],
+			},
+			box,
+		);
+	}
+	const dest = newOrder("app/2026-11-11-b", box);
+	// MP-1 was claimed again without history and got a new head since;
+	// MP-2 was here before and dropped
+	addTickets(dest, ["MP-1", "MP-2"], box);
+	setTicket(dest, "MP-1", { head: "2b3c4d5", tests: ["bun test = pass"] }, mac);
+	dropTicket(dest, "MP-2", "later", box);
+
+	const carried = adoptCarried(dest, source.id, source.tickets, mac);
+
+	assert.deepEqual(carried, ["MP-1", "MP-2", "MP-3"]);
+	const [one, two, three] = dest.tickets;
+	assert.equal(one.head, "2b3c4d5", "its own head stays");
+	assert.equal(one.mr, "!812");
+	assert.deepEqual(reviewStaleness(one), {
+		reviewed: "1a2b3c4",
+		head: "2b3c4d5",
+	});
+	assert.deepEqual(
+		one.tests.map((r) => r.sha),
+		["1a2b3c4", "2b3c4d5"],
+	);
+	assert.equal(two.state, "in-progress");
+	assert.equal(two.reason, undefined);
+	assert.equal(two.branch, "agent/MP-2");
+	assert.equal(three.carried_from?.order, source.id);
+	// A second carry from the same source changes nothing
+	assert.deepEqual(adoptCarried(dest, source.id, source.tickets, mac), []);
+
+	assert.deepEqual(markCarriedAway(source, ["MP-1", "MP-2"], dest.id, mac), [
+		"MP-1",
+		"MP-2",
+	]);
+	assert.equal(source.tickets[0].reason, `carried to ${dest.id}`);
+	assert.deepEqual(markCarriedAway(source, ["MP-1"], dest.id, mac), []);
+
+	markInReview(dest, ["MP-1", "MP-2", "MP-3"], mac);
+	sealOrder(dest, "5d6e7f8", mac);
+	assert.throws(
+		() => adoptCarried(dest, source.id, source.tickets, mac),
+		/takes no more tickets/,
+	);
+	assert.throws(
+		() => adoptCarried(source, source.id, source.tickets, mac),
+		/from itself/,
+	);
+});
+
+test("a return notice lands on a handed-off copy once, and does not undo a carry made since", () => {
+	const coordinator = sealedOrder();
+	handOff(coordinator, box);
+	const integrator = adoptImported(
+		structuredClone(coordinator),
+		undefined,
+		mac,
+		false,
+	);
+	setTicket(integrator, "MP-2", { head: "1a2b3c4" }, mac);
+	returnTickets(integrator, ["MP-2"], "pair not ready", mac);
+	const notice = buildReturnNotice(integrator, ["MP-1", "MP-2"], mac);
+	assert.deepEqual(
+		notice.tickets.map((t) => t.id),
+		["MP-2"],
+		"only returned tickets travel",
+	);
+
+	assert.deepEqual(applyReturnNotice(coordinator, notice, box), ["MP-2"]);
+	assert.equal(coordinator.tickets[1].state, "returned");
+	assert.equal(coordinator.tickets[1].head, "1a2b3c4", "the writer's record");
+	assert.ok(coordinator.handed_off);
+	assert.deepEqual(applyReturnNotice(coordinator, notice, box), []);
+
+	reclaim(coordinator, box);
+	markCarriedAway(coordinator, ["MP-2"], "app/2026-11-11-b", box);
+	assert.deepEqual(applyReturnNotice(coordinator, notice, box), []);
+	assert.equal(coordinator.tickets[1].state, "dropped");
+
+	assert.throws(
+		() => applyReturnNotice(newOrder("app/other", box), notice, box),
+		/is for order app\/2026-11-11-a/,
+	);
 });

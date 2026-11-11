@@ -13,8 +13,10 @@ import { decode, encode } from "@toon-format/toon";
 import { getPaths, type LocalConfig } from "../../utils.js";
 import {
 	addTickets,
+	adoptCarried,
 	assertAcceptsTickets,
 	assertSegment,
+	hasLeft,
 	localDate,
 	newOrder,
 	nextCode,
@@ -22,7 +24,7 @@ import {
 	type Stamp,
 	validateOrder,
 } from "./model.js";
-import { OrderError, type WorkOrder } from "./types.js";
+import { OrderError, type OrderTicket, type WorkOrder } from "./types.js";
 
 const LOCK_WAIT_MS = 10_000;
 const LOCK_RETRY_MS = 50;
@@ -159,10 +161,19 @@ async function readOrderFile(id: string): Promise<WorkOrder | undefined> {
 	return order;
 }
 
-/** Write atomically; call only while holding the project lock. */
-async function writeOrderFile(order: WorkOrder): Promise<WorkOrder> {
+/**
+ * Write atomically; call only while holding the project lock. `keepRev`
+ * stores the copy without counting a revision.
+ */
+async function writeOrderFile(
+	order: WorkOrder,
+	options: { keepRev?: boolean } = {},
+): Promise<WorkOrder> {
 	// validateOrder also puts the fields in one fixed order and drops unset ones
-	const next = validateOrder({ ...order, rev: order.rev + 1 });
+	const next = validateOrder({
+		...order,
+		rev: options.keepRev ? order.rev : order.rev + 1,
+	});
 	const file = orderPath(next.id);
 	const temp = `${file}.${process.pid}.tmp`;
 	await fs.writeFile(temp, encode(next), "utf8");
@@ -234,6 +245,24 @@ export async function updateOrder(
 	});
 }
 
+/**
+ * Record on this copy what the order's writer reported from elsewhere, such
+ * as a return notice. A handed-off copy takes it too and keeps its revision:
+ * revisions count the writer's changes, and the writer's next export must
+ * still import here. `mutate` returns false when it changed nothing.
+ */
+export async function annotateOrder(
+	id: string,
+	mutate: (order: WorkOrder) => boolean,
+): Promise<WorkOrder> {
+	const { project } = parseOrderId(id);
+	return withProjectLock(project, async () => {
+		const order = await loadOrder(id);
+		if (!mutate(order)) return order;
+		return writeOrderFile(order, { keepRev: Boolean(order.handed_off) });
+	});
+}
+
 export interface OpenOrderOptions {
 	project: string;
 	/** Omit for the next `<date>-<letter>` code */
@@ -282,16 +311,21 @@ function claimProject(target: ClaimTarget): string {
 	return target.project ?? defaultProject();
 }
 
-/** A ticket rides one train at a time, per project. */
+/**
+ * A ticket rides one train at a time, per project. `exempt` names orders
+ * whose hold does not count: the ones a carry takes the tickets out of.
+ */
 function assertTicketsFree(
 	orders: WorkOrder[],
 	targetId: string | undefined,
 	ticketIds: string[],
+	exempt: ReadonlySet<string> = new Set(),
 ): void {
 	for (const other of orders) {
 		if (other.id === targetId || other.stage === "closed") continue;
+		if (exempt.has(other.id)) continue;
 		const busy = other.tickets.filter(
-			(t) => ticketIds.includes(t.id) && t.state !== "dropped",
+			(t) => ticketIds.includes(t.id) && !hasLeft(t),
 		);
 		if (busy.length > 0) {
 			throw new OrderError(
@@ -367,6 +401,111 @@ export async function addClaimedTickets(
 		const added = addTickets(order, ticketIds, stamp);
 		if (!created && added.length === 0) return { order, added, created };
 		return { order: await writeOrderFile(order), added, created };
+	});
+}
+
+/** The order `target` names now; null when `auto` would open a new one. */
+export async function resolveTargetId(
+	target: ClaimTarget,
+): Promise<string | null> {
+	const project = claimProject(target);
+	if (target.order !== "auto" && target.project && target.project !== project) {
+		throw new OrderError(
+			`--project ${target.project} does not match order ${target.order}.`,
+		);
+	}
+	if (target.order !== "auto") return target.order;
+	return findOpenOrder(await listOrders(project))?.id ?? null;
+}
+
+/** The order `id` on this machine, or undefined when it is not here. */
+export async function findOrder(id: string): Promise<WorkOrder | undefined> {
+	return readOrderFile(id);
+}
+
+/**
+ * The newest order of `project`, other than `exceptId`, that holds
+ * `ticketId` in any state: where its history is.
+ */
+export async function findTicketSource(
+	project: string,
+	ticketId: string,
+	exceptId: string | null,
+): Promise<WorkOrder | undefined> {
+	return (await listOrders(project))
+		.filter((o) => o.id !== exceptId)
+		.reverse()
+		.find((o) => o.tickets.some((t) => t.id === ticketId));
+}
+
+/** A ticket's record in the order it is carried from. */
+export interface CarriedTicket {
+	sourceId: string;
+	ticket: OrderTicket;
+}
+
+/**
+ * Take tickets with their history into the target order, opening one for
+ * `auto` if needed. Another open order of the project that holds one of them
+ * refuses the carry; the source orders do not count.
+ */
+export async function carryTickets(
+	target: ClaimTarget,
+	carried: CarriedTicket[],
+	stamp: Stamp,
+): Promise<{ order: WorkOrder; carried: string[]; created: boolean }> {
+	const project = claimProject(target);
+	return withProjectLock(project, async () => {
+		const existing = await listOrders(project);
+		let order: WorkOrder | undefined;
+		if (target.order === "auto") {
+			order = findOpenOrder(existing);
+		} else {
+			order = await loadOrder(target.order);
+		}
+		const sourceIds = [...new Set(carried.map((c) => c.sourceId))];
+		const created = !order;
+		if (!order) {
+			// A source that is not on this machine still owns its code
+			const taken = [...existing.map((o) => o.id), ...sourceIds]
+				.map(parseOrderId)
+				.filter((id) => id.project === project)
+				.map((id) => id.code);
+			const code = nextCode(taken, localDate(new Date(stamp.at)));
+			order = newOrder(`${project}/${code}`, stamp);
+		}
+
+		if (sourceIds.includes(order.id)) {
+			const ids = carried
+				.filter((c) => c.sourceId === order.id)
+				.map((c) => c.ticket.id);
+			throw new OrderError(
+				`${ids.join(", ")} would be carried from ${order.id} into itself${target.order === "auto" ? " (it is the project's open order)" : ""}. ` +
+					`To move a ticket to the next order, seal ${order.id} first, then carry with --to auto --from ${order.id}; or name its real source with --from <id>.`,
+			);
+		}
+		assertTicketsFree(
+			existing,
+			order.id,
+			carried.map((c) => c.ticket.id),
+			new Set(sourceIds),
+		);
+
+		const changed: string[] = [];
+		for (const sourceId of sourceIds) {
+			changed.push(
+				...adoptCarried(
+					order,
+					sourceId,
+					carried.filter((c) => c.sourceId === sourceId).map((c) => c.ticket),
+					stamp,
+				),
+			);
+		}
+		if (!created && changed.length === 0) {
+			return { order, carried: changed, created };
+		}
+		return { order: await writeOrderFile(order), carried: changed, created };
 	});
 }
 

@@ -2,16 +2,22 @@ import { test } from "bun:test";
 import assert from "node:assert/strict";
 import {
 	addTickets,
+	buildReturnNotice,
 	handOff,
 	markInReview,
 	newOrder,
+	reclaim,
+	returnTickets,
 	sealOrder,
 	setTicket,
 } from "./model.js";
 import {
 	extractOrderBlocks,
+	extractReturnNotices,
 	pickOrderBlock,
+	readBlocks,
 	renderOrderBlock,
+	renderReturnBlock,
 } from "./transfer.js";
 import { OrderError, type WorkOrder } from "./types.js";
 
@@ -136,4 +142,31 @@ test("a block that lost a row is rejected, not imported short", () => {
 		(error: unknown) =>
 			error instanceof OrderError && /not valid TOON.*rows/.test(error.message),
 	);
+});
+
+test("a return notice travels as its own block, beside an order block and through <br>", () => {
+	const mac = { by: "integ@mac", at: "2026-11-11T05:00:00.000Z" };
+	const original = order();
+	const integrators = structuredClone(original);
+	reclaim(integrators, mac);
+	returnTickets(integrators, ["MP-1"], "pair `MP-9` not ready", mac);
+	const notice = buildReturnNotice(integrators, ["MP-1"], mac);
+	const block = renderReturnBlock(notice);
+	assert.match(block, /^```toon ttt-return\n/);
+
+	assert.deepEqual(extractReturnNotices(`Returned:\n\n${block}\n`), [notice]);
+	assert.equal(notice.tickets[0].mr, "!812", "the whole record travels");
+	assert.equal(notice.tickets[0].returned?.reason, "pair `MP-9` not ready");
+
+	// Each reader takes only its own blocks
+	const both = `${renderOrderBlock(original)}\n\n${block}\n`;
+	assert.deepEqual(extractOrderBlocks(block), []);
+	assert.deepEqual(pickOrderBlock(both), original);
+	assert.deepEqual(readBlocks(both), { orders: [original], returns: [notice] });
+	assert.throws(() => pickOrderBlock(block), /No work order block found/);
+
+	assert.deepEqual(readBlocks(block.replace(/\n/g, "<br>")).returns, [notice]);
+
+	const active = block.replace("state: returned", "state: in-review");
+	assert.throws(() => extractReturnNotices(active), /not returned/);
 });

@@ -8,6 +8,8 @@ import {
 	type OrderLogEntry,
 	type OrderTestRun,
 	type OrderTicket,
+	type OrderTicketNote,
+	type ReturnNotice,
 	TICKET_STATES,
 	type WorkOrder,
 } from "./types.js";
@@ -143,9 +145,33 @@ function requireTicket(order: WorkOrder, ticketId: string): OrderTicket {
 	return ticket;
 }
 
+/** A dropped or returned ticket has left the batch: another order may take it. */
+export function hasLeft(ticket: OrderTicket): boolean {
+	return ticket.state === "dropped" || ticket.state === "returned";
+}
+
+/** True when both name one commit, however far each is abbreviated. */
+function sameCommit(a: string, b: string): boolean {
+	const [x, y] = [a.toLowerCase(), b.toLowerCase()];
+	return x.startsWith(y) || y.startsWith(x);
+}
+
+/**
+ * A review is stale when the ticket's head moved after the verdict was
+ * recorded. Returns the two heads, or undefined when the review stands (or
+ * the order predates `review_head`).
+ */
+export function reviewStaleness(
+	ticket: OrderTicket,
+): { reviewed: string; head: string } | undefined {
+	if (!ticket.review || !ticket.review_head || !ticket.head) return undefined;
+	if (sameCommit(ticket.review_head, ticket.head)) return undefined;
+	return { reviewed: ticket.review_head, head: ticket.head };
+}
+
 /**
  * Put tickets in the order as in-progress. A ticket already there is left as
- * it is; a dropped one comes back. Returns the IDs that changed.
+ * it is; a dropped or returned one comes back. Returns the IDs that changed.
  */
 export function addTickets(
 	order: WorkOrder,
@@ -156,10 +182,11 @@ export function addTickets(
 	const added: string[] = [];
 	for (const id of ticketIds) {
 		const existing = findTicket(order, id);
-		if (existing && existing.state !== "dropped") continue;
+		if (existing && !hasLeft(existing)) continue;
 		if (existing) {
 			existing.state = "in-progress";
 			delete existing.reason;
+			delete existing.returned;
 		} else {
 			order.tickets.push({ id, state: "in-progress", tests: [] });
 		}
@@ -225,9 +252,9 @@ export function setTicket(
 ): OrderTicket {
 	assertWritable(order);
 	const ticket = requireTicket(order, ticketId);
-	if (ticket.state === "dropped") {
+	if (hasLeft(ticket)) {
 		throw new OrderError(
-			`${ticketId} was dropped from order ${order.id}. Bring it back with 'ttt claim ${ticketId} --order ${order.id}' first.`,
+			`${ticketId} was ${ticket.state} from order ${order.id}. Bring it back with 'ttt claim ${ticketId} --order ${order.id}' first, or take it into another order with 'ttt order carry ${ticketId} --to <id|auto> --from ${order.id}'.`,
 		);
 	}
 	if (fields.head !== undefined) assertSha(fields.head, "--head");
@@ -245,6 +272,11 @@ export function setTicket(
 			changed.push(key);
 		}
 	}
+	if (fields.review !== undefined) {
+		// The verdict is for the head recorded with it, else the current one
+		if (ticket.head) ticket.review_head = ticket.head;
+		else delete ticket.review_head;
+	}
 	if (runs.length > 0) {
 		ticket.tests.push(...runs);
 		changed.push(`tests+${runs.length}`);
@@ -254,7 +286,12 @@ export function setTicket(
 			"Nothing to record: pass at least one of --branch, --mr, --head, --review, --tests.",
 		);
 	}
-	log(order, stamp, `set ${ticketId}: ${changed.join(", ")}`);
+	const stale = fields.head !== undefined ? reviewStaleness(ticket) : undefined;
+	log(
+		order,
+		stamp,
+		`set ${ticketId}: ${changed.join(", ")}${stale ? ` (review stale: reviewed ${stale.reviewed}, head now ${stale.head})` : ""}`,
+	);
 	return ticket;
 }
 
@@ -266,7 +303,7 @@ export function assertReviewable(order: WorkOrder, ticketIds: string[]): void {
 		if (!ticket) {
 			// An open order adopts a ticket named at review; a sealed one is fixed
 			assertAcceptsTickets(order);
-		} else if (ticket.state === "dropped" || ticket.state === "done") {
+		} else if (hasLeft(ticket) || ticket.state === "done") {
 			throw new OrderError(
 				`${id} is ${ticket.state} in order ${order.id} and cannot go to review.`,
 			);
@@ -364,6 +401,273 @@ export function dropTicket(
 	ticket.state = "dropped";
 	ticket.reason = reason;
 	log(order, stamp, `dropped ${ticketId}: ${reason}`);
+}
+
+function requireHeld(order: WorkOrder, ticketId: string): OrderTicket {
+	const ticket = findTicket(order, ticketId);
+	if (!ticket) {
+		throw new OrderError(`${ticketId} is not in order ${order.id}.`);
+	}
+	return ticket;
+}
+
+/** Tickets that `return` may hand back: every one in the order, none done. */
+export function assertReturnable(order: WorkOrder, ticketIds: string[]): void {
+	assertWritable(order);
+	for (const id of ticketIds) {
+		if (requireHeld(order, id).state === "done") {
+			throw new OrderError(
+				`${id} is already done in order ${order.id}; it cannot be returned.`,
+			);
+		}
+	}
+}
+
+/**
+ * Hand tickets back to their coordinator. Each keeps its record and gains a
+ * `returned` note; one already returned is left as it is. Returns the IDs
+ * that changed.
+ */
+export function returnTickets(
+	order: WorkOrder,
+	ticketIds: string[],
+	reason: string,
+	stamp: Stamp,
+): string[] {
+	assertReturnable(order, ticketIds);
+	if (!reason.trim()) {
+		throw new OrderError("return needs --reason <text>.");
+	}
+	const returned: string[] = [];
+	for (const id of ticketIds) {
+		const ticket = requireHeld(order, id);
+		if (ticket.state === "returned") continue;
+		ticket.state = "returned";
+		ticket.returned = { at: stamp.at, by: stamp.by, reason };
+		delete ticket.reason;
+		returned.push(id);
+	}
+	if (returned.length > 0) {
+		log(order, stamp, `returned ${returned.join(", ")}: ${reason}`);
+	}
+	return returned;
+}
+
+/** The ticket `rework` may send back to work, in an order not merged yet. */
+export function assertReworkable(
+	order: WorkOrder,
+	ticketId: string,
+): OrderTicket {
+	assertWritable(order);
+	if (order.stage === "merged") {
+		throw new OrderError(
+			`Order ${order.id} is already merged (${order.train.merged_commit}). A ticket that is not in the merge leaves with 'ttt order return ${order.id} ${ticketId} --reason ...'.`,
+		);
+	}
+	const ticket = requireHeld(order, ticketId);
+	if (ticket.state !== "in-review" && ticket.state !== "in-progress") {
+		throw new OrderError(
+			`${ticketId} is ${ticket.state} in order ${order.id}; only a ticket in review can be reworked.`,
+		);
+	}
+	return ticket;
+}
+
+/**
+ * Send an in-review ticket back to work inside its order. A sealed order
+ * opens again and loses its gated head: the batch must be gated and sealed
+ * anew. Returns false when the ticket was already in progress.
+ */
+export function reworkTicket(
+	order: WorkOrder,
+	ticketId: string,
+	reason: string,
+	stamp: Stamp,
+): boolean {
+	const ticket = assertReworkable(order, ticketId);
+	if (!reason.trim()) {
+		throw new OrderError("rework needs --reason <text>.");
+	}
+	if (ticket.state === "in-progress") return false;
+	ticket.state = "in-progress";
+	ticket.reworked = { at: stamp.at, by: stamp.by, reason };
+	let reopened = "";
+	if (order.stage === "sealed") {
+		const gated = order.train.gated_head;
+		order.stage = "open";
+		delete order.train.gated_head;
+		reopened = ` (order reopened${gated ? `, gated head ${gated} cleared` : ""})`;
+	}
+	log(order, stamp, `rework ${ticketId}: ${reason}${reopened}`);
+	return true;
+}
+
+const runKey = (run: OrderTestRun) =>
+	[run.command, run.sha, run.result, run.at].join("\u0000");
+
+/**
+ * Take tickets into `dest` with the history they had in `sourceId`: branch,
+ * MR, head, review (bound to the head it was given on), and test runs. They
+ * arrive in progress. A ticket `dest` already holds without history gets the
+ * missing fields filled in; one already carried from `sourceId` is left as
+ * it is. Returns the IDs that changed.
+ */
+export function adoptCarried(
+	dest: WorkOrder,
+	sourceId: string,
+	sources: OrderTicket[],
+	stamp: Stamp,
+): string[] {
+	assertAcceptsTickets(dest);
+	if (sourceId === dest.id) {
+		throw new OrderError(
+			`Order ${dest.id} cannot carry tickets from itself; name another order with --to.`,
+		);
+	}
+	const carried: string[] = [];
+	for (const source of sources) {
+		const history = {
+			branch: source.branch,
+			mr: source.mr,
+			head: source.head,
+			review: source.review,
+			review_head: source.review
+				? (source.review_head ?? source.head)
+				: undefined,
+		};
+		const tests = source.tests.map((run) => ({ ...run }));
+		const carriedFrom = { order: sourceId, at: stamp.at, by: stamp.by };
+		const fresh = (): OrderTicket =>
+			compact<OrderTicket>({
+				id: source.id,
+				state: "in-progress",
+				...history,
+				carried_from: carriedFrom,
+				tests,
+			});
+
+		const index = dest.tickets.findIndex((t) => t.id === source.id);
+		const existing = dest.tickets[index];
+		if (!existing) {
+			dest.tickets.push(fresh());
+		} else if (existing.state === "done") {
+			throw new OrderError(
+				`${source.id} is already done in order ${dest.id}; it cannot be carried there.`,
+			);
+		} else if (hasLeft(existing)) {
+			// Back in this order, with the history of where it has been since
+			dest.tickets[index] = fresh();
+		} else if (existing.carried_from?.order === sourceId) {
+			continue;
+		} else {
+			// Claimed here without its history: fill in what is missing
+			existing.branch ??= history.branch;
+			existing.mr ??= history.mr;
+			existing.head ??= history.head;
+			if (existing.review === undefined && history.review !== undefined) {
+				existing.review = history.review;
+				if (history.review_head) existing.review_head = history.review_head;
+			}
+			const known = new Set(existing.tests.map(runKey));
+			existing.tests = [
+				...tests.filter((run) => !known.has(runKey(run))),
+				...existing.tests,
+			];
+			existing.carried_from = carriedFrom;
+		}
+		carried.push(source.id);
+	}
+	if (carried.length > 0) {
+		log(dest, stamp, `carried ${carried.join(", ")} from ${sourceId}`);
+	}
+	return carried;
+}
+
+/**
+ * In the source order, mark tickets that were carried to `destId` as dropped.
+ * Returns the IDs that changed.
+ */
+export function markCarriedAway(
+	source: WorkOrder,
+	ticketIds: string[],
+	destId: string,
+	stamp: Stamp,
+): string[] {
+	assertWritable(source);
+	const reason = `carried to ${destId}`;
+	const changed: string[] = [];
+	for (const id of ticketIds) {
+		const ticket = findTicket(source, id);
+		if (!ticket || ticket.state === "done") continue;
+		if (ticket.state === "dropped" && ticket.reason === reason) continue;
+		ticket.state = "dropped";
+		ticket.reason = reason;
+		changed.push(id);
+	}
+	if (changed.length > 0) {
+		log(source, stamp, `dropped ${changed.join(", ")}: ${reason}`);
+	}
+	return changed;
+}
+
+/** What the order's writer tells the coordinator about `ticketIds`. */
+export function buildReturnNotice(
+	order: WorkOrder,
+	ticketIds: string[],
+	stamp: Stamp,
+): ReturnNotice {
+	return {
+		order: order.id,
+		rev: order.rev,
+		by: stamp.by,
+		at: stamp.at,
+		tickets: order.tickets.filter(
+			(t) => ticketIds.includes(t.id) && t.state === "returned",
+		),
+	};
+}
+
+const sameNote = (a?: OrderTicketNote, b?: OrderTicketNote) =>
+	a?.at === b?.at && a?.by === b?.by && a?.reason === b?.reason;
+
+/**
+ * Record a return notice on this copy of the order: each returned ticket
+ * takes the writer's record of it. A handed-off copy takes it too, because a
+ * notice reports what the writer did and changes nothing about who writes.
+ * Returns the IDs that changed.
+ */
+export function applyReturnNotice(
+	order: WorkOrder,
+	notice: ReturnNotice,
+	stamp: Stamp,
+): string[] {
+	if (notice.order !== order.id) {
+		throw new OrderError(
+			`The return notice is for order ${notice.order}, not ${order.id}.`,
+		);
+	}
+	const changed: string[] = [];
+	for (const incoming of notice.tickets) {
+		const index = order.tickets.findIndex((t) => t.id === incoming.id);
+		const local = order.tickets[index];
+		if (local?.state === "done") {
+			throw new OrderError(
+				`${incoming.id} is done in this copy of ${order.id}; the return notice does not apply to it.`,
+			);
+		}
+		// Already recorded here, and possibly carried on since
+		if (local?.returned && sameNote(local.returned, incoming.returned)) {
+			continue;
+		}
+		const record = structuredClone(incoming);
+		if (local) order.tickets[index] = record;
+		else order.tickets.push(record);
+		changed.push(incoming.id);
+	}
+	if (changed.length > 0) {
+		log(order, stamp, `return notice from ${notice.by}: ${changed.join(", ")}`);
+	}
+	return changed;
 }
 
 /** Mark this copy read-only: its content now travels with the export. */
@@ -536,6 +840,95 @@ function compact<T extends object>(value: T): T {
 	) as T;
 }
 
+function optionalNote(
+	value: unknown,
+	field: string,
+): OrderTicketNote | undefined {
+	if (!isRecord(value)) return undefined;
+	return {
+		at: text(value.at, `${field}.at`),
+		by: text(value.by, `${field}.by`),
+		reason: text(value.reason, `${field}.reason`),
+	};
+}
+
+/** Fields added after 3.13 are optional, so older files and blocks load. */
+function validateTicket(raw: unknown, where: string): OrderTicket {
+	if (!isRecord(raw)) {
+		throw new OrderError(`Invalid work order: ${where} is malformed.`);
+	}
+	const carriedFrom = isRecord(raw.carried_from) ? raw.carried_from : undefined;
+	return compact<OrderTicket>({
+		id: text(raw.id, `${where}.id`),
+		state: oneOf(raw.state, TICKET_STATES, `${where}.state`),
+		branch: optionalText(raw.branch, `${where}.branch`),
+		mr: optionalText(raw.mr, `${where}.mr`),
+		head: optionalText(raw.head, `${where}.head`),
+		review: optionalText(raw.review, `${where}.review`),
+		review_head: optionalText(raw.review_head, `${where}.review_head`),
+		reason: optionalText(raw.reason, `${where}.reason`),
+		returned: optionalNote(raw.returned, `${where}.returned`),
+		reworked: optionalNote(raw.reworked, `${where}.reworked`),
+		carried_from: carriedFrom
+			? {
+					order: text(carriedFrom.order, `${where}.carried_from.order`),
+					at: text(carriedFrom.at, `${where}.carried_from.at`),
+					by: text(carriedFrom.by, `${where}.carried_from.by`),
+				}
+			: undefined,
+		tests: list(raw.tests, `${where}.tests`).map((run, runIndex) => {
+			const at = `${where}.tests[${runIndex}]`;
+			if (!isRecord(run)) {
+				throw new OrderError(`Invalid work order: ${at} is malformed.`);
+			}
+			return {
+				command: text(run.command, `${at}.command`),
+				sha: text(run.sha, `${at}.sha`),
+				result: text(run.result, `${at}.result`),
+				at: text(run.at, `${at}.at`),
+			};
+		}),
+	});
+}
+
+function validateTickets(value: unknown): OrderTicket[] {
+	const tickets = list(value, "tickets").map((raw, index) =>
+		validateTicket(raw, `tickets[${index}]`),
+	);
+	const duplicate = tickets.find(
+		(t, index) => tickets.findIndex((o) => o.id === t.id) !== index,
+	);
+	if (duplicate) {
+		throw new OrderError(
+			`Invalid work order: ticket ${duplicate.id} is listed twice.`,
+		);
+	}
+	return tickets;
+}
+
+/** Check a decoded return notice, dropping unknown fields. */
+export function validateReturnNotice(value: unknown): ReturnNotice {
+	if (!isRecord(value)) {
+		throw new OrderError("Invalid return notice: not a TOON object.");
+	}
+	const order = text(value.order, "order");
+	parseOrderId(order);
+	const tickets = validateTickets(value.tickets);
+	const active = tickets.find((t) => t.state !== "returned");
+	if (active) {
+		throw new OrderError(
+			`Invalid return notice: ${active.id} is ${active.state}, not returned.`,
+		);
+	}
+	return {
+		order,
+		rev: typeof value.rev === "number" ? value.rev : 0,
+		by: text(value.by, "by"),
+		at: text(value.at, "at"),
+		tickets,
+	};
+}
+
 /** Check decoded text against the order shape, dropping unknown fields. */
 export function validateOrder(value: unknown): WorkOrder {
 	if (!isRecord(value)) {
@@ -547,44 +940,7 @@ export function validateOrder(value: unknown): WorkOrder {
 	const handedOff = isRecord(value.handed_off) ? value.handed_off : undefined;
 	const rev = typeof value.rev === "number" ? value.rev : 0;
 
-	const tickets = list(value.tickets, "tickets").map((raw, index) => {
-		if (!isRecord(raw)) {
-			throw new OrderError(
-				`Invalid work order: tickets[${index}] is malformed.`,
-			);
-		}
-		const where = `tickets[${index}]`;
-		return compact<OrderTicket>({
-			id: text(raw.id, `${where}.id`),
-			state: oneOf(raw.state, TICKET_STATES, `${where}.state`),
-			branch: optionalText(raw.branch, `${where}.branch`),
-			mr: optionalText(raw.mr, `${where}.mr`),
-			head: optionalText(raw.head, `${where}.head`),
-			review: optionalText(raw.review, `${where}.review`),
-			reason: optionalText(raw.reason, `${where}.reason`),
-			tests: list(raw.tests, `${where}.tests`).map((run, runIndex) => {
-				const at = `${where}.tests[${runIndex}]`;
-				if (!isRecord(run)) {
-					throw new OrderError(`Invalid work order: ${at} is malformed.`);
-				}
-				return {
-					command: text(run.command, `${at}.command`),
-					sha: text(run.sha, `${at}.sha`),
-					result: text(run.result, `${at}.result`),
-					at: text(run.at, `${at}.at`),
-				};
-			}),
-		});
-	});
-
-	const duplicate = tickets.find(
-		(t, index) => tickets.findIndex((o) => o.id === t.id) !== index,
-	);
-	if (duplicate) {
-		throw new OrderError(
-			`Invalid work order: ticket ${duplicate.id} is listed twice.`,
-		);
-	}
+	const tickets = validateTickets(value.tickets);
 
 	return compact<WorkOrder>({
 		id,
