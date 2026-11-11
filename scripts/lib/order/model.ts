@@ -666,6 +666,13 @@ export function applyReturnNotice(
 			`The return notice is for order ${notice.order}, not ${order.id}.`,
 		);
 	}
+	// A copy this machine writes moved on since the notice was printed: its
+	// tickets may have come back to work, which the notice would undo
+	if (!order.handed_off && notice.rev < order.rev) {
+		throw new OrderError(
+			`The return notice is from rev ${notice.rev} of ${order.id}, older than this copy (rev ${order.rev}); it no longer applies.`,
+		);
+	}
 	const changed: string[] = [];
 	for (const incoming of notice.tickets) {
 		const index = order.tickets.findIndex((t) => t.id === incoming.id);

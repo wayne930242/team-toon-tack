@@ -532,3 +532,24 @@ test("return refuses a dropped ticket and names why it left", () => {
 		/dropped .*carried to app\/2026-11-12-d/,
 	);
 });
+
+test("a stale return notice does not undo a writable copy that moved on", () => {
+	const coordinator = sealedOrder();
+	handOff(coordinator, box);
+	const integrator = adoptImported(
+		structuredClone(coordinator),
+		undefined,
+		mac,
+		false,
+	);
+	returnTickets(integrator, ["MP-2"], "pair not ready", mac);
+	const notice = buildReturnNotice(integrator, ["MP-2"], mac);
+	reclaim(coordinator, box);
+	// Saves bump the revision (store.ts): two writes since the notice
+	coordinator.rev = notice.rev + 2;
+	assert.throws(
+		() => applyReturnNotice(coordinator, notice, box),
+		/older than this copy/,
+	);
+	assert.equal(coordinator.tickets[1].state, "in-review");
+});

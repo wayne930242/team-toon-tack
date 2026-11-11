@@ -673,12 +673,22 @@ function pickFromText(
 			(latest, item) => (!latest || item.rev >= latest.rev ? item : latest),
 			undefined,
 		);
-	const notice = newest(
-		blocks.returns.filter((n) => n.tickets.some((t) => t.id === ticketId)),
-	);
+	// Notices from different orders compare by time: revisions count per order
+	const notice = blocks.returns
+		.filter((n) => n.tickets.some((t) => t.id === ticketId))
+		.reduce<ReturnNotice | undefined>(
+			(latest, item) => (!latest || item.at >= latest.at ? item : latest),
+			undefined,
+		);
+	const holders = blocks.orders.filter((o) => findTicket(o, ticketId));
+	if (!notice && new Set(holders.map((o) => o.id)).size > 1) {
+		throw new OrderError(
+			`${ticketId} is in more than one order in the text (${[...new Set(holders.map((o) => o.id))].join(", ")}); name the source with --from.`,
+		);
+	}
 	const source = notice
 		? { id: notice.order, tickets: notice.tickets }
-		: newest(blocks.orders.filter((o) => findTicket(o, ticketId)));
+		: newest(holders);
 	const ticket = source?.tickets.find((t) => t.id === ticketId);
 	if (!source || !ticket) return undefined;
 	return { carried: { sourceId: source.id, ticket }, notice };
