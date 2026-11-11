@@ -1,5 +1,6 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
+import { TrelloClient } from "../trello.js";
 import { TrelloAdapter } from "./trello-adapter.js";
 
 const originalFetch = globalThis.fetch;
@@ -238,6 +239,22 @@ test("TrelloAdapter.createIssue returns the Trello API failure without retrying 
 			error: "Trello API error (429): rate limited",
 		});
 		assert.equal(postCount, 1);
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
+test("TrelloClient.getCardComments asks for every comment, not Trello's default 50", async () => {
+	const urls: URL[] = [];
+	globalThis.fetch = async (input) => {
+		urls.push(new URL(String(input)));
+		return jsonResponse([]);
+	};
+	try {
+		await new TrelloClient("key", "token").getCardComments("card-1");
+		assert.equal(urls[0].pathname, "/1/cards/card-1/actions");
+		assert.equal(urls[0].searchParams.get("filter"), "commentCard");
+		assert.equal(urls[0].searchParams.get("limit"), "1000");
 	} finally {
 		globalThis.fetch = originalFetch;
 	}

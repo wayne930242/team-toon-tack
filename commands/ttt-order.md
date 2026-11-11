@@ -63,6 +63,7 @@ ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0
 
 `close` completes every in-review ticket through the configured completion mode (parent issues included) and comments MR, merge commit, version, and order id on each.
 Dropped tickets are untouched.
+A ticket must reach the done status: under `strict_review` (or `upstream_strict` without a parent) it stops at testing, so close fails it and the order stays merged.
 When a ticket fails, fix the cause and rerun the same command: done tickets are skipped and no comment is posted twice.
 
 ### A returned train
@@ -91,7 +92,9 @@ Commands:
         head, the result to "pass".
   review <id> <ticket>... [--status <name>]
         Move tickets to the testing status (assignee unchanged) and mark
-        them in-review. An open order adopts a ticket it does not hold yet.
+        them in-review. An open order adopts a ticket it does not hold yet,
+        unless another order of the project holds it. Done or Canceled
+        tickets are left where they are.
   train <id> [--branch <b>] [--mr <mr>]
         Record the train branch and its merge request.
   seal <id> --gated-head <sha>
@@ -124,5 +127,8 @@ The writer's name is `TTT_ACTOR`, else `<current_user>@<hostname>`.
 | `Cannot seal ...: MP-x still in progress` | `ttt order review <id> MP-x` or `ttt order drop <id> MP-x --reason ...` |
 | `is not sealed` on close | `ttt order seal <id> --gated-head <sha>` first |
 | `is Canceled at the source` on close | `ttt order drop <id> MP-x --reason canceled`, then rerun close |
+| `no longer in review` on close | The ticket moved since the seal: `ttt order drop` it, or put it back in review |
+| `is In Review, not Done` on close | The completion mode stops at testing; move it to Done or change `completion_mode`, then rerun |
+| `already in order ...` on review | A ticket rides one order per project; drop it there first |
 | `already exists here as a writable copy` on import | Check which copy is current; replace the local one with `--force` |
 | `No work order block found` | Pass text that contains the block printed by `ttt order export` |

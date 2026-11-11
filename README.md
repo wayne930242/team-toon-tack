@@ -205,8 +205,10 @@ Use `--from-remote` (or `-r`) when the issue exists in remote but not in local s
 Use `--commit <sha>` (and `--repo <path>` when the commit lives in another checkout) to close a ticket whose commit was merged earlier. Without it, the current HEAD is recorded.
 
 With several IDs, `-m`, `--commit`, `--repo`, and `--from-remote` apply to every ticket.
+Every ID must resolve first: one that is unknown or not in progress stops the run before any ticket moves.
 Each ticket gets a result line, and one failing ticket does not stop the rest.
-A ticket that is already done is reported and skipped, so a run can be repeated after a partial failure.
+A ticket that is already done (or, under `strict_review`, already at the testing status) is reported and skipped, so a run can be repeated after a partial failure.
+IDs repeated in another case count once.
 The exit code is non-zero when any ticket failed.
 To close a whole train batch after its merge, use a [work order](#ttt-order) instead.
 
@@ -252,10 +254,10 @@ How an order behaves:
 - **Storage.** Orders live in `.ttt/orders/<project>/<code>.toon` on the writer's machine and are never committed. Writes are atomic (temp file, then rename) and serialized by a lock per project. The default project is the directory that holds `.ttt`.
 - **Stages.** `open` → `sealed` → `merged` → `closed`. A project holds one open order at a time. After the seal, `ttt claim --order auto` opens the next one, and a returned ticket is reworked inside its own order: record the new head with `set`, then `seal` again.
 - **One writer.** Workers report; the coordinator records. `export --handoff` passes the pen to the integrator, and write commands on the handed-off copy refuse with the way back: import the returned copy, or `reclaim`. An import never overwrites a writable local copy without `--force`, and never takes an older revision.
-- **Close.** Each in-review ticket goes through the same completion handler as `ttt done`, so `completion_mode` and parent issues apply. Each gets one comment with its MR, the merge commit, the version, and the order id. Dropped tickets are untouched. A ticket canceled at the source stops the close until it is dropped. A rerun skips what is already done and does not comment twice.
+- **Close.** Each in-review ticket goes through the same completion handler as `ttt done`, so `completion_mode` and parent issues apply. Each gets one comment with its MR, the merge commit, the version, and the order id. Dropped tickets are untouched. A ticket canceled at the source, or moved out of review since the seal, stops the close until it is dropped or sent back to review. Close requires the done status: a completion mode that leaves a ticket at testing (`strict_review`, or `upstream_strict` without a parent to take it) fails that ticket and keeps the order merged. A rerun skips what is already done and does not comment twice.
 - **Identity.** The writer's name in `owner` and the log is `TTT_ACTOR`, else `<current_user>@<hostname>`.
 
-A ticket rides one order at a time: claiming it into a second order is refused until it is dropped from the first.
+A ticket rides one order per project at a time: claiming it into a second order of the same project, or having `review` adopt it there, is refused until it is dropped from the first. `review` leaves a Done or Canceled ticket where it is.
 
 ### `ttt status`
 

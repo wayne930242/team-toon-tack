@@ -249,7 +249,8 @@ export class TrelloClient {
 	async getCardComments(cardId: string): Promise<TrelloAction[]> {
 		return this.request<TrelloAction[]>(
 			"GET",
-			`/cards/${cardId}/actions?filter=commentCard`,
+			// 1000 is the most Trello returns; the default is 50
+			`/cards/${cardId}/actions?filter=commentCard&limit=1000`,
 		);
 	}
 

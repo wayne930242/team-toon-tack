@@ -11,6 +11,7 @@ import {
 	assertWritable,
 	closeIfComplete,
 	dropTicket,
+	findTicket,
 	handOff,
 	markInReview,
 	markTicketDone,
@@ -31,6 +32,7 @@ import {
 	writesRemote,
 } from "./lib/order/remote.js";
 import {
+	assertFreeForOrder,
 	defaultProject,
 	listOrders,
 	loadOrder,
@@ -69,7 +71,9 @@ Commands:
         head, the result to "pass".
   review <id> <ticket>... [--status <name>]
         Move tickets to the testing status (assignee unchanged) and mark
-        them in-review. An open order adopts a ticket it does not hold yet.
+        them in-review. An open order adopts a ticket it does not hold yet,
+        unless another order of the project holds it. Done or Canceled
+        tickets are left where they are.
   train <id> [--branch <b>] [--mr <mr>]
         Record the train branch and its merge request.
   seal <id> --gated-head <sha>
@@ -332,7 +336,12 @@ async function cmdReview(args: string[]): Promise<void> {
 	const stamp = stampFor(localConfig);
 
 	// Refuse before anything moves at the source
-	assertReviewable(await loadOrder(id), ticketIds);
+	const current = await loadOrder(id);
+	assertReviewable(current, ticketIds);
+	await assertFreeForOrder(
+		id,
+		ticketIds.filter((t) => !findTicket(current, t)),
+	);
 
 	const updates = new Map<string, string | null>();
 	let results: TicketResult[];
@@ -463,6 +472,9 @@ async function cmdImport(args: string[]): Promise<void> {
 	);
 	console.log(
 		`Imported order ${order.id} [${order.stage}]: ${countByState(order)}. You (${order.owner}) are now its writer.`,
+	);
+	console.log(
+		`Tickets: ${order.tickets.map((t) => `${t.id} (${t.state})`).join(", ") || "none"}`,
 	);
 }
 

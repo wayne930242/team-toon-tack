@@ -73,22 +73,23 @@ async function withProjectLock<T>(
 	const lockPath = path.join(dir, ".lock");
 	const deadline = Date.now() + LOCK_WAIT_MS;
 
+	const token = `${process.pid}@${os.hostname()} ${new Date().toISOString()} ${Math.random().toString(36).slice(2)}\n`;
+	const isStale = (file: string) =>
+		fs
+			.stat(file)
+			.then((stat) => Date.now() - stat.mtimeMs > LOCK_STALE_MS)
+			.catch(() => false);
+
 	for (;;) {
 		try {
 			const handle = await fs.open(lockPath, "wx");
-			await handle.writeFile(
-				`${process.pid}@${os.hostname()} ${new Date().toISOString()}\n`,
-			);
+			await handle.writeFile(token);
 			await handle.close();
 			break;
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-			const age = await fs
-				.stat(lockPath)
-				.then((stat) => Date.now() - stat.mtimeMs)
-				.catch(() => 0);
-			if (age > LOCK_STALE_MS) {
-				await fs.rm(lockPath, { force: true });
+			if (await isStale(lockPath)) {
+				await takeOverStaleLock(lockPath, isStale);
 				continue;
 			}
 			if (Date.now() > deadline) {
@@ -104,8 +105,34 @@ async function withProjectLock<T>(
 	try {
 		return await fn();
 	} finally {
-		await fs.rm(lockPath, { force: true });
+		// Release only our own lock: if it went stale, another process owns it now
+		const current = await fs.readFile(lockPath, "utf8").catch(() => "");
+		if (current === token) await fs.rm(lockPath, { force: true });
 	}
+}
+
+/**
+ * Move a stale lock aside under a unique name before deleting it, so two
+ * processes that both saw it stale cannot delete a fresh lock between them.
+ * If what got moved turns out to be fresh, it goes back.
+ */
+async function takeOverStaleLock(
+	lockPath: string,
+	isStale: (file: string) => Promise<boolean>,
+): Promise<void> {
+	const aside = `${lockPath}.${process.pid}.${Math.random().toString(36).slice(2)}.stale`;
+	try {
+		await fs.rename(lockPath, aside);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+		throw error;
+	}
+	if (!(await isStale(aside))) {
+		// Another process locked in between: restore its lock unless a third
+		// one already holds the path
+		await fs.link(aside, lockPath).catch(() => undefined);
+	}
+	await fs.rm(aside, { force: true });
 }
 
 async function readOrderFile(id: string): Promise<WorkOrder | undefined> {
@@ -118,7 +145,7 @@ async function readOrderFile(id: string): Promise<WorkOrder | undefined> {
 	}
 	let order: WorkOrder;
 	try {
-		order = validateOrder(decode(content, { strict: false }));
+		order = validateOrder(decode(content, { strict: true }));
 	} catch (error) {
 		throw new OrderError(
 			`${orderPath(id)}: ${error instanceof Error ? error.message : error}`,
@@ -255,7 +282,7 @@ function claimProject(target: ClaimTarget): string {
 	return target.project ?? defaultProject();
 }
 
-/** A ticket rides one train at a time. */
+/** A ticket rides one train at a time, per project. */
 function assertTicketsFree(
 	orders: WorkOrder[],
 	targetId: string | undefined,
@@ -272,6 +299,18 @@ function assertTicketsFree(
 			);
 		}
 	}
+}
+
+/**
+ * Before `review` adopts tickets into `orderId`: none of them may ride
+ * another order of the same project. Orders of other projects do not count.
+ */
+export async function assertFreeForOrder(
+	orderId: string,
+	ticketIds: string[],
+): Promise<void> {
+	const { project } = parseOrderId(orderId);
+	assertTicketsFree(await listOrders(project), orderId, ticketIds);
 }
 
 /**

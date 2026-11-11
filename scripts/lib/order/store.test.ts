@@ -5,6 +5,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
+	readFileSync,
 	utimesSync,
 	writeFileSync,
 } from "node:fs";
@@ -171,4 +172,50 @@ test("a lock left by a dead process is taken over", async () => {
 
 test("the default project is the directory that holds .ttt", () => {
 	assert.match(defaultProject(), /^ttt-order-store-/);
+});
+
+test("an order file that lost a row is refused", async () => {
+	const opened = await openOrder({ project: "app" }, stamp);
+	await updateOrder(opened.id, (o) => {
+		markInReview(o, [], stamp);
+		o.log.push({ ...o.log[0] });
+	});
+	const file = path.join(dir, "orders/app/2026-11-11-a.toon");
+	const lines = readFileSync(file, "utf8").split("\n");
+	const header = lines.findIndex((line) => /^log\[\d+\]/.test(line));
+	lines.splice(header + 1, 1);
+	writeFileSync(file, lines.join("\n"));
+
+	await assert.rejects(loadOrder(opened.id), /2026-11-11-a\.toon: .*rows/);
+});
+
+test("releasing leaves a lock another process took over in place", async () => {
+	const opened = await openOrder({ project: "app" }, stamp);
+	const lock = path.join(dir, "orders/app/.lock");
+	const theirs = "4242@other 2026-11-11T01:00:00.000Z\n";
+
+	await updateOrder(opened.id, () => {
+		// Our lock went stale and someone else took it while we worked
+		writeFileSync(lock, theirs);
+	});
+
+	assert.equal(readFileSync(lock, "utf8"), theirs);
+});
+
+test("taking over a stale lock leaves no stray files", async () => {
+	const opened = await openOrder({ project: "app" }, stamp);
+	const lock = path.join(dir, "orders/app/.lock");
+	writeFileSync(lock, "999999@gone 2026-11-11T00:00:00.000Z\n");
+	const old = new Date(Date.now() - 60_000);
+	utimesSync(lock, old, old);
+
+	await Promise.all([
+		updateOrder(opened.id, () => false),
+		updateOrder(opened.id, () => false),
+	]);
+
+	assert.deepEqual(
+		readdirSync(path.join(dir, "orders/app")).filter((f) => f.startsWith(".")),
+		[],
+	);
 });

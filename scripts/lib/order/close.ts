@@ -70,6 +70,20 @@ export async function closeTicket(
 			);
 		}
 		const alreadyDone = issue.status === doneStatus || type === "completed";
+		const transitions = getStatusTransitions(config);
+		const reviewStatuses = [
+			localConfig.dev_testing_status,
+			transitions.testing,
+		].filter((s): s is string => Boolean(s));
+		if (
+			!alreadyDone &&
+			reviewStatuses.length > 0 &&
+			!reviewStatuses.includes(issue.status)
+		) {
+			return fail(
+				`is ${issue.status} at the source, no longer in review (${reviewStatuses.join(" or ")}); send it back with 'ttt order review' if it is not merged yet, or leave it out with 'ttt order drop ${order.id} ${id} --reason ...'`,
+			);
+		}
 		const commented =
 			issue.comments?.some((c) =>
 				c.body.includes(orderCommentMarker(order.id)),
@@ -106,6 +120,14 @@ export async function closeTicket(
 				return fail(result.message ?? "the status update failed");
 			}
 			status = result.status ?? doneStatus;
+			const resultType = remote.statuses.find((s) => s.name === status)?.type;
+			if (status !== doneStatus && resultType !== "completed") {
+				// The completion mode handed it to testing: the train is merged, but
+				// the ticket is not done, so the order must not close over it
+				return fail(
+					`is ${status}, not ${doneStatus}: completion_mode '${localConfig.completion_mode ?? "default"}' stops at the testing status. Move it to ${doneStatus} or set completion_mode (ttt config), then rerun 'ttt order close ${order.id}'`,
+				);
+			}
 		}
 
 		if (!commented) {

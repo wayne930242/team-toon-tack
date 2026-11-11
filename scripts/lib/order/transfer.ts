@@ -37,7 +37,7 @@ export function extractOrderBlocks(text: string): WorkOrder[] {
 			);
 		let decoded: unknown;
 		try {
-			decoded = decode(lines.join("\n"), { strict: false });
+			decoded = decode(lines.join("\n"), { strict: true });
 		} catch (error) {
 			throw new OrderError(
 				`The work order block is not valid TOON: ${error instanceof Error ? error.message : error}`,

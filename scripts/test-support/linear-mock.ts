@@ -88,6 +88,8 @@ const page = (name: string, nodes: unknown[]) => ({
 interface Variables {
 	id?: string;
 	term?: string;
+	first?: number;
+	after?: string;
 	filter?: { parent?: { id?: { eq?: string } } };
 	input?: { stateId?: string; issueId?: string; body?: string };
 }
@@ -148,19 +150,28 @@ function respond(
 		return { issue: issueNode(...found) };
 	}
 	if (query.includes("query issue_comments(")) {
+		// Paged like Linear: 50 by default, `first`/`after` pick the window
 		const comments = findByUuid(state, variables.id)?.[1].comments ?? [];
+		const start = variables.after ? Number(variables.after) : 0;
+		const end = Math.min(comments.length, start + (variables.first ?? 50));
 		return {
-			issue: page(
-				"comments",
-				comments.map((body, index) => ({
-					__typename: "Comment",
-					id: `comment-${index}`,
-					body,
-					createdAt: "2026-11-01T00:00:00.000Z",
-					reactionData: [],
-					reactions: [],
-				})),
-			),
+			issue: {
+				comments: {
+					__typename: "CommentConnection",
+					pageInfo: {
+						hasNextPage: end < comments.length,
+						endCursor: String(end),
+					},
+					nodes: comments.slice(start, end).map((body, offset) => ({
+						__typename: "Comment",
+						id: `comment-${start + offset}`,
+						body,
+						createdAt: "2026-11-01T00:00:00.000Z",
+						reactionData: [],
+						reactions: [],
+					})),
+				},
+			},
 		};
 	}
 	if (query.includes("query issueLabels(")) return page("issueLabels", []);

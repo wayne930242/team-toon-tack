@@ -204,7 +204,11 @@ export class LinearAdapter implements TaskSourceAdapter {
 			const labelNames = labels.nodes.map((l) => l.name);
 			const parent = await issue.parent;
 			const attachmentsData = await issue.attachments();
-			const commentsData = await issue.comments();
+			// Every page: callers look for their own marker among old comments
+			const commentsData = await issue.comments({ first: 100 });
+			while (commentsData.pageInfo.hasNextPage) {
+				await commentsData.fetchNext();
+			}
 
 			const attachments: SourceAttachment[] = attachmentsData.nodes.map(
 				(a) => ({

@@ -99,13 +99,22 @@ export async function moveToStatus(
 	const results: TicketResult[] = [];
 	for (const id of ticketIds) {
 		try {
+			// Read the current status: the local copy may be stale
+			const issue = await remote.adapter.searchIssue(id);
 			const local = findTaskByIssueId(localTasks, id);
-			const sourceId =
-				local?.sourceId ??
-				local?.linearId ??
-				(await remote.adapter.searchIssue(id))?.sourceId;
-			if (!sourceId) {
+			const sourceId = issue?.sourceId ?? local?.sourceId ?? local?.linearId;
+			if (!issue || !sourceId) {
 				results.push({ id, ok: false, detail: "not found at the source" });
+				continue;
+			}
+			const type = remote.statuses.find((s) => s.name === issue.status)?.type;
+			if (type === "completed" || type === "canceled") {
+				// Never reopen a closed ticket by sending it to review
+				results.push({
+					id,
+					ok: false,
+					detail: `is ${issue.status} at the source; reopen it there first, or drop it from the order`,
+				});
 				continue;
 			}
 			const update = await remote.adapter.updateIssueStatus(

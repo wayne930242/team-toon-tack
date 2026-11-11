@@ -418,3 +418,125 @@ test("ttt order rejects unknown commands and options without changing anything",
 	assert.equal(help.exitCode, 0);
 	assert.match(help.stdout, /Usage: ttt order <command>/);
 });
+
+test("close refuses a completion mode that stops at testing and keeps the order merged", async () => {
+	for (const localConfig of [
+		{ completion_mode: "strict_review" },
+		{ completion_mode: "upstream_strict", qa_pm_teams: ["qa"] },
+	]) {
+		const box = makeLinearWorkspace(threeTodo, { localConfig });
+		await runCli(box, "claim.ts", [
+			"MP-1",
+			"--order",
+			"auto",
+			"--project",
+			"app",
+		]);
+		await order(box, ["review", ORDER, "MP-1"]);
+		await order(box, ["seal", ORDER, "--gated-head", "5d6e7f8"]);
+
+		const close = await order(box, ["close", ORDER, "--merged", "9a8b7c6"]);
+
+		assert.equal(close.exitCode, 1, localConfig.completion_mode);
+		assert.match(close.stdout, /❌ MP-1 is In Review, not Done/);
+		assert.equal(readOrder(box).stage, "merged");
+		assert.deepEqual(states(readOrder(box)), { "MP-1": "in-review" });
+		assert.deepEqual(readRemote(box)["MP-1"].comments, []);
+	}
+});
+
+test("close refuses a ticket that left review after the seal", async () => {
+	const box = await sealedOnBox(threeTodo);
+	const remoteFile = JSON.parse(readFileSync(box.statePath, "utf8"));
+	remoteFile.issues["MP-1"].state = "s-todo";
+	writeFileSync(box.statePath, JSON.stringify(remoteFile));
+
+	const close = await order(box, ["close", ORDER, "--merged", "9a8b7c6"]);
+
+	assert.equal(close.exitCode, 1);
+	assert.match(
+		close.stdout,
+		/❌ MP-1 is Todo at the source, no longer in review.*ttt order drop/,
+	);
+	assert.equal(readRemote(box)["MP-1"].status, "Todo");
+	assert.equal(readOrder(box).stage, "merged");
+});
+
+test("ttt order review leaves a Done or Canceled ticket where it is", async () => {
+	const box = makeLinearWorkspace(threeTodo);
+	await runCli(box, "claim.ts", [
+		"MP-1",
+		"MP-2",
+		"MP-3",
+		"--order",
+		"auto",
+		"--project",
+		"app",
+	]);
+	const remoteFile = JSON.parse(readFileSync(box.statePath, "utf8"));
+	remoteFile.issues["MP-1"].state = "s-done";
+	remoteFile.issues["MP-2"].state = "s-canceled";
+	writeFileSync(box.statePath, JSON.stringify(remoteFile));
+
+	const review = await order(box, ["review", ORDER, "MP-1", "MP-2", "MP-3"]);
+
+	assert.equal(review.exitCode, 1);
+	assert.match(review.stdout, /MP-1 未更新 \(is Done at the source/);
+	assert.match(review.stdout, /MP-2 未更新 \(is Canceled at the source/);
+	const remote = readRemote(box);
+	assert.equal(remote["MP-1"].status, "Done");
+	assert.equal(remote["MP-2"].status, "Canceled");
+	assert.equal(remote["MP-3"].status, "In Review");
+});
+
+test("ttt order review does not adopt a ticket another order of the project holds", async () => {
+	const box = await sealedOnBox({ ...threeTodo, "MP-4": { state: "s-todo" } });
+	await runCli(box, "claim.ts", [
+		"MP-4",
+		"--order",
+		"auto",
+		"--project",
+		"app",
+	]);
+	const next = `app/${today}-b`;
+
+	const review = await order(box, ["review", next, "MP-1"]);
+
+	assert.equal(review.exitCode, 1);
+	assert.match(review.stderr, new RegExp(`MP-1 already in order ${ORDER}`));
+	assert.equal(
+		review.requests.some((r) => r.name === "updateIssue"),
+		false,
+	);
+	assert.deepEqual(states(readOrder(box, next)), { "MP-4": "in-progress" });
+});
+
+test("close finds its marker beyond the first page of comments", async () => {
+	const box = await sealedOnBox(threeTodo);
+	const marker = `- **Work order:** \`${ORDER}\``;
+	const remoteFile = JSON.parse(readFileSync(box.statePath, "utf8"));
+	remoteFile.issues["MP-1"].state = "s-done";
+	remoteFile.issues["MP-1"].comments = [
+		...Array.from({ length: 60 }, (_, i) => `note ${i}`),
+		`## merged\n${marker}`,
+	];
+	writeFileSync(box.statePath, JSON.stringify(remoteFile));
+
+	await order(box, ["close", ORDER, "--merged", "9a8b7c6"]);
+
+	assert.equal(readRemote(box)["MP-1"].comments.length, 61);
+});
+
+test("import names the tickets it brought in", async () => {
+	const box = await sealedOnBox(threeTodo);
+	const exported = await order(box, ["export", ORDER, "--handoff"]);
+	const mac = makeLinearWorkspace({}, { sameRemoteAs: box });
+
+	const imported = await order(mac, ["import", "-"], {}, exported.stdout);
+
+	assert.equal(imported.exitCode, 0, imported.stderr);
+	assert.match(
+		imported.stdout,
+		/MP-1 \(in-review\), MP-2 \(in-review\), MP-3 \(dropped\)/,
+	);
+});

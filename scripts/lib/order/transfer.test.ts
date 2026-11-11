@@ -111,3 +111,16 @@ test("text without a valid block is refused with what was expected", () => {
 		OrderError,
 	);
 });
+
+test("a block that lost a row is rejected, not imported short", () => {
+	const block = renderOrderBlock(order());
+	const lines = block.split("\n");
+	const header = lines.findIndex((line) => /^log\[\d+\]/.test(line));
+	lines.splice(header + 1, 1);
+
+	assert.throws(
+		() => extractOrderBlocks(lines.join("\n")),
+		(error: unknown) =>
+			error instanceof OrderError && /not valid TOON.*rows/.test(error.message),
+	);
+});
