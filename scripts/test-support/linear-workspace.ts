@@ -42,6 +42,7 @@ const STATE_NAMES: Record<string, string> = {
 	"s-todo": "Todo",
 	"s-progress": "In Progress",
 	"s-review": "In Review",
+	"s-code-review": "Code Review",
 	"s-done": "Done",
 	"s-canceled": "Canceled",
 };
@@ -49,6 +50,7 @@ const STATE_NAMES: Record<string, string> = {
 const LOCAL_STATUS: Record<string, string> = {
 	"s-progress": "in-progress",
 	"s-review": "in-review",
+	"s-code-review": "in-review",
 	"s-done": "completed",
 };
 

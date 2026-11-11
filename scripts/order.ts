@@ -3,6 +3,7 @@
  * ttt order - work orders: one file per train batch, from claim to Done
  */
 import fs from "node:fs/promises";
+import { getStatusTransitions } from "./lib/linear.js";
 import { type CloseResult, closeTicket } from "./lib/order/close.js";
 import {
 	adoptImported,
@@ -358,6 +359,7 @@ async function cmdReview(args: string[]): Promise<void> {
 			statusName,
 			remote,
 			data?.tasks ?? [],
+			getStatusTransitions(config).done,
 		);
 		for (const result of results) {
 			if (result.ok) updates.set(result.id, statusName);

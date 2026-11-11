@@ -16,6 +16,7 @@ const STATES = [
 	{ id: "s-todo", name: "Todo", type: "unstarted" },
 	{ id: "s-progress", name: "In Progress", type: "started" },
 	{ id: "s-review", name: "In Review", type: "started" },
+	{ id: "s-code-review", name: "Code Review", type: "started" },
 	{ id: "s-done", name: "Done", type: "completed" },
 	{ id: "s-canceled", name: "Canceled", type: "canceled" },
 ];

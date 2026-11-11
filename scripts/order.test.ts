@@ -462,6 +462,49 @@ test("close refuses a ticket that left review after the seal", async () => {
 	assert.equal(readOrder(box).stage, "merged");
 });
 
+test("close completes a ticket reviewed with --status <other review status>", async () => {
+	const box = makeLinearWorkspace(threeTodo);
+	await runCli(box, "claim.ts", [
+		"MP-1",
+		"--order",
+		"auto",
+		"--project",
+		"app",
+	]);
+	const review = await order(box, [
+		"review",
+		ORDER,
+		"MP-1",
+		"--status",
+		"Code Review",
+	]);
+	assert.equal(review.exitCode, 0, review.stdout + review.stderr);
+	assert.equal(readRemote(box)["MP-1"].status, "Code Review");
+	await order(box, ["seal", ORDER, "--gated-head", "5d6e7f8"]);
+
+	const close = await order(box, ["close", ORDER, "--merged", "9a8b7c6"]);
+
+	assert.equal(close.exitCode, 0, close.stdout + close.stderr);
+	assert.equal(readRemote(box)["MP-1"].status, "Done");
+	assert.equal(readOrder(box).stage, "closed");
+});
+
+test("close refuses a ticket sent back to In Progress after the seal", async () => {
+	const box = await sealedOnBox(threeTodo);
+	const remoteFile = JSON.parse(readFileSync(box.statePath, "utf8"));
+	remoteFile.issues["MP-1"].state = "s-progress";
+	writeFileSync(box.statePath, JSON.stringify(remoteFile));
+
+	const close = await order(box, ["close", ORDER, "--merged", "9a8b7c6"]);
+
+	assert.equal(close.exitCode, 1);
+	assert.match(
+		close.stdout,
+		/❌ MP-1 is In Progress at the source, no longer in review/,
+	);
+	assert.equal(readRemote(box)["MP-1"].status, "In Progress");
+});
+
 test("ttt order review leaves a Done or Canceled ticket where it is", async () => {
 	const box = makeLinearWorkspace(threeTodo);
 	await runCli(box, "claim.ts", [

@@ -88,6 +88,7 @@ export async function moveToStatus(
 	statusName: string,
 	remote: OrderRemote,
 	localTasks: Task[],
+	doneStatus?: string,
 ): Promise<TicketResult[]> {
 	const status = remote.statuses.find((s) => s.name === statusName);
 	if (!status) {
@@ -108,7 +109,12 @@ export async function moveToStatus(
 				continue;
 			}
 			const type = remote.statuses.find((s) => s.name === issue.status)?.type;
-			if (type === "completed" || type === "canceled") {
+			// Trello lists carry no type, so the done name is checked too
+			if (
+				type === "completed" ||
+				type === "canceled" ||
+				(doneStatus !== undefined && issue.status === doneStatus)
+			) {
 				// Never reopen a closed ticket by sending it to review
 				results.push({
 					id,

@@ -71,17 +71,20 @@ export async function closeTicket(
 		}
 		const alreadyDone = issue.status === doneStatus || type === "completed";
 		const transitions = getStatusTransitions(config);
-		const reviewStatuses = [
-			localConfig.dev_testing_status,
-			transitions.testing,
-		].filter((s): s is string => Boolean(s));
-		if (
-			!alreadyDone &&
-			reviewStatuses.length > 0 &&
-			!reviewStatuses.includes(issue.status)
-		) {
+		// A ticket sent back to work after the seal (Todo, In Progress, Backlog,
+		// Triage) is not closed. Any other open status is a review status, so a
+		// ticket reviewed with `ttt order review --status <name>` still closes.
+		const backStatuses = [transitions.todo, transitions.in_progress].filter(
+			(s): s is string => Boolean(s),
+		);
+		const movedBack =
+			type === "unstarted" ||
+			type === "backlog" ||
+			type === "triage" ||
+			backStatuses.includes(issue.status);
+		if (!alreadyDone && movedBack) {
 			return fail(
-				`is ${issue.status} at the source, no longer in review (${reviewStatuses.join(" or ")}); send it back with 'ttt order review' if it is not merged yet, or leave it out with 'ttt order drop ${order.id} ${id} --reason ...'`,
+				`is ${issue.status} at the source, no longer in review; send it back with 'ttt order review' if it is not merged yet, or leave it out with 'ttt order drop ${order.id} ${id} --reason ...'`,
 			);
 		}
 		const commented =
