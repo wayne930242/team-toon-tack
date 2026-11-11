@@ -232,6 +232,13 @@ ttt order export app/2026-11-11-a --handoff         # Paste the block into the t
 glab mr view 900 | ttt order import -               # Reads the block out of any text
 ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0 --dry-run
 ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0
+
+# A ticket pulled out of the train keeps its history
+ttt order return app/2026-11-11-a MP-2 --reason "waits for MP-9" > notice.md   # Integrator
+ttt order carry MP-2 --to auto --project app --text notice.md                  # Coordinator: into the next order
+
+# A ticket fixed during integration
+ttt order rework app/2026-11-11-a MP-1 --reason "gate red"   # Back to in-progress; a sealed order reopens
 ```
 
 | Command | What it does |
@@ -239,25 +246,31 @@ ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0
 | `open [<project>/<code>] [--project p] [--reviewer r]` | Open an order. Without an id the code is `<YYYY-MM-DD>-<next letter>`. |
 | `list [--project p] [--all]` | List orders; closed ones only with `--all`. |
 | `show <id> [--toon]` | Show an order, or its stored TOON. |
-| `set <id> <ticket> [--branch --mr --head --review --tests]` | Record what a worker reported. Each `--tests "<cmd> [@ <sha>] [= <result>]"` appends one run; the SHA defaults to the ticket's head and the result to `pass`. |
+| `set <id> <ticket> [--branch --mr --head --review --tests]` | Record what a worker reported. Each `--tests "<cmd> [@ <sha>] [= <result>]"` appends one run; the SHA defaults to the ticket's head and the result to `pass`. A review is bound to the head it was recorded on. |
 | `review <id> <ticket>... [--status name]` | Move tickets to the testing status (`status_transitions.testing`, else `dev_testing_status`) and mark them in-review. |
 | `train <id> [--branch b] [--mr mr]` | Record the train branch and its merge request. |
-| `seal <id> --gated-head <sha>` | Fix the batch on the head the gate passed on. Every ticket must be in review or dropped. |
+| `seal <id> --gated-head <sha>` | Fix the batch on the head the gate passed on. Every ticket must be in review, dropped, or returned. |
 | `drop <id> <ticket> --reason <text>` | Leave a ticket out of the batch. Its remote status is not touched. |
+| `rework <id> <ticket> --reason <text>` | Send an in-review ticket back to in-progress, in the order and at the source (assignee unchanged). A sealed order reopens and its gated head is cleared. |
+| `return <id> <ticket>... --reason <text>` | Writer (normally the integrator): hand tickets back to the coordinator. Marks them returned, moves them to in-progress at the source, and prints a return notice block. Safe to repeat. |
+| `carry <ticket>... --to <id\|auto> [--project p] [--from id \| --text file\|-]` | Coordinator: take tickets into another open order with branch, MR, head, review, and test runs, plus a `carried_from` record. |
 | `export <id> [--handoff]` | Print the order as a fenced block. `--handoff` makes the local copy read-only. |
-| `import <file\|-> [--id id] [--force]` | Take the block from a file or stdin; the importer becomes the writer. |
+| `import <file\|-> [--id id] [--force] [--returns \| --order]` | Take the block from a file or stdin; the importer becomes the writer. A return notice is recorded on the local copy instead, without changing the writer. |
 | `reclaim <id>` | Take a handed-off order back when it was returned without an export. |
 | `close <id> --merged <sha> [--version v] [--dry-run]` | Complete every in-review ticket and comment on each. |
 
 How an order behaves:
 
 - **Storage.** Orders live in `.ttt/orders/<project>/<code>.toon` on the writer's machine and are never committed. Writes are atomic (temp file, then rename) and serialized by a lock per project. The default project is the directory that holds `.ttt`.
-- **Stages.** `open` → `sealed` → `merged` → `closed`. A project holds one open order at a time. After the seal, `ttt claim --order auto` opens the next one, and a returned ticket is reworked inside its own order: record the new head with `set`, then `seal` again.
+- **Stages.** `open` → `sealed` → `merged` → `closed`. A project holds one open order at a time. After the seal, `ttt claim --order auto` opens the next one. A ticket fixed inside its order goes through `rework`: the order is `open` again without a gated head, so record the new head with `set`, `review` it, and `seal` again.
+- **Ticket states.** `in-progress`, `in-review`, `dropped`, `returned`, `done`. A dropped or returned ticket is never completed by `close`, does not block `seal` or `close`, and may be taken by another order.
+- **Return and carry.** `return` keeps the ticket's record and adds who returned it, when, and why. The notice it prints (a fenced `toon ttt-return` block) holds the returned tickets' full records. The coordinator's `import` records it on its copy, even a handed-off one, and stays read-only; a text holding both an order block and a notice needs `--returns` or `--order`. `carry` reads the history from a local order (`--from`, else the newest order of the project that holds the ticket) or from a notice or order block in `--text`, and puts the ticket in progress in the destination (`auto`: the project's open order, opened if there is none). A source this machine writes marks the ticket dropped with reason `carried to <order>`. A ticket still held by a writer elsewhere (in progress or in review in a handed-off order) is refused until that writer returns it. `carry` does not change remote statuses.
+- **Stale review.** The head a review was recorded on is stored as `review_head`. When `set --head` moves the head without a new `--review`, `show` marks the review `stale: reviewed <old>, head now <new>` and `seal` warns. Test runs keep the SHA they ran on. Orders written before this field existed are never marked.
 - **One writer.** Workers report; the coordinator records. `export --handoff` passes the pen to the integrator, and write commands on the handed-off copy refuse with the way back: import the returned copy, or `reclaim`. An import never overwrites a writable local copy without `--force`, and never takes an older revision.
-- **Close.** Each in-review ticket goes through the same completion handler as `ttt done`, so `completion_mode` and parent issues apply. Each gets one comment with its MR, the merge commit, the version, and the order id. Dropped tickets are untouched. A ticket canceled at the source, or moved out of review since the seal, stops the close until it is dropped or sent back to review. Close requires the done status: a completion mode that leaves a ticket at testing (`strict_review`, or `upstream_strict` without a parent to take it) fails that ticket and keeps the order merged. A rerun skips what is already done and does not comment twice.
+- **Close.** Each in-review ticket goes through the same completion handler as `ttt done`, so `completion_mode` and parent issues apply. Each gets one comment with its MR, the merge commit, the version, and the order id. Dropped and returned tickets are untouched. A ticket canceled at the source, or moved out of review since the seal, stops the close until it is dropped or sent back to review. Close requires the done status: a completion mode that leaves a ticket at testing (`strict_review`, or `upstream_strict` without a parent to take it) fails that ticket and keeps the order merged. A rerun skips what is already done and does not comment twice.
 - **Identity.** The writer's name in `owner` and the log is `TTT_ACTOR`, else `<current_user>@<hostname>`.
 
-A ticket rides one order per project at a time: claiming it into a second order of the same project, or having `review` adopt it there, is refused until it is dropped from the first. `review` leaves a Done or Canceled ticket where it is.
+A ticket rides one order per project at a time: claiming or carrying it into a second order of the same project, or having `review` adopt it there, is refused until it is dropped or returned from the first. `review` leaves a Done or Canceled ticket where it is.
 
 ### `ttt status`
 
@@ -298,6 +311,20 @@ Two options widen a `--remote` search beyond what `ttt sync` stores (both need
 - `--any-cycle` searches outside the current cycle. `--status Backlog` implies
   it, because backlog tickets usually belong to no cycle. Trello has no cycles,
   so there it changes nothing.
+
+### `ttt skills` / `ttt skill`
+
+Print the agent skill text bundled with this version of the CLI.
+An agent setup installs only a short stub skill that says to run these commands, so the instructions an agent follows always match the installed `ttt`.
+
+```bash
+ttt skills                                         # Bundled skills, their pages, and the ttt version
+ttt skill managing-linear-tasks                    # The skill; its header lists the pages
+ttt skill managing-linear-tasks orders-coordinator # Work orders: the coordinator's side
+ttt skill managing-linear-tasks orders-integrator  # Work orders: the integrator's side
+```
+
+The text lives in `bundled-skills/<name>/index.md` (plus one `<page>.md` per page) inside the package and is read from the installed package's directory, not the working directory.
 
 ### `ttt config`
 
@@ -374,7 +401,7 @@ Install the plugin for Claude Code integration:
 
 ### Auto-Activated Skill
 
-The plugin includes a `managing-linear-tasks` skill that automatically activates when working with tasks, providing workflow guidance and best practices.
+The plugin includes a `managing-linear-tasks` skill that automatically activates when working with tasks. It is a stub: it tells the agent to run `ttt skill managing-linear-tasks`, which prints the full instructions bundled with the installed CLI (see [`ttt skills`](#ttt-skills--ttt-skill)).
 
 ## License
 

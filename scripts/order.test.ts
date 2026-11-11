@@ -862,6 +862,28 @@ test("carry --text reads the history out of a return notice on a machine without
 	assert.deepEqual(historyOf(next, "MP-2"), MP2_HISTORY);
 	assert.equal(ticketOf(next, "MP-2").carried_from?.order, ORDER);
 
+	// On the coordinator's machine the same carry also records the notice on
+	// its handed-off copy, which had not heard of the return yet
+	const fresh = await handedToMac();
+	const pulled = await order(
+		fresh.mac,
+		["return", ORDER, "MP-2", "--reason", "waits for its FE pair"],
+		asMac,
+	);
+	const direct = await order(
+		fresh.box,
+		["carry", "MP-2", "--to", "auto", "--text", "-"],
+		{},
+		pulled.stdout,
+	);
+	assert.equal(direct.exitCode, 0, direct.stderr);
+	assert.deepEqual(states(readOrder(fresh.box, NEXT)), {
+		"MP-2": "in-progress",
+	});
+	const source = readOrder(fresh.box);
+	assert.equal(ticketOf(source, "MP-2").state, "returned");
+	assert.ok(source.handed_off, "the source stays the integrator's");
+
 	// An order block whose writer still holds the ticket is not a release
 	const held = await order(
 		other,

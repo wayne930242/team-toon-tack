@@ -226,6 +226,13 @@ ttt order export app/2026-11-11-a --handoff         # 把輸出的區塊貼進�
 glab mr view 900 | ttt order import -               # 從任何文字中取出工單區塊
 ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0 --dry-run
 ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0
+
+# 從列車拉下來的票，紀錄跟著走
+ttt order return app/2026-11-11-a MP-2 --reason "等 MP-9" > notice.md   # 整合者
+ttt order carry MP-2 --to auto --project app --text notice.md           # 協調者：帶進下一張工單
+
+# 整合期間要修的票
+ttt order rework app/2026-11-11-a MP-1 --reason "gate 紅燈"   # 退回 in-progress；已封的工單重新打開
 ```
 
 | 指令 | 作用 |
@@ -233,25 +240,31 @@ ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0
 | `open [<project>/<code>] [--project p] [--reviewer r]` | 開工單。不給 id 時，代碼為 `<YYYY-MM-DD>-<下一個字母>`。 |
 | `list [--project p] [--all]` | 列出工單；加 `--all` 才列已關閉的。 |
 | `show <id> [--toon]` | 顯示工單，或印出儲存的 TOON。 |
-| `set <id> <ticket> [--branch --mr --head --review --tests]` | 記錄 worker 回報的內容。每個 `--tests "<指令> [@ <sha>] [= <結果>]"` 追加一筆測試紀錄；SHA 預設為該票的 head，結果預設為 `pass`。 |
+| `set <id> <ticket> [--branch --mr --head --review --tests]` | 記錄 worker 回報的內容。每個 `--tests "<指令> [@ <sha>] [= <結果>]"` 追加一筆測試紀錄；SHA 預設為該票的 head，結果預設為 `pass`。審查結論綁定記錄當下的 head。 |
 | `review <id> <ticket>... [--status name]` | 把票改到測試狀態（`status_transitions.testing`，沒有則用 `dev_testing_status`），並在工單標為 in-review。 |
 | `train <id> [--branch b] [--mr mr]` | 記錄列車分支與它的 MR。 |
-| `seal <id> --gated-head <sha>` | 以通過 gate 的 head 封單。每張票都必須已送審或已剔除。 |
+| `seal <id> --gated-head <sha>` | 以通過 gate 的 head 封單。每張票都必須已送審、已剔除或已退回。 |
 | `drop <id> <ticket> --reason <text>` | 把票從這一批剔除，遠端狀態不動。 |
+| `rework <id> <ticket> --reason <text>` | 把送審中的票退回 in-progress，工單與遠端一起改，指派人不變。已封的工單會重新打開，並清掉 gated head。 |
+| `return <id> <ticket>... --reason <text>` | 寫入者（通常是整合者）把票退回給協調者：標為 returned、遠端改回 in-progress，並印出退回通知區塊。可重複執行。 |
+| `carry <ticket>... --to <id\|auto> [--project p] [--from id \| --text file\|-]` | 協調者把票帶進另一張開著的工單，分支、MR、head、審查結論與測試紀錄一併帶過去，並記下 `carried_from`。 |
 | `export <id> [--handoff]` | 把工單印成一個 fenced 區塊。加 `--handoff` 後本機這份改為唯讀。 |
-| `import <file\|-> [--id id] [--force]` | 從檔案或 stdin 取出區塊；匯入者成為寫入者。 |
+| `import <file\|-> [--id id] [--force] [--returns \| --order]` | 從檔案或 stdin 取出區塊；匯入者成為寫入者。若是退回通知，只記到本機那份工單上，寫入者不變。 |
 | `reclaim <id>` | 對方退回但沒有匯出時，把已交接的工單收回。 |
 | `close <id> --merged <sha> [--version v] [--dry-run]` | 完成每張送審中的票，並各留一則留言。 |
 
 工單的規則：
 
 - **儲存。** 工單存在寫入者機器上的 `.ttt/orders/<project>/<code>.toon`，不進版控。寫入先寫暫存檔再改名，並以每個專案一把鎖排隊。預設專案是 `.ttt` 所在的目錄名稱。
-- **階段。** `open` → `sealed` → `merged` → `closed`。一個專案同時只有一張開著的工單。封單之後，`ttt claim --order auto` 會開下一張；被退回的票留在原工單重做：用 `set` 記下新的 head，再 `seal` 一次。
+- **階段。** `open` → `sealed` → `merged` → `closed`。一個專案同時只有一張開著的工單。封單之後，`ttt claim --order auto` 會開下一張。要在原工單內修的票用 `rework`：工單回到 `open`、gated head 清空，接著用 `set` 記下新的 head、`review` 送審，再 `seal` 一次。
+- **票的狀態。** `in-progress`、`in-review`、`dropped`、`returned`、`done`。已剔除或已退回的票不會被 `close` 完成，不會擋住 `seal` 與 `close`，也可以被另一張工單收走。
+- **退回與帶票。** `return` 保留票的紀錄，並記下誰退回、何時、原因。它印出的通知（`toon ttt-return` fenced 區塊）帶著這些票的完整紀錄。協調者 `import` 這份通知時，只記到自己那份工單上，已交接的那份也收，而且維持唯讀；文字裡同時有工單區塊與通知時，要用 `--returns` 或 `--order` 指定。`carry` 的紀錄來源是本機的工單（`--from`，沒給就找該專案最新一張含這張票的工單），或 `--text` 裡的通知或工單區塊；票進到目的工單時是 in-progress（`auto` 指該專案開著的工單，沒有就開一張）。來源工單若由本機寫入，票會標為剔除，原因是 `carried to <order>`。別處的寫入者還握著的票（在已交接的工單裡仍是 in-progress 或 in-review）會被拒絕，要等對方退回。`carry` 不改遠端狀態。
+- **審查過期。** 記錄審查結論時的 head 存在 `review_head`。之後 `set --head` 換了 head 卻沒有新的 `--review`，`show` 會標出 `stale: reviewed <舊>, head now <新>`，`seal` 也會警告。測試紀錄維持各自執行時的 SHA。在這個欄位出現之前寫的工單不會被標記。
 - **單一寫入者。** Worker 回報，協調者記錄。`export --handoff` 把寫入權交給整合者；之後在已交接的那份上執行寫入指令會被拒絕，訊息會說明怎麼拿回來：匯入對方退回的版本，或執行 `reclaim`。匯入時，本機那份若仍可寫，沒有 `--force` 不會被覆蓋；版本比本機舊的也不會被接受。
-- **關單。** 每張送審中的票走與 `ttt done` 相同的完成流程，所以 `completion_mode` 與上層 issue 的規則照常套用。每張票各有一則留言，寫明它的 MR、合併 commit、版本與工單 id。已剔除的票不動。遠端已取消的票會讓關單停下，剔除後才能繼續。重跑時，已完成的票會跳過，留言不會重複。
+- **關單。** 每張送審中的票走與 `ttt done` 相同的完成流程，所以 `completion_mode` 與上層 issue 的規則照常套用。每張票各有一則留言，寫明它的 MR、合併 commit、版本與工單 id。已剔除與已退回的票不動。遠端已取消的票會讓關單停下，剔除後才能繼續。重跑時，已完成的票會跳過，留言不會重複。
 - **身分。** `owner` 與紀錄中的寫入者名稱取自 `TTT_ACTOR`，未設定時為 `<current_user>@<hostname>`。
 
-一張票同一時間只搭一張工單：要領進第二張工單，必須先從第一張剔除。
+一張票同一時間只搭一張工單：要領進或帶進第二張工單，必須先從第一張剔除或退回。
 
 ### `ttt status`
 
@@ -288,6 +301,20 @@ ttt show --remote --any-cycle --creator me        # 我建立、不限 cycle 的
   未指定 `--user` 時會解除指派對象的限制，因此你建給別人或未指派的票也找得到。
 - `--any-cycle`：不限目前 cycle。`--status Backlog` 會自動帶上它，因為 Backlog 票通常不屬於任何 cycle。
   Trello 沒有 cycle，所以在 Trello 上沒有作用。
+
+### `ttt skills` / `ttt skill`
+
+印出隨這個版本的 CLI 一起安裝的 agent 技能說明。
+Agent 那邊只裝一份短的引導技能，內容是要它執行這兩個指令，所以 agent 照著做的說明一定和裝著的 `ttt` 同一版。
+
+```bash
+ttt skills                                         # 內建的技能、各自的分頁與 ttt 版本
+ttt skill managing-linear-tasks                    # 印出技能；開頭列出有哪些分頁
+ttt skill managing-linear-tasks orders-coordinator # 工單：協調者這一側
+ttt skill managing-linear-tasks orders-integrator  # 工單：整合者這一側
+```
+
+說明文字放在套件裡的 `bundled-skills/<name>/index.md`（每個分頁另有一份 `<page>.md`），讀取時以安裝的套件目錄為準，與目前所在的目錄無關。
 
 ### `ttt config`
 
@@ -364,7 +391,7 @@ your-project/
 
 ### 自動啟用技能
 
-Plugin 包含 `managing-linear-tasks` 技能，在處理任務時會自動啟用，提供工作流程指導和最佳實踐。
+Plugin 包含 `managing-linear-tasks` 技能，在處理任務時會自動啟用。它只是一份短的引導：要 agent 執行 `ttt skill managing-linear-tasks`，印出隨 CLI 一起安裝的完整說明（見 [`ttt skills`](#ttt-skills--ttt-skill)）。
 
 ## 授權
 

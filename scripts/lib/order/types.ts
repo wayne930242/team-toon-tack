@@ -60,7 +60,7 @@ export interface OrderTicket {
 	review?: string;
 	/**
 	 * Head the review verdict was recorded on. When `head` has moved since,
-	 * the review is stale. Absent in orders written before 3.14.
+	 * the review is stale. Absent in orders written by 3.13 or earlier.
 	 */
 	review_head?: string;
 	tests: OrderTestRun[];

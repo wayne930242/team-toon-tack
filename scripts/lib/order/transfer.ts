@@ -10,7 +10,7 @@ import { OrderError, type ReturnNotice, type WorkOrder } from "./types.js";
 export const ORDER_BLOCK_TAG = "toon ttt-order";
 /**
  * Info string of a return notice. It must not start with the order tag:
- * releases before 3.14 read every "toon ttt-order…" fence as an order.
+ * releases up to 3.13 read every "toon ttt-order…" fence as an order.
  */
 export const RETURN_BLOCK_TAG = "toon ttt-return";
 

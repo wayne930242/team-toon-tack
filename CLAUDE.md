@@ -40,6 +40,7 @@ ttt done -m "msg"      # Complete with message
 ttt done MP-1 MP-2     # Complete several tickets in one run
 ttt claim MP-1 --order auto --project app   # Claim into the open work order
 ttt order close app/2026-11-11-a --merged <sha>   # Train batch → Done (ttt order --help)
+ttt skill managing-linear-tasks [page]   # Agent skill text bundled with the CLI (ttt skills lists)
 ttt show MP-123        # Show issue details
 ttt status             # Current task status
 ttt comment -m "msg"   # Comment on current task
@@ -59,7 +60,8 @@ ttt cancel MP-123      # Cancel an issue
 | `scripts/lib/adapters/` | Multi-source adapters (Linear, Trello) |
 | `scripts/lib/order/` | Work orders: rules (model), files and lock (store), export/import (transfer), close |
 | `commands/` | Claude Code slash commands |
-| `skills/` | Claude Code skills |
+| `skills/` | Claude Code skills: stubs that say to run `ttt skill <name>` |
+| `bundled-skills/` | Full skill text printed by `ttt skill <name> [page]`; edit skill content here |
 
 ### Architecture
 - **Adapter Pattern**: `TaskSourceAdapter` interface for Linear/Trello
