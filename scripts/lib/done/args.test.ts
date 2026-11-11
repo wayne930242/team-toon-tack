@@ -14,7 +14,7 @@ test("parseArgs reads --commit and --repo alongside the issue and message", () =
 			"/tmp/app",
 		]),
 		{
-			issueId: "MP-1",
+			issueIds: ["MP-1"],
 			message: "done",
 			fromRemote: false,
 			commit: "1a2b3c4",
@@ -36,4 +36,10 @@ test("parseArgs rejects --commit or --repo without a value", () => {
 		() => parseArgs(["--repo", "--from-remote"]),
 		/--repo requires/,
 	);
+});
+
+test("parseArgs collects several issue IDs in order, without duplicates", () => {
+	const parsed = parseArgs(["MP-2", "MP-1", "-m", "merged", "MP-2", "MP-3"]);
+	assert.deepEqual(parsed.issueIds, ["MP-2", "MP-1", "MP-3"]);
+	assert.equal(parsed.message, "merged");
 });

@@ -1,9 +1,9 @@
 ---
 name: ttt:done
-description: Mark current task as completed
+description: Mark one or more tasks as completed
 arguments:
   - name: issue-id
-    description: Issue ID if multiple tasks in progress (e.g., MP-624)
+    description: Issue ID if multiple tasks in progress (e.g., MP-624); several IDs complete them in one run
     required: false
   - name: message
     description: Completion message summarizing what was done
@@ -40,6 +40,7 @@ ttt done                                # Complete current in-progress task
 ttt done MP-624                         # Complete specific task
 ttt done -m "Fixed null check"          # With completion message
 ttt done MP-624 -m "Refactored auth"    # Specific task with message
+ttt done MP-624 MP-625 -m "Merged"      # Several tasks, options shared by all
 ttt done MP-624 --from-remote           # Issue not in local data, or still Todo (no claim needed)
 ttt done MP-624 --commit 1a2b3c4        # Record an earlier commit, not HEAD
 ```
@@ -47,10 +48,11 @@ ttt done MP-624 --commit 1a2b3c4        # Record an earlier commit, not HEAD
 ## Full CLI Reference
 
 ```
-Usage: ttt done [issue-id] [-m message] [--from-remote] [--commit <sha>] [--repo <path>]
+Usage: ttt done [issue-id...] [-m message] [--from-remote] [--commit <sha>] [--repo <path>]
 
 Arguments:
-  issue-id              Optional. Issue ID if multiple tasks in-progress
+  issue-id              Optional. Issue ID if multiple tasks in-progress.
+                        Several IDs complete each ticket with the same options
 
 Options:
   -m, --message         Completion message describing what was done
@@ -59,6 +61,13 @@ Options:
   --commit <sha>        Record this commit instead of HEAD
   --repo <path>         Git repository to read the commit from (default: cwd)
 ```
+
+## Several Tickets
+
+With several IDs each ticket gets a result line (`✅ done`, `⏭️ already done`, `❌ failed`).
+One failing ticket does not stop the rest, and the exit code is non-zero when any failed.
+A ticket that is already done is skipped, so the same command can be rerun after a partial failure.
+For a train batch tracked in a work order, close it with `/ttt:order` (`ttt order close`) instead.
 
 ## Before Running
 
@@ -89,5 +98,6 @@ Additionally:
 | `No in-progress task` | Specify issue-id explicitly |
 | `Multiple in-progress` | Specify issue-id to disambiguate |
 | `Issue not found` | Use `--from-remote` flag |
+| `❌ MP-x failed` in a batch | Fix the cause and rerun the same command; done tickets are skipped |
 | `不在進行中狀態` (task is Todo) | `ttt claim <id>` first, or `ttt done <id> --from-remote` |
 | `No commits found` | Commit your changes first |

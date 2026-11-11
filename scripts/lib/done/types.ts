@@ -6,7 +6,8 @@ import type { Config, LocalConfig, Task } from "../../utils.js";
 import type { CommitInfo } from "../git.js";
 
 export interface DoneArgs {
-	issueId?: string;
+	/** Tickets to complete, in the order given, without duplicates */
+	issueIds: string[];
 	message?: string;
 	fromRemote: boolean;
 	/** Commit-ish to record instead of HEAD */

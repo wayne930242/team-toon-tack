@@ -19,10 +19,10 @@ test("a pending task is told how to proceed: claim first or --from-remote", () =
 	assert.match(message, /ttt done MP-2715 --from-remote/);
 });
 
-test("an already completed task is not told to claim it again", () => {
+test("a task already in review is not told to claim it again", () => {
 	const message = describeNotInProgress({
 		id: "MP-1",
-		localStatus: "completed",
+		localStatus: "in-review",
 	});
 
 	assert.doesNotMatch(message, /ttt claim/);

@@ -63,6 +63,7 @@ ttt comment -m "msg"        # Comment on current task
 ttt done -m "summary"       # Complete with message
 ttt done MP-624 --commit <sha> [--repo <path>]  # Close a ticket with an earlier commit
 ttt done MP-624 --from-remote  # Complete a Todo ticket without claiming it first
+ttt done MP-624 MP-625 -m "summary"  # Complete several tickets; done ones are skipped, exit non-zero if any failed
 ```
 
 ## Prerequisites

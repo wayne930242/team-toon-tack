@@ -182,6 +182,7 @@ ttt estimate MP-123 --clear                   # 移除既有估時
 ```bash
 ttt done                         # 若只有一個進行中，自動選擇
 ttt done MP-123                  # 指定 issue
+ttt done MP-123 MP-124 -m "已隨 v1.2.0 合併"   # 一次完成多張票，共用說明
 ttt done -m "修復了錯誤"           # 附上完成說明
 ttt done MP-123 --from-remote    # 從遠端取得（略過本地資料檢查）
 ttt done MP-123 --commit 1a2b3c4 # 記錄指定 commit，而非目前 HEAD
@@ -191,6 +192,12 @@ ttt done MP-123 --commit 1a2b3c4 --repo ~/projects/app   # ...從另一個 repos
 當 issue 存在於遠端但未同步到本地資料，或 ticket 仍是 Todo、想不經 `ttt claim`（不多一次 In Progress 轉換）直接完成時，使用 `--from-remote`（或 `-r`）。不加此參數時，`ttt done` 只接受進行中的任務。
 
 要關閉 commit 早已合併的 ticket，用 `--commit <sha>`（commit 在另一個 checkout 時再加 `--repo <path>`）。未指定時記錄目前的 HEAD。
+
+一次給多個 ID 時，`-m`、`--commit`、`--repo`、`--from-remote` 套用到每一張票。
+每張票各有一行結果，其中一張失敗不會中斷其他票。
+已經完成的票只回報、不重做，所以部分失敗後可以原指令重跑。
+只要有一張失敗，結束碼就不是 0。
+整批列車合併後要一次關票，改用[工單](#ttt-order)。
 
 ### `ttt status`
 

@@ -7,16 +7,17 @@ import type { Task } from "../../utils.js";
 /**
  * Explain why a task cannot be completed from its local status, and what to
  * do instead. `ttt done` completes in-progress work only, so the guard stays;
- * the message names the two ways forward.
+ * the message names the ways forward. A completed task never reaches it:
+ * `ttt done` reports that one as already done.
  */
 export function describeNotInProgress(task: Pick<Task, "id" | "localStatus">) {
 	const lines = [
 		`⚠️ 任務 ${task.id} 不在進行中狀態 (目前: ${task.localStatus})`,
 	];
 
-	if (task.localStatus === "completed" || task.localStatus === "in-review") {
+	if (task.localStatus === "in-review") {
 		lines.push(
-			`   已經完成或送審；若要再次執行完成流程，請用 'ttt done ${task.id} --from-remote'。`,
+			`   已經送審；若要執行完成流程，請用 'ttt done ${task.id} --from-remote'。`,
 		);
 	} else {
 		lines.push(

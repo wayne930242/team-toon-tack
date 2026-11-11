@@ -5,6 +5,12 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { encode } from "@toon-format/toon";
+import {
+	makeLinearWorkspace,
+	readLocalStatuses,
+	readRemote,
+	runCli,
+} from "./test-support/linear-workspace.js";
 
 /** Trello + status_source=local workspace so `ttt done` never reaches a remote. */
 function makeWorkspace(localStatus: string): string {
@@ -144,4 +150,68 @@ test("ttt done reports a missing option value with a non-zero exit", async () =>
 
 	assert.notEqual(exitCode, 0);
 	assert.match(stderr, /--commit requires a value/);
+});
+
+test("ttt done with several IDs completes each, skips the done one, and fails on the refused one", async () => {
+	const workspace = makeLinearWorkspace({
+		"MP-1": { state: "s-review" },
+		"MP-2": { state: "s-done" },
+		"MP-3": { state: "s-review" },
+		"MP-4": { state: "s-review" },
+	});
+
+	const { stdout, stderr, exitCode, requests } = await runCli(
+		workspace,
+		"done-job.ts",
+		["MP-1", "MP-2", "MP-3", "MP-4", "--from-remote", "-m", "merged"],
+		{ MOCK_LINEAR_FAIL_UPDATE: "MP-3" },
+	);
+
+	assert.equal(exitCode, 1, "one failed ticket makes the run fail");
+	assert.match(stdout, /✅ MP-1 → Done/);
+	assert.match(stdout, /⏭️ MP-2 already Done \(skipped\)/);
+	assert.match(stdout, /❌ MP-3 failed: Failed to move MP-3 to Done/);
+	assert.match(stdout, /✅ MP-4 → Done/);
+	assert.match(stdout, /Done: 2, already done: 1, failed: 1/);
+	assert.match(stderr, /Failed to move MP-3 to Done/);
+
+	const remote = readRemote(workspace);
+	assert.equal(remote["MP-1"].status, "Done");
+	assert.equal(remote["MP-3"].status, "In Review");
+	assert.equal(remote["MP-4"].status, "Done", "the batch goes on after MP-3");
+	assert.deepEqual(
+		requests.filter((r) => r.name === "updateIssue").map((r) => r.variables.id),
+		["uuid-MP-1", "uuid-MP-3", "uuid-MP-4"],
+		"the already-done ticket is never written to",
+	);
+	assert.equal(readLocalStatuses(workspace)["MP-1"], "completed");
+});
+
+test("ttt done with several IDs exits 0 when every ticket is done or already done", async () => {
+	const workspace = makeLinearWorkspace({
+		"MP-1": { state: "s-progress" },
+		"MP-2": { state: "s-done" },
+	});
+
+	const { stdout, exitCode } = await runCli(workspace, "done-job.ts", [
+		"MP-1",
+		"MP-2",
+		"-m",
+		"merged",
+	]);
+
+	assert.equal(exitCode, 0);
+	assert.match(stdout, /✅ MP-1 → Done/);
+	assert.match(stdout, /⏭️ MP-2 already Done \(skipped\)/);
+	assert.equal(readRemote(workspace)["MP-1"].status, "Done");
+});
+
+test("ttt done on one already completed ticket reports it and exits 0", async () => {
+	const dir = makeWorkspace("completed");
+
+	const { stdout, stderr, exitCode } = await runDone(dir, ["MP-1"]);
+
+	assert.equal(exitCode, 0);
+	assert.match(stdout, /MP-1 already Todo \(skipped\)/);
+	assert.equal(stderr, "");
 });

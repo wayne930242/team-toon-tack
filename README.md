@@ -186,6 +186,7 @@ Mark task as completed.
 ```bash
 ttt done                         # Auto-select if only one in-progress
 ttt done MP-123                  # Specific issue
+ttt done MP-123 MP-124 -m "Merged in v1.2.0"   # Several issues, one message
 ttt done -m "Fixed the bug"      # With completion message
 ttt done MP-123 --from-remote    # Fetch from remote (bypasses local data check)
 ttt done MP-123 --commit 1a2b3c4 # Record this commit instead of HEAD
@@ -195,6 +196,12 @@ ttt done MP-123 --commit 1a2b3c4 --repo ~/projects/app   # ...read from another 
 Use `--from-remote` (or `-r`) when the issue exists in remote but not in local sync data, or when the ticket is still Todo and you want to complete it without `ttt claim` (no extra In Progress transition). `ttt done` without it only accepts in-progress tasks.
 
 Use `--commit <sha>` (and `--repo <path>` when the commit lives in another checkout) to close a ticket whose commit was merged earlier. Without it, the current HEAD is recorded.
+
+With several IDs, `-m`, `--commit`, `--repo`, and `--from-remote` apply to every ticket.
+Each ticket gets a result line, and one failing ticket does not stop the rest.
+A ticket that is already done is reported and skipped, so a run can be repeated after a partial failure.
+The exit code is non-zero when any ticket failed.
+To close a whole train batch after its merge, use a [work order](#ttt-order) instead.
 
 ### `ttt status`
 
