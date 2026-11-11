@@ -3,6 +3,12 @@ import type { SourceStatus, TaskSourceAdapter } from "./lib/adapters/index.js";
 import { createAdapter } from "./lib/adapters/index.js";
 import { displayTaskFull, PRIORITY_LABELS } from "./lib/display.js";
 import { getStatusTransitions } from "./lib/linear.js";
+import {
+	addClaimedTickets,
+	type ClaimTarget,
+	checkClaimTarget,
+	stampFor,
+} from "./lib/order/store.js";
 import { sourceIssueToTask } from "./lib/remote-task.js";
 import { mapRemoteToLocalStatus } from "./lib/status-helpers.js";
 import {
@@ -37,7 +43,13 @@ Arguments:
               claimed like any other
 
 Options:
-  --dry-run   Pick tickets without changing status (preview only)
+  --dry-run            Pick tickets without changing status (preview only)
+  --order <id|auto>    Also record the claimed tickets in a work order
+                       (see 'ttt order --help'). 'auto' is the project's open
+                       order; when the last one was sealed, a new order
+                       <project>/<YYYY-MM-DD>-<next letter> is opened
+  --project <name>     Project for '--order auto'
+                       (default: the directory that holds .ttt)
 
 Examples:
   ttt claim                     # Interactive multi-select
@@ -45,7 +57,8 @@ Examples:
   ttt claim MP-624 MP-625       # Claim several tickets at once
   ttt claim next                # Claim highest priority pending task
   ttt claim next 3              # Claim top 3 pending tasks
-  ttt claim --dry-run           # Preview without changes`;
+  ttt claim --dry-run           # Preview without changes
+  ttt claim MP-624 --order auto --project app   # Claim into the open work order`;
 
 /** What `claim` decided to do with one requested ticket. */
 interface ClaimOutcome {
@@ -323,6 +336,45 @@ async function resolveIssueIds(
 	return [...new Set(positional)];
 }
 
+interface ClaimArgs {
+	positional: string[];
+	dryRun: boolean;
+	/** Work order to record the claimed tickets in */
+	target?: ClaimTarget;
+}
+
+function parseClaimArgs(args: string[]): ClaimArgs {
+	const positional: string[] = [];
+	let dryRun = false;
+	let order: string | undefined;
+	let project: string | undefined;
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === "--dry-run") {
+			dryRun = true;
+		} else if (arg === "--order" || arg === "--project") {
+			const value = args[++i];
+			if (!value || value.startsWith("-")) {
+				throw new Error(`${arg} requires a value.`);
+			}
+			if (arg === "--order") order = value;
+			else project = value;
+		} else {
+			positional.push(arg);
+		}
+	}
+
+	if (project && !order) {
+		throw new Error("--project is only used with --order.");
+	}
+	return {
+		positional,
+		dryRun,
+		target: order ? { order, project } : undefined,
+	};
+}
+
 async function claim() {
 	const args = process.argv.slice(2);
 
@@ -331,8 +383,7 @@ async function claim() {
 		process.exit(0);
 	}
 
-	const dryRun = args.includes("--dry-run");
-	const positional = args.filter((a) => a !== "--dry-run");
+	const { positional, dryRun, target } = parseClaimArgs(args);
 
 	const config = await loadConfig();
 	const data = await loadCycleData();
@@ -357,6 +408,13 @@ async function claim() {
 		process.exit(0);
 	}
 
+	// The order takes what this run holds in progress. Refuse before any
+	// ticket changes when it cannot take them.
+	const orderTicketIds = toDisplay.map((t) => t.id);
+	const targetOrderId = target
+		? await checkClaimTarget(target, orderTicketIds)
+		: undefined;
+
 	// Fetched tickets are stored when they are claimed or already in progress,
 	// so a later `ttt done` finds them; a dry run or a skipped ticket leaves
 	// local data untouched.
@@ -371,6 +429,21 @@ async function claim() {
 		} else if (toStore.length > 0) {
 			await saveCycleData(data);
 		}
+
+		if (target) {
+			const { order, added, created } = await addClaimedTickets(
+				target,
+				orderTicketIds,
+				stampFor(localConfig),
+			);
+			console.log(
+				`Order ${order.id}${created ? " (new)" : ""}: ${added.length > 0 ? `+ ${added.join(", ")}` : "no new tickets"} (${order.tickets.length} in the order)`,
+			);
+		}
+	} else if (target) {
+		console.log(
+			`Order ${targetOrderId ?? "(a new order)"} would take ${orderTicketIds.join(", ")}`,
+		);
 	}
 
 	// Display task info
@@ -386,4 +459,7 @@ async function claim() {
 	}
 }
 
-claim().catch(console.error);
+claim().catch((error) => {
+	console.error(error instanceof Error ? error.message : error);
+	process.exitCode = 1;
+});

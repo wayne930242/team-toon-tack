@@ -8,6 +8,12 @@ arguments:
   - name: dry-run
     description: Preview selection without changing status
     required: false
+  - name: order
+    description: "Work order to record the claimed tickets in: an order id, or 'auto' for the project's open order"
+    required: false
+  - name: project
+    description: Project for order 'auto' (default - the directory that holds .ttt)
+    required: false
 ---
 
 <law>
@@ -24,7 +30,7 @@ to in-progress locally and on the remote source.
 ## Execution
 
 ```bash
-ttt claim {{ issue-ids | default: "next" }} {{ "--dry-run" if dry-run }}
+ttt claim {{ issue-ids | default: "next" }} {{ "--dry-run" if dry-run }} {{ "--order " + order if order }} {{ "--project " + project if project }}
 ```
 
 ### Argument Resolution
@@ -38,6 +44,7 @@ ttt claim {{ issue-ids | default: "next" }} {{ "--dry-run" if dry-run }}
 | `MP-624 MP-625` | `ttt claim MP-624 MP-625` |
 | `--dry-run` | `ttt claim next --dry-run` |
 | `MP-624 --dry-run` | `ttt claim MP-624 --dry-run` |
+| `MP-624 MP-625` in a train batch | `ttt claim MP-624 MP-625 --order auto --project <name>` |
 
 ## Full CLI Reference
 
@@ -57,7 +64,13 @@ Arguments:
               claimed like any other
 
 Options:
-  --dry-run   Pick tickets without changing status (preview only)
+  --dry-run            Pick tickets without changing status (preview only)
+  --order <id|auto>    Also record the claimed tickets in a work order
+                       (see 'ttt order --help'). 'auto' is the project's open
+                       order; when the last one was sealed, a new order
+                       <project>/<YYYY-MM-DD>-<next letter> is opened
+  --project <name>     Project for '--order auto'
+                       (default: the directory that holds .ttt)
 ```
 
 Tickets that are already completed, in review, or blocked are reported and
@@ -82,6 +95,12 @@ This command claims the tickets. The implementation workflow belongs to the user
 When several tickets were claimed at once, carry them one at a time and close
 each with `/ttt:done -m "summary"` before starting the next.
 
+## Batch Work on a Train
+
+When the tickets ride one integration branch and are closed together after its
+merge, claim them with `--order` and do not run `/ttt:done` per ticket. The work
+order then carries them to Done: see `/ttt:order`.
+
 ## Error Handling
 
 | Error | Solution |
@@ -89,3 +108,5 @@ each with `/ttt:done -m "summary"` before starting the next.
 | `No cycle data found` | Run `ttt sync` first |
 | `No eligible tasks` | All tasks assigned or in-review; run `ttt sync` to refresh |
 | `Issue not found` | Run `ttt sync <id>` to fetch it |
+| `Order ... takes no more tickets` | The order is sealed; use `--order auto` to claim into the next one |
+| `already in order ...` | The ticket rides another order; drop it there first (`ttt order drop`) |

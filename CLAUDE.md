@@ -37,6 +37,9 @@ ttt claim next         # Claim highest priority pending task
 ttt claim MP-1 MP-2    # Batch claim (alias: ttt work-on)
 ttt claim --dry-run    # Preview selection without changes
 ttt done -m "msg"      # Complete with message
+ttt done MP-1 MP-2     # Complete several tickets in one run
+ttt claim MP-1 --order auto --project app   # Claim into the open work order
+ttt order close app/2026-11-11-a --merged <sha>   # Train batch → Done (ttt order --help)
 ttt show MP-123        # Show issue details
 ttt status             # Current task status
 ttt comment -m "msg"   # Comment on current task
@@ -54,6 +57,7 @@ ttt cancel MP-123      # Cancel an issue
 | `scripts/*.ts` | Command implementations |
 | `scripts/lib/` | Shared utilities |
 | `scripts/lib/adapters/` | Multi-source adapters (Linear, Trello) |
+| `scripts/lib/order/` | Work orders: rules (model), files and lock (store), export/import (transfer), close |
 | `commands/` | Claude Code slash commands |
 | `skills/` | Claude Code skills |
 

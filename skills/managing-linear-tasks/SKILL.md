@@ -1,6 +1,6 @@
 ---
 name: managing-linear-tasks
-description: Use when the user mentions Linear or Trello issues, mentions `ttt`, references issue IDs like MP-123, or asks to sync, show, start, complete, create, assign, edit, cancel, comment on, or check status of tasks.
+description: Use when the user mentions Linear or Trello issues, mentions `ttt`, references issue IDs like MP-123, or asks to sync, show, start, complete, create, assign, edit, cancel, comment on, or check status of tasks, or to track a train batch of tickets in a work order (工單).
 ---
 
 ## 執行方式
@@ -31,7 +31,8 @@ Manage developer task workflows using the `ttt` CLI.
 | Record an estimate | `ttt estimate` | "estimate MP-624 as 6h", "save 2.5h estimate" |
 | Check/change status | `ttt status` | "what's my current task", "set MP-624 to blocked" |
 | Add a comment | `ttt comment` | "comment on MP-624", "add note to task" |
-| Complete a task | `ttt done` | "done", "mark complete", "finish task" |
+| Complete task(s) | `ttt done` | "done", "mark complete", "finish task", "close MP-624 MP-625" |
+| Track a train batch | `ttt order` | "開工單", "seal the order", "hand off the train", "close the batch after merge" |
 
 **意圖符合時，透過 shell 工具執行對應的 `ttt` CLI 指令。**
 
@@ -64,6 +65,8 @@ ttt done -m "summary"       # Complete with message
 ttt done MP-624 --commit <sha> [--repo <path>]  # Close a ticket with an earlier commit
 ttt done MP-624 --from-remote  # Complete a Todo ticket without claiming it first
 ttt done MP-624 MP-625 -m "summary"  # Complete several tickets; done ones are skipped, exit non-zero if any failed
+ttt claim MP-624 --order auto --project app  # Claim into the project's open work order
+ttt order close app/2026-11-11-a --merged <sha> --version v1.2.0  # After the merge: whole batch → Done
 ```
 
 ## Prerequisites
@@ -78,6 +81,27 @@ ttt done MP-624 MP-625 -m "summary"  # Complete several tickets; done ones are s
 ttt sync → ttt claim next → ttt estimate <id> <hours> → [implement] → git commit → ttt comment -m "notes" → ttt done -m "..."
 ```
 
+## Batch Work on a Train (Work Order)
+
+When several tickets ride one integration branch and close together after its merge, claim them with `--order` and skip the per-ticket `ttt done`: closing a ticket before its train merged reports work as done that is not on the integration branch yet.
+One side writes the order at a time, so workers report and the coordinator records.
+
+```
+Coordinator: ttt claim <ids> --order auto --project <p>
+             ttt order set <order> <id> --branch --mr --head --review --tests   (per worker report)
+             ttt order review <order> <ids>            → testing status, assignee kept
+             ttt order train <order> --branch --mr
+             ttt order seal <order> --gated-head <sha> → no more tickets; the next claim opens a new order
+             ttt order export <order> --handoff        → block into the train MR; local copy read-only
+Integrator:  ttt order import <file|->                 → becomes the writer
+             ttt order close <order> --merged <sha> [--version v] [--dry-run]
+```
+
+`ttt order close` runs each in-review ticket through the configured completion mode, comments MR, merge commit, version, and order id on it, and is safe to rerun after a failure.
+A ticket left out of the train: `ttt order drop <order> <id> --reason ...`.
+A returned train: the coordinator imports the returned export (or `ttt order reclaim <order>`), reworks inside the same order, and seals again.
+`ttt order --help` lists every command.
+
 ## File Structure
 
 ```
@@ -85,6 +109,7 @@ ttt sync → ttt claim next → ttt estimate <id> <hours> → [implement] → gi
 ├── config.toon     # Team configuration
 ├── local.toon      # Personal settings
 ├── cycle.toon      # Current cycle tasks + local estimates (auto-generated)
+├── orders/         # Work orders: <project>/<code>.toon (never commit, never edit by hand)
 └── output/         # Downloaded attachments
 ```
 
@@ -96,6 +121,8 @@ ttt sync → ttt claim next → ttt estimate <id> <hours> → [implement] → gi
 | Issue not found locally | `ttt show <id> --remote` or `ttt sync <id>` (`ttt status` auto-fetches from remote) |
 | API key not set | Set `LINEAR_API_KEY` or `TRELLO_API_KEY` + `TRELLO_TOKEN` |
 | Stale data | `ttt sync` to refresh |
+| Order is read-only (handed off) | Import the returned copy, or `ttt order reclaim <order>` |
+| Order takes no more tickets (sealed) | `ttt claim <id> --order auto` opens the next order |
 
 ## Common Rationalizations
 
@@ -104,6 +131,7 @@ ttt sync → ttt claim next → ttt estimate <id> <hours> → [implement] → gi
 | "I'll edit `cycle.toon` directly, faster" | `cycle.toon` is auto-generated. Manual edits get overwritten on next `ttt sync`. Always go through the CLI. |
 | "I remember this issue ID, no need to sync" | Remote status, assignee, priority may have changed. Run `ttt sync` or `ttt show <id> --remote` first. |
 | "I'll create the issue in the Linear/Trello UI instead" | Bypassing `ttt create` leaves the new issue outside local cycle data. Use the CLI so it gets tracked. |
+| "The MR is open, so I'll `ttt done` each train ticket now" | The ticket is done when its train merges. Record it in the order (`ttt order review`) and let `ttt order close` complete the batch. |
 | "Task is obvious, skip `ttt done`" | `ttt done` syncs local + remote status, posts a completion comment, reads git commit info. Skipping leaves state inconsistent. |
 | "I know what the task needs without reading it" | Fabricated assumptions produce wrong work. Run `ttt show <id>` before starting. |
 | "Fetch issue details via Linear MCP / web UI" | The CLI is authoritative and token-efficient. Use `ttt show` / `ttt sync`, not alternate data paths. |
@@ -128,6 +156,7 @@ digraph ttt_router {
     status   [label="ttt status",  shape=box];
     comment  [label="ttt comment", shape=box];
     done     [label="ttt done",    shape=box];
+    order    [label="ttt order",   shape=box];
 
     user -> classify;
     classify -> sync     [label="fetch / pull"];
@@ -141,5 +170,6 @@ digraph ttt_router {
     classify -> status   [label="current / set status"];
     classify -> comment  [label="comment / note"];
     classify -> done     [label="done / complete"];
+    classify -> order    [label="train batch / work order"];
 }
 ```

@@ -9,6 +9,7 @@ Optimized task workflow for Claude Code — supports Linear and Trello, saves si
 - **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs MCP
 - **Multi-source Support** — Works with both Linear and Trello
 - **Batch Ticket Claiming** — Claim one or many tickets at once with `ttt claim`, or auto-pick your highest priority pending tasks with `ttt claim next <n>`
+- **Work Orders** — One file per train batch carries its tickets from claim to Done: `ttt claim --order`, then `ttt order close` completes the whole batch after the merge
 - **Multi-team Support** — Sync and filter issues across multiple teams/boards
 - **Flexible Sync Modes** — Choose between remote (immediate sync) or local (offline-first, sync later with `--update`)
 - **Completion Modes** — Four modes for task completion (Linear): simple, strict review, upstream strict, upstream not strict
@@ -156,6 +157,7 @@ ttt claim MP-123 MP-124    # Batch claim
 ttt claim next             # Claim highest priority pending task
 ttt claim next 3           # Claim top 3 pending tasks
 ttt claim --dry-run        # Preview without changes
+ttt claim MP-123 --order auto --project app   # Also record it in the project's open work order
 ```
 
 Completed, in-review, and blocked tickets are reported and skipped without
@@ -167,6 +169,11 @@ A ticket that is already closed (done or canceled) is reported and skipped. Note
 that a full `ttt sync` rewrites local data from the current cycle, so a stored
 ticket outside it drops out on the next sync (`ttt done <id> --from-remote`
 still completes it).
+
+`--order <id|auto>` also records the claimed tickets in a [work order](#ttt-order).
+`auto` means the project's open order; when the last one was sealed, a new order `<project>/<YYYY-MM-DD>-<next letter>` is opened.
+`--project <name>` names the project for `auto` (default: the directory that holds `.ttt`).
+An order that cannot take the ticket (sealed, handed off, closed) refuses before anything is claimed.
 
 ### `ttt estimate`
 
@@ -202,6 +209,53 @@ Each ticket gets a result line, and one failing ticket does not stop the rest.
 A ticket that is already done is reported and skipped, so a run can be repeated after a partial failure.
 The exit code is non-zero when any ticket failed.
 To close a whole train batch after its merge, use a [work order](#ttt-order) instead.
+
+### `ttt order`
+
+A work order is one TOON file per train batch.
+It carries the batch's tickets from claim to Done, with each ticket's branch, MR, head, review verdict, and passed test runs in one place.
+Use it when several tickets ride one integration branch and are closed together after its merge.
+
+```bash
+# Coordinator (the one writer while tickets are being worked on)
+ttt claim MP-1 MP-2 --order auto --project app      # Claim into the project's open order
+ttt order set app/2026-11-11-a MP-1 --branch feat/mp-1 --mr '!812' --head 1a2b3c4 \
+    --review "P0/P1=0" --tests "bun test scripts/x = pass"
+ttt order review app/2026-11-11-a MP-1 MP-2         # Move to the testing status, keep the assignee
+ttt order train app/2026-11-11-a --branch agent-train/2026-11-11-a --mr '!900'
+ttt order seal app/2026-11-11-a --gated-head 5d6e7f8   # No more tickets
+ttt order export app/2026-11-11-a --handoff         # Paste the block into the train MR
+
+# Integrator (the writer after the handoff)
+glab mr view 900 | ttt order import -               # Reads the block out of any text
+ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0 --dry-run
+ttt order close app/2026-11-11-a --merged 9a8b7c6 --version v1.2.0
+```
+
+| Command | What it does |
+|---------|--------------|
+| `open [<project>/<code>] [--project p] [--reviewer r]` | Open an order. Without an id the code is `<YYYY-MM-DD>-<next letter>`. |
+| `list [--project p] [--all]` | List orders; closed ones only with `--all`. |
+| `show <id> [--toon]` | Show an order, or its stored TOON. |
+| `set <id> <ticket> [--branch --mr --head --review --tests]` | Record what a worker reported. Each `--tests "<cmd> [@ <sha>] [= <result>]"` appends one run; the SHA defaults to the ticket's head and the result to `pass`. |
+| `review <id> <ticket>... [--status name]` | Move tickets to the testing status (`status_transitions.testing`, else `dev_testing_status`) and mark them in-review. |
+| `train <id> [--branch b] [--mr mr]` | Record the train branch and its merge request. |
+| `seal <id> --gated-head <sha>` | Fix the batch on the head the gate passed on. Every ticket must be in review or dropped. |
+| `drop <id> <ticket> --reason <text>` | Leave a ticket out of the batch. Its remote status is not touched. |
+| `export <id> [--handoff]` | Print the order as a fenced block. `--handoff` makes the local copy read-only. |
+| `import <file\|-> [--id id] [--force]` | Take the block from a file or stdin; the importer becomes the writer. |
+| `reclaim <id>` | Take a handed-off order back when it was returned without an export. |
+| `close <id> --merged <sha> [--version v] [--dry-run]` | Complete every in-review ticket and comment on each. |
+
+How an order behaves:
+
+- **Storage.** Orders live in `.ttt/orders/<project>/<code>.toon` on the writer's machine and are never committed. Writes are atomic (temp file, then rename) and serialized by a lock per project. The default project is the directory that holds `.ttt`.
+- **Stages.** `open` → `sealed` → `merged` → `closed`. A project holds one open order at a time. After the seal, `ttt claim --order auto` opens the next one, and a returned ticket is reworked inside its own order: record the new head with `set`, then `seal` again.
+- **One writer.** Workers report; the coordinator records. `export --handoff` passes the pen to the integrator, and write commands on the handed-off copy refuse with the way back: import the returned copy, or `reclaim`. An import never overwrites a writable local copy without `--force`, and never takes an older revision.
+- **Close.** Each in-review ticket goes through the same completion handler as `ttt done`, so `completion_mode` and parent issues apply. Each gets one comment with its MR, the merge commit, the version, and the order id. Dropped tickets are untouched. A ticket canceled at the source stops the close until it is dropped. A rerun skips what is already done and does not comment twice.
+- **Identity.** The writer's name in `owner` and the log is `TTT_ACTOR`, else `<current_user>@<hostname>`.
+
+A ticket rides one order at a time: claiming it into a second order is refused until it is dropped from the first.
 
 ### `ttt status`
 
@@ -264,6 +318,7 @@ your-project/
     ├── config.toon     # Team config (gitignore recommended)
     ├── local.toon      # Personal settings (gitignore)
     ├── cycle.toon      # Current cycle data + local estimates (auto-generated)
+    ├── orders/         # Work orders: <project>/<code>.toon (never commit)
     └── output/         # Downloaded attachments (images, files)
 ```
 
@@ -275,6 +330,7 @@ your-project/
 | `TRELLO_API_KEY` | **Required for Trello.** Your Trello API key |
 | `TRELLO_TOKEN` | **Required for Trello.** Your Trello authorization token |
 | `TOON_DIR` | Config directory (default: `.ttt`) |
+| `TTT_ACTOR` | Writer's name in work orders (default: `<current_user>@<hostname>`) |
 
 ### Trello Setup
 
@@ -309,7 +365,8 @@ Install the plugin for Claude Code integration:
 | `/ttt:sync` | Sync issues to local cycle data |
 | `/ttt:work-on` | Claim ticket(s) and work on them |
 | `/ttt:estimate` | Save a local human-effort estimate |
-| `/ttt:done` | Mark current task as completed |
+| `/ttt:done` | Mark one or more tasks as completed |
+| `/ttt:order` | Work orders: carry a train batch from claim to Done |
 | `/ttt:status` | Show or modify task status |
 | `/ttt:show` | Show issue details or search issues |
 

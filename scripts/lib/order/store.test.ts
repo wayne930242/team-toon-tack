@@ -1,0 +1,174 @@
+import { afterEach, beforeEach, test } from "bun:test";
+import assert from "node:assert/strict";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { markInReview, sealOrder, setTicket } from "./model.js";
+import {
+	addClaimedTickets,
+	checkClaimTarget,
+	defaultProject,
+	listOrders,
+	loadOrder,
+	openOrder,
+	updateOrder,
+} from "./store.js";
+import { OrderError } from "./types.js";
+
+const stamp = { by: "coord@box", at: "2026-11-11T01:00:00.000Z" };
+let dir: string;
+let previousDir: string | undefined;
+
+beforeEach(() => {
+	previousDir = process.env.TOON_DIR;
+	dir = path.join(mkdtempSync(path.join(tmpdir(), "ttt-order-store-")), ".ttt");
+	mkdirSync(dir);
+	process.env.TOON_DIR = dir;
+});
+
+afterEach(() => {
+	if (previousDir === undefined) delete process.env.TOON_DIR;
+	else process.env.TOON_DIR = previousDir;
+});
+
+test("orders are stored as .ttt/orders/<project>/<code>.toon and read back", async () => {
+	const opened = await openOrder(
+		{ project: "app", reviewer: "integ@mac" },
+		stamp,
+	);
+
+	assert.equal(opened.id, "app/2026-11-11-a");
+	assert.ok(existsSync(path.join(dir, "orders/app/2026-11-11-a.toon")));
+	assert.deepEqual(await loadOrder(opened.id), opened);
+	assert.equal(opened.rev, 1);
+	await assert.rejects(loadOrder("app/nope"), /not found.*ttt order list/);
+});
+
+test("--order auto fills the open order, and opens the next letter once it is sealed", async () => {
+	const target = { order: "auto", project: "app" };
+	assert.equal(await checkClaimTarget(target, ["MP-1"]), null);
+
+	const first = await addClaimedTickets(target, ["MP-1"], stamp);
+	const again = await addClaimedTickets(target, ["MP-2", "MP-1"], stamp);
+	assert.equal(first.created, true);
+	assert.equal(again.order.id, "app/2026-11-11-a");
+	assert.deepEqual(again.added, ["MP-2"]);
+
+	await updateOrder(again.order.id, (o) => {
+		markInReview(o, ["MP-1", "MP-2"], stamp);
+		sealOrder(o, "5d6e7f8", stamp);
+	});
+	await assert.rejects(
+		checkClaimTarget({ order: "app/2026-11-11-a" }, ["MP-3"]),
+		/sealed and takes no more tickets/,
+	);
+
+	const next = await addClaimedTickets(target, ["MP-3"], stamp);
+	assert.equal(next.order.id, "app/2026-11-11-b");
+	assert.deepEqual(
+		(await listOrders("app")).map((o) => `${o.id} ${o.stage}`),
+		["app/2026-11-11-a sealed", "app/2026-11-11-b open"],
+	);
+});
+
+test("a ticket riding one order cannot be claimed into another", async () => {
+	const target = { order: "auto", project: "app" };
+	const { order } = await addClaimedTickets(target, ["MP-1"], stamp);
+	await updateOrder(order.id, (o) => {
+		markInReview(o, ["MP-1"], stamp);
+		sealOrder(o, "5d6e7f8", stamp);
+	});
+
+	await assert.rejects(
+		checkClaimTarget(target, ["MP-1", "MP-2"]),
+		/MP-1 already in order app\/2026-11-11-a.*ttt order drop/,
+	);
+	await assert.rejects(addClaimedTickets(target, ["MP-1"], stamp), OrderError);
+	assert.equal((await listOrders("app")).length, 1, "no order opened for it");
+});
+
+test("a project holds one open order at a time", async () => {
+	await openOrder({ project: "app" }, stamp);
+	await assert.rejects(
+		openOrder({ project: "app" }, stamp),
+		/already has an open order, app\/2026-11-11-a/,
+	);
+	await openOrder({ project: "web", code: "train-7" }, stamp);
+	assert.deepEqual(
+		(await listOrders()).map((o) => o.id),
+		["app/2026-11-11-a", "web/train-7"],
+	);
+});
+
+test("concurrent writers all land: no update is lost and no temp file stays", async () => {
+	const { order } = await addClaimedTickets(
+		{ order: "auto", project: "app" },
+		Array.from({ length: 12 }, (_, i) => `MP-${i}`),
+		stamp,
+	);
+
+	await Promise.all(
+		order.tickets.map((t) =>
+			updateOrder(order.id, (o) => {
+				setTicket(o, t.id, { mr: `!${t.id}` }, stamp);
+			}),
+		),
+	);
+
+	const stored = await loadOrder(order.id);
+	assert.deepEqual(
+		stored.tickets.map((t) => t.mr),
+		order.tickets.map((t) => `!${t.id}`),
+	);
+	assert.equal(stored.rev, order.rev + 12);
+	assert.deepEqual(readdirSync(path.join(dir, "orders/app")), [
+		"2026-11-11-a.toon",
+	]);
+});
+
+test("a refused change writes nothing", async () => {
+	const { order } = await addClaimedTickets(
+		{ order: "auto", project: "app" },
+		["MP-1"],
+		stamp,
+	);
+
+	await assert.rejects(
+		updateOrder(order.id, (o) => {
+			o.tickets[0].mr = "!half-done";
+			sealOrder(o, "5d6e7f8", stamp);
+		}),
+		/Cannot seal/,
+	);
+
+	assert.deepEqual(await loadOrder(order.id), order);
+});
+
+test("a lock left by a dead process is taken over", async () => {
+	const { order } = await addClaimedTickets(
+		{ order: "auto", project: "app" },
+		["MP-1"],
+		stamp,
+	);
+	const lock = path.join(dir, "orders/app/.lock");
+
+	writeFileSync(lock, "999999@gone 2026-11-11T00:00:00.000Z\n");
+	const old = new Date(Date.now() - 60_000);
+	utimesSync(lock, old, old);
+	await updateOrder(order.id, (o) => {
+		setTicket(o, "MP-1", { mr: "!1" }, stamp);
+	});
+	assert.equal((await loadOrder(order.id)).tickets[0].mr, "!1");
+	assert.equal(existsSync(lock), false);
+});
+
+test("the default project is the directory that holds .ttt", () => {
+	assert.match(defaultProject(), /^ttt-order-store-/);
+});

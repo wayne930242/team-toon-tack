@@ -26,6 +26,7 @@ const COMMANDS = [
 	"assign",
 	"edit",
 	"cancel",
+	"order",
 	"config",
 	"help",
 	"version",
@@ -53,6 +54,7 @@ COMMANDS:
   assign     Reassign an issue to a user
   edit       Edit issue fields (title, description, priority, labels)
   cancel     Cancel an issue
+  order      Work orders: carry a train batch of tickets from claim to Done
   config     Configure settings (status mappings, filters)
   help       Show this help message
   version    Show version
@@ -74,6 +76,9 @@ EXAMPLES:
   ttt estimate MP-123 6         # Save a 6-hour estimate locally
   ttt done                      # Complete current task
   ttt done -m "Fixed the bug"   # With completion message
+  ttt done MP-123 MP-124        # Complete several tickets in one run
+  ttt claim MP-123 --order auto # Claim into the project's open work order
+  ttt order close app/2026-11-11-a --merged 1a2b3c4   # Batch → Done after merge
   ttt show MP-123               # Show issue from local data
   ttt show --label frontend     # Search local issues by label
   ttt show --status "In Progress"  # Filter by status
@@ -247,6 +252,10 @@ async function main() {
 			case "cancel":
 				process.argv = ["node", "cancel.js", ...commandArgs];
 				await importScript("cancel.js");
+				break;
+			case "order":
+				process.argv = ["node", "order.js", ...commandArgs];
+				await importScript("order.js");
 				break;
 			case "config":
 				process.argv = ["node", "config.js", ...commandArgs];

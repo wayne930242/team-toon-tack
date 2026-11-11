@@ -61,13 +61,18 @@ export function makeLinearWorkspace(
 	options: {
 		localIds?: string[];
 		localConfig?: Record<string, unknown>;
+		/** Another machine's workspace on the same fake Linear */
+		sameRemoteAs?: LinearWorkspace;
 	} = {},
 ): LinearWorkspace {
 	const dir = mkdtempSync(path.join(tmpdir(), "ttt-linear-test-"));
-	const statePath = path.join(dir, "mock-linear.json");
+	const statePath =
+		options.sameRemoteAs?.statePath ?? path.join(dir, "mock-linear.json");
 	const logPath = path.join(dir, "requests.jsonl");
 
-	writeFileSync(statePath, JSON.stringify({ issues }));
+	if (!options.sameRemoteAs) {
+		writeFileSync(statePath, JSON.stringify({ issues }));
+	}
 	writeFileSync(logPath, "");
 	writeFileSync(
 		path.join(dir, "config.toon"),
@@ -117,12 +122,16 @@ export function makeLinearWorkspace(
 	return { dir, statePath, logPath };
 }
 
-/** Run one CLI script (e.g. "done-job.ts") against the workspace. */
+/**
+ * Run one CLI script (e.g. "done-job.ts") against the workspace. `stdin` is
+ * piped to the script when given.
+ */
 export function runCli(
 	workspace: LinearWorkspace,
 	script: string,
 	args: string[],
 	env: Record<string, string> = {},
+	stdin?: string,
 ): Promise<CliResult> {
 	const logStart = readFileSync(workspace.logPath, "utf8").length;
 	const child = spawn(
@@ -143,16 +152,17 @@ export function runCli(
 				TTT_ACTOR: "tester@box",
 				...env,
 			},
-			stdio: ["ignore", "pipe", "pipe"],
+			stdio: [stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
 		},
 	);
+	child.stdin?.end(stdin);
 
 	let stdout = "";
 	let stderr = "";
-	child.stdout.on("data", (chunk) => {
+	child.stdout?.on("data", (chunk) => {
 		stdout += chunk;
 	});
-	child.stderr.on("data", (chunk) => {
+	child.stderr?.on("data", (chunk) => {
 		stderr += chunk;
 	});
 
