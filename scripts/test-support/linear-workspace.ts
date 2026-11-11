@@ -152,6 +152,9 @@ export function runCli(
 				MOCK_LINEAR_STATE: workspace.statePath,
 				MOCK_LINEAR_LOG: workspace.logPath,
 				TTT_ACTOR: "tester@box",
+				// `bun test` runs in UTC whatever the machine's zone is; the CLI
+				// must name dates (order codes) in the zone the test computes them in
+				TZ: Intl.DateTimeFormat().resolvedOptions().timeZone,
 				...env,
 			},
 			stdio: [stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
