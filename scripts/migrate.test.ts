@@ -290,6 +290,43 @@ describe("ttt migrate --to linear", () => {
 		).toEqual([["parentId"]]);
 	}, 90_000);
 
+	test("an estimate off the team's scale is named in the plan and left out", async () => {
+		const ws = await makeLocalWorkspace();
+		for (const [title, estimate] of [
+			["Fits", "3"],
+			["Too big", "8"],
+		]) {
+			const result = await runLocal(ws, "create.ts", [
+				"-t",
+				title,
+				"--estimate",
+				estimate,
+			]);
+			expect(result.exitCode, result.stderr).toBe(0);
+		}
+		// Linear scale 1-5
+		const scale = { MOCK_LINEAR_ESTIMATION: "linear" };
+
+		const plan = await migrate(ws, ["--dry-run"], scale);
+		expect(plan.exitCode, plan.stderr).toBe(0);
+		expect(plan.stdout).toContain("MP-2 (8)");
+		expect(plan.stdout).not.toContain("MP-1 (3)");
+
+		const result = await migrate(ws, [], scale);
+		expect(result.exitCode, result.stderr).toBe(0);
+		const byTitle = Object.fromEntries(
+			Object.values(readRemoteState(ws).issues).map((i) => [i.title, i]),
+		);
+		expect(byTitle.Fits.estimate).toBe(3);
+		expect(byTitle["Too big"].estimate).toBeUndefined();
+		// The board keeps it
+		expect(
+			readToonFile<{ estimate?: number }>(
+				path.join(ws.dir, "local", "issues", "MP-2.toon"),
+			).estimate,
+		).toBe(8);
+	}, 60_000);
+
 	test("open work orders move to the Linear ids, so order commands leave Linear's own MP-1 alone", async () => {
 		const ws = await makeLocalWorkspace();
 		// The workspace already has issues of its own under the same key

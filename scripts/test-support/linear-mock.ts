@@ -57,7 +57,39 @@ interface MockState {
 	nextNumber?: number;
 }
 
-const TEAM = { id: "team-dev", name: "Dev", key: "ENG" };
+// MOCK_LINEAR_ESTIMATION="<type>[,extended][,zero]": the team's estimate
+// scale (default fibonacci). An estimate off the scale is refused.
+const [estimationType = "fibonacci", ...estimationFlags] = envList(
+	"MOCK_LINEAR_ESTIMATION",
+);
+const TEAM = {
+	id: "team-dev",
+	name: "Dev",
+	key: "ENG",
+	issueEstimationType: estimationType,
+	issueEstimationExtended: estimationFlags.includes("extended"),
+	issueEstimationAllowZero: estimationFlags.includes("zero"),
+};
+const SCALES: Record<string, number[]> = {
+	exponential: [1, 2, 4, 8, 16, 32, 64],
+	fibonacci: [1, 2, 3, 5, 8, 13, 21],
+	linear: [1, 2, 3, 4, 5, 6, 7],
+	tShirt: [1, 2, 3, 5, 8, 13, 21],
+};
+
+function checkEstimate(estimate: number | null | undefined): void {
+	if (estimate === undefined || estimate === null) return;
+	const scale = (SCALES[TEAM.issueEstimationType] ?? []).slice(
+		0,
+		TEAM.issueEstimationExtended ? 7 : 5,
+	);
+	if (TEAM.issueEstimationAllowZero) scale.push(0);
+	if (!scale.includes(estimate)) {
+		throw new InputError(
+			`Argument Validation Error: estimate ${estimate} is not on the team's scale`,
+		);
+	}
+}
 const USERS = [
 	{
 		id: "u-alice",
@@ -75,8 +107,10 @@ const USERS = [
 	},
 ];
 
-/** Answered as a GraphQL error, the way Linear reports a missing entity. */
-class NotFound extends Error {}
+/** Answered as a GraphQL error, the way Linear reports bad input. */
+class InputError extends Error {}
+/** A missing entity, as Linear reports it. */
+class NotFound extends InputError {}
 
 const statePath = process.env.MOCK_LINEAR_STATE;
 
@@ -252,6 +286,7 @@ function respond(
 		if (idTaken(state, input.id)) {
 			throw new Error(`Entity already exists: ${input.id}`);
 		}
+		checkEstimate(input.estimate);
 		const number = state.nextNumber ?? 1;
 		state.nextNumber = number + 1;
 		const identifier = `${TEAM.key}-${number}`;
@@ -406,6 +441,7 @@ function respond(
 			.split(",")
 			.includes(identifier);
 		const input = variables.input ?? {};
+		checkEstimate(input.estimate);
 		if (!refused) {
 			if (input.stateId) issue.state = input.stateId;
 			if (input.parentId !== undefined) {
@@ -503,7 +539,7 @@ globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
 	try {
 		payload = { data: respond(String(body.query), body.variables) };
 	} catch (error) {
-		if (!(error instanceof NotFound)) throw error;
+		if (!(error instanceof InputError)) throw error;
 		payload = {
 			data: null,
 			errors: [

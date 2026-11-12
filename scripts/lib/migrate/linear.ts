@@ -165,8 +165,42 @@ async function createOnce(
 	await save();
 }
 
+/** A team's estimate setting, as Linear names it. */
+interface Estimation {
+	type: string;
+	extended: boolean;
+	allowZero: boolean;
+}
+
+/** Points of each scale; the last two only with the extended setting. */
+const ESTIMATE_SCALES: Record<string, number[]> = {
+	exponential: [1, 2, 4, 8, 16, 32, 64],
+	fibonacci: [1, 2, 3, 5, 8, 13, 21],
+	linear: [1, 2, 3, 4, 5, 6, 7],
+	// T-shirt sizes XS..XXXL, stored as Fibonacci points
+	tShirt: [1, 2, 3, 5, 8, 13, 21],
+};
+
+/**
+ * Estimates the team takes: none when it does not use them, undefined for
+ * a scale this version does not know (Linear then decides).
+ */
+function allowedEstimates(estimation: Estimation): number[] | undefined {
+	if (estimation.type === "notUsed") return [];
+	const scale = ESTIMATE_SCALES[estimation.type];
+	if (!scale) return undefined;
+	const points = scale.slice(0, estimation.extended ? 7 : 5);
+	return estimation.allowZero ? [0, ...points] : points;
+}
+
 interface LinearTarget {
-	team: { id: string; name: string; key: string; icon?: string };
+	team: {
+		id: string;
+		name: string;
+		key: string;
+		icon?: string;
+		estimation: Estimation;
+	};
 	states: { id: string; name: string; type: string }[];
 	labels: { id: string; name: string; color?: string }[];
 	users: {
@@ -225,6 +259,11 @@ async function loadTarget(
 			name: team.name,
 			key: team.key,
 			icon: team.icon ?? undefined,
+			estimation: {
+				type: team.issueEstimationType,
+				extended: Boolean(team.issueEstimationExtended),
+				allowZero: Boolean(team.issueEstimationAllowZero),
+			},
 		},
 		states: states.nodes.map((s) => ({ id: s.id, name: s.name, type: s.type })),
 		labels: labels.nodes.map((l) => ({
@@ -510,6 +549,22 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 	if (issues.some((i) => i.cycle)) {
 		log("Cycles are not carried over: Linear cycles are dated per team.");
 	}
+	// An estimate the team does not take would fail the create: leave it out
+	const allowed = allowedEstimates(target.team.estimation);
+	const estimateOf = (issue: LocalIssue) =>
+		issue.estimate !== undefined && allowed && !allowed.includes(issue.estimate)
+			? undefined
+			: issue.estimate;
+	const offScale = issues.filter((i) => estimateOf(i) !== i.estimate);
+	if (offScale.length > 0) {
+		const scale =
+			allowed && allowed.length > 0
+				? `takes ${target.team.estimation.type} estimates ${allowed.join(", ")}`
+				: "does not use estimates";
+		log(
+			`Team ${target.team.key} ${scale}: ${offScale.map((i) => `${i.identifier} (${i.estimate})`).join(", ")} go in without an estimate; the local board keeps it.`,
+		);
+	}
 	const orders = checkOrders(await listOrders(), issues, mapping);
 	if (orders.length > 0) {
 		log(
@@ -583,7 +638,7 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 		stateId: states.get(issue.state)?.id,
 		labelIds: issue.labels.map(labelId),
 		assigneeId: (issue.assignee && users.map.get(issue.assignee)) || null,
-		estimate: issue.estimate ?? null,
+		estimate: estimateOf(issue) ?? null,
 	});
 
 	for (const issue of issues) {
