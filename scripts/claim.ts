@@ -38,6 +38,8 @@ Arguments:
   issue-id    One or more issue IDs (e.g., MP-624 MP-625)
               'next' claims the highest priority pending task
               'next <n>' claims the top <n> pending tasks
+              (assigned to you; on a local board with none assigned to
+              you, unassigned tasks in a Todo status, left unassigned)
               If omitted, shows interactive multi-select
               An ID missing from local data (e.g. a Backlog ticket outside
               the cycle) is fetched from the source, stored locally, and
@@ -74,7 +76,11 @@ function pickTasks(
 	return outcomes.filter((o) => match(o.action)).map((o) => o.task);
 }
 
-/** Pending tasks assigned to the current user, highest priority first. */
+/**
+ * Pending tasks assigned to the current user, highest priority first. On a
+ * local board, where no one hands tickets out, a user with none assigned
+ * gets the unassigned ones in a Todo status instead.
+ */
 function getPendingTasks(
 	data: CycleData,
 	config: Config,
@@ -89,18 +95,25 @@ function getPendingTasks(
 		.map((key) => config.users[key]?.email?.toLowerCase())
 		.filter((email): email is string => !!email);
 
-	return data.tasks
-		.filter((t) => {
-			if (t.localStatus !== "pending") return false;
-			if (currentUserEmails.length === 0) return true; // No filter = all users
-			if (!t.assignee) return false;
-			return currentUserEmails.includes(t.assignee.toLowerCase());
-		})
-		.sort((a, b) => {
+	const byPriority = (tasks: Task[]) =>
+		tasks.sort((a, b) => {
 			const pa = getPrioritySortIndex(a.priority, config.priority_order);
 			const pb = getPrioritySortIndex(b.priority, config.priority_order);
 			return pa - pb;
 		});
+	const pending = data.tasks.filter((t) => t.localStatus === "pending");
+	if (currentUserEmails.length === 0) return byPriority(pending); // No filter = all users
+	const mine = pending.filter(
+		(t) => t.assignee && currentUserEmails.includes(t.assignee.toLowerCase()),
+	);
+	if (mine.length > 0 || getSourceType(config) !== "local") {
+		return byPriority(mine);
+	}
+	const todo = getStatusTransitions(config).todo;
+	const todoNames = Array.isArray(todo) ? todo : [todo];
+	return byPriority(
+		pending.filter((t) => !t.assignee && todoNames.includes(t.status)),
+	);
 }
 
 async function selectInteractively(pendingTasks: Task[]): Promise<string[]> {

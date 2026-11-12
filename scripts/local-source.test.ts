@@ -428,6 +428,31 @@ describe("commands on the local source", () => {
 		expect(cycleTask(ws, "MP-4")?.localStatus).toBe("in-progress");
 	}, 90_000);
 
+	test("claim next takes an unassigned Todo when none is assigned to you", async () => {
+		const ws = await makeLocalWorkspace();
+		ok(await runLocal(ws, "create.ts", ["-t", "Later", "-s", "Backlog"]));
+		ok(await runLocal(ws, "create.ts", ["-t", "Free low", "-p", "4"]));
+		ok(await runLocal(ws, "create.ts", ["-t", "Free high", "-p", "2"]));
+
+		const first = ok(await runLocal(ws, "claim.ts", ["next"]));
+		expect(first.stdout).toContain("Auto-selected: MP-3");
+		expect(issue(ws, "MP-3").state).toBe("In Progress");
+
+		// Your own ticket comes first
+		ok(
+			await runLocal(ws, "create.ts", ["-t", "Mine", "-p", "4", "-a", "alice"]),
+		);
+		const second = ok(await runLocal(ws, "claim.ts", ["next"]));
+		expect(second.stdout).toContain("Auto-selected: MP-4");
+
+		const third = ok(await runLocal(ws, "claim.ts", ["next"]));
+		expect(third.stdout).toContain("Auto-selected: MP-2");
+		// Backlog is not up for grabs
+		const none = ok(await runLocal(ws, "claim.ts", ["next"]));
+		expect(none.stdout).not.toContain("Auto-selected");
+		expect(issue(ws, "MP-1").state).toBe("Backlog");
+	}, 60_000);
+
 	test("sync is a no-op that says why", async () => {
 		const ws = await makeLocalWorkspace();
 		ok(await runLocal(ws, "create.ts", ["-t", "Stay"]));
