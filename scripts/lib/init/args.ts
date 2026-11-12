@@ -5,6 +5,32 @@
 import { isValidSourceType } from "../adapters/index.js";
 import type { InitOptions } from "./types.js";
 
+/** Options only the local source reads. */
+function setLocalOption(
+	options: InitOptions,
+	flag: string,
+	value: string | undefined,
+): void {
+	if (value === undefined) return;
+	switch (flag) {
+		case "--team-name":
+			options.teamName = value;
+			break;
+		case "--email":
+			options.email = value;
+			break;
+		case "--members":
+			options.members = value
+				.split(",")
+				.map((m) => m.trim())
+				.filter(Boolean);
+			break;
+		case "--statuses":
+			options.statuses = value;
+			break;
+	}
+}
+
 export function parseArgs(args: string[]): InitOptions {
 	const options: InitOptions = { interactive: true };
 
@@ -43,6 +69,8 @@ export function parseArgs(args: string[]): InitOptions {
 				case "-l":
 					options.labels = value.split(",").map((l) => l.trim());
 					break;
+				default:
+					setLocalOption(options, key, value);
 			}
 			continue;
 		}
@@ -81,6 +109,12 @@ export function parseArgs(args: string[]): InitOptions {
 				options.labels = labelArg?.split(",").map((l) => l.trim());
 				break;
 			}
+			case "--team-name":
+			case "--email":
+			case "--members":
+			case "--statuses":
+				setLocalOption(options, arg, args[++i]);
+				break;
 			case "--force":
 			case "-f":
 				options.force = true;
@@ -107,20 +141,33 @@ USAGE:
   ttt init [OPTIONS]
 
 OPTIONS:
-  -s, --source <type>   Task source: "linear" (default) or "trello"
+  -s, --source <type>   Task source: "linear" (default), "trello", or "local"
   -k, --api-key <key>   Linear API key (or set LINEAR_API_KEY env)
   --trello-key <key>    Trello API key (or set TRELLO_API_KEY env)
   --trello-token <tok>  Trello token (or set TRELLO_TOKEN env)
   -u, --user <email>    Your email/username
-  -t, --team <name>     Team/Board name to sync
+  -t, --team <name>     Team/Board name to sync (local: the team key, e.g. MP)
   -l, --labels <names>  Label filters, comma-separated (e.g., "Frontend,Backend")
+                        (local: the board's labels)
   -f, --force           Overwrite existing config files
+
+LOCAL SOURCE (a work board in .ttt/local, no Linear/Trello login):
+  -u, --user <name>     Your name (default: your OS user name)
+  --email <addr>        Your email (default: <name>@local)
+  --members <names>     Other team members, comma-separated
+  --team-name <name>    Team display name (default: the key)
+  --statuses <list>     Workflow in order, "Name" or "Name:type"; types are
+                        backlog, unstarted, started, completed, canceled
+                        (default: Backlog, Todo, In Progress, In Review,
+                        Done, Canceled)
+  Re-running init keeps the board's issues, numbering, and statuses.
   -y, --yes             Non-interactive mode (use defaults/provided args)
   -h, --help            Show this help message
 
 EXAMPLES:
   ttt init                           # Interactive Linear setup
   ttt init --source=trello           # Interactive Trello setup
+  ttt init --source local --team MP -y   # Local board, issues MP-1, MP-2, ...
   ttt init --user alice@example.com --labels "Frontend,Backend"
   ttt init -k lin_api_xxx -y
 `);

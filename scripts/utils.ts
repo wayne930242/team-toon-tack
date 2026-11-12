@@ -147,7 +147,7 @@ export type CompletionMode =
 	| "upstream_not_strict"; // Mark task as done + parent to testing, no fallback
 
 // Task source type for multi-source support
-export type TaskSourceType = "linear" | "trello";
+export type TaskSourceType = "linear" | "trello" | "local";
 
 // Source configuration for different task management systems
 export interface SourceConfig {
@@ -247,7 +247,11 @@ export interface Task {
 	url?: string;
 	attachments?: Attachment[];
 	comments?: Comment[];
+	/** Local human-effort estimate (`ttt estimate`), kept across syncs */
 	estimate?: TaskEstimate;
+	/** Estimate points at the source, where it has them */
+	points?: number;
+	relations?: { type: "blocks" | "blocked_by" | "related"; issueId: string }[];
 }
 
 export interface CycleData {
@@ -481,6 +485,17 @@ export function getSourceType(config: Config): TaskSourceType {
 	return config.source?.type ?? "linear";
 }
 
+const SOURCE_NAMES: Record<TaskSourceType, string> = {
+	linear: "Linear",
+	trello: "Trello",
+	local: "Local board",
+};
+
+/** The source's name in messages ("Linear: MP-1 → Done"). */
+export function getSourceName(config: Config): string {
+	return SOURCE_NAMES[getSourceType(config)] ?? "Linear";
+}
+
 // Helper to get sourceId from Task, falling back to linearId for backwards compatibility
 export function getTaskSourceId(task: Task): string {
 	return task.sourceId ?? task.linearId;
@@ -599,5 +614,11 @@ export function sourceIssueToTask(
 			createdAt: c.createdAt,
 			user: c.user,
 		})),
+		// Only sources that have them add these keys, so cycle.toon for
+		// other sources stays as it was
+		...(issue.estimate !== undefined ? { points: issue.estimate } : {}),
+		...(issue.relations
+			? { relations: issue.relations.map((r) => ({ ...r })) }
+			: {}),
 	};
 }

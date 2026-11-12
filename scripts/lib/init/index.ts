@@ -13,11 +13,13 @@ export {
 	selectQaPmTeams,
 	selectStatusMappings,
 } from "./linear-prompts.js";
+export { initLocal } from "./local-init.js";
 export {
 	selectLabelFilter,
 	selectStatusSource,
 	selectTaskSource,
 	selectUsers,
+	TASK_SOURCE_CHOICES,
 } from "./prompts.js";
 export { initTrello } from "./trello-init.js";
 export { promptForTrelloCredentials } from "./trello-prompts.js";

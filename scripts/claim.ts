@@ -16,6 +16,7 @@ import {
 	type CycleData,
 	findTaskByIssueId,
 	getPrioritySortIndex,
+	getSourceName,
 	getSourceType,
 	type LocalConfig,
 	loadConfig,
@@ -297,7 +298,7 @@ async function applyClaims(
 	localConfig: LocalConfig,
 ): Promise<void> {
 	const statusSource = localConfig.status_source || "remote";
-	const sourceName = getSourceType(config) === "trello" ? "Trello" : "Linear";
+	const sourceName = getSourceName(config);
 	const transitions = getStatusTransitions(config);
 	const remote =
 		statusSource === "remote"

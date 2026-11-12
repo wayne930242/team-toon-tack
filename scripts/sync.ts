@@ -89,7 +89,8 @@ async function sync() {
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(`Usage: ttt sync [issue-id] [--all] [--update]
 
-Sync issues from Linear to local cycle.ttt file.
+Sync issues from Linear to local cycle.ttt file. With the local source
+(ttt init --source local) there is nothing to sync: commands write the board.
 
 Arguments:
   issue-id    Optional. Sync only this specific issue (e.g., MP-624)
@@ -130,6 +131,14 @@ Examples:
 
 	// Check source type and branch
 	const sourceType = getSourceType(config);
+	if (sourceType === "local") {
+		// The board under .ttt/local is the source itself; commands write it
+		// and cycle.toon together, so there is no remote to pull from
+		console.log(
+			"Source is the local board (.ttt/local): nothing to sync. Commands update the board directly; 'ttt show --remote' lists the whole board.",
+		);
+		return;
+	}
 	if (sourceType === "trello") {
 		await syncTrello(config, localConfig, {
 			shouldUpdate,

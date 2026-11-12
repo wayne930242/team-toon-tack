@@ -126,7 +126,7 @@ export function makeLinearWorkspace(
 
 /**
  * Run one CLI script (e.g. "done-job.ts") against the workspace. `stdin` is
- * piped to the script when given.
+ * piped to the script when given; `cwd` defaults to this process's.
  */
 export function runCli(
 	workspace: LinearWorkspace,
@@ -134,6 +134,7 @@ export function runCli(
 	args: string[],
 	env: Record<string, string> = {},
 	stdin?: string,
+	cwd?: string,
 ): Promise<CliResult> {
 	const logStart = readFileSync(workspace.logPath, "utf8").length;
 	const child = spawn(
@@ -158,6 +159,7 @@ export function runCli(
 				...env,
 			},
 			stdio: [stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+			cwd,
 		},
 	);
 	child.stdin?.end(stdin);

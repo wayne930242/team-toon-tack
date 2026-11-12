@@ -8,6 +8,7 @@ import { confirm } from "@inquirer/prompts";
 import {
 	type InitPaths,
 	initLinear,
+	initLocal,
 	initTrello,
 	parseArgs,
 	printHelp,
@@ -71,6 +72,8 @@ async function init() {
 	// Branch based on source
 	if (source === "trello") {
 		await initTrello(options, initPaths);
+	} else if (source === "local") {
+		await initLocal(options, initPaths);
 	} else {
 		await initLinear(options, initPaths);
 	}

@@ -6,6 +6,7 @@ import { getFirstTodoStatus } from "./lib/status-helpers.js";
 import {
 	type Config,
 	findTaskByIssueId,
+	getSourceName,
 	getSourceType,
 	loadConfig,
 	loadCycleData,
@@ -216,7 +217,6 @@ Examples:
 
 		// Update remote status (only if status_source is 'remote' or not set)
 		const statusSource = localConfig.status_source || "remote";
-		const sourceType = getSourceType(config);
 		const sourceId = task.sourceId ?? task.linearId;
 
 		if (
@@ -248,8 +248,7 @@ Examples:
 							if (result.success) {
 								task.status = targetStateName;
 								needsSave = true;
-								const sourceName =
-									sourceType === "trello" ? "Trello" : "Linear";
+								const sourceName = getSourceName(config);
 								console.log(`${sourceName}: ${task.id} → ${targetStateName}`);
 							}
 						}
@@ -276,7 +275,7 @@ Examples:
 				console.log(`Local: ${task.id} ${oldLocalStatus} → ${newLocalStatus}`);
 			}
 			if (statusSource === "local") {
-				const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+				const sourceName = getSourceName(config);
 				console.log(
 					`(${sourceName} status not updated - use 'sync --update' to push)`,
 				);

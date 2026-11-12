@@ -4,6 +4,7 @@
  * Entry point that delegates to source-specific completion handlers
  */
 import { input, select } from "@inquirer/prompts";
+import { createAdapter } from "./lib/adapters/index.js";
 import {
 	type CompletionResult,
 	handleCompletion,
@@ -16,11 +17,13 @@ import {
 } from "./lib/done/status-check.js";
 import { type CommitInfo, getLatestCommit } from "./lib/git.js";
 import { getStatusTransitions } from "./lib/linear.js";
+import { sourceIssueToTask } from "./lib/remote-task.js";
 import { fetchIssueDetail, syncSingleIssue } from "./lib/sync.js";
 import {
 	type Config,
 	type CycleData,
 	findTaskByIssueId,
+	getSourceName,
 	getSourceType,
 	type LocalConfig,
 	loadConfig,
@@ -104,6 +107,16 @@ function completionTarget(
 	return localConfig.dev_testing_status || getStatusTransitions(config).testing;
 }
 
+/** Linear goes through the full issue sync; other sources through their adapter. */
+async function fetchFromSource(
+	issueId: string,
+	config: Config,
+): Promise<Task | null> {
+	if (getSourceType(config) === "linear") return fetchIssueDetail(issueId);
+	const issue = await createAdapter(config).searchIssue(issueId);
+	return issue ? sourceIssueToTask(issue, getSourceType(config)) : null;
+}
+
 /**
  * Find the ticket to complete. A ticket that is already done is reported, not
  * completed again, so a batch can be rerun after a partial failure.
@@ -115,14 +128,18 @@ async function resolveTask(
 	const doneStatus = getStatusTransitions(run.config).done;
 	const target = completionTarget(run.config, run.localConfig);
 
-	// --from-remote mode: fetch directly from Linear
+	// --from-remote mode: fetch directly from the source
 	if (run.fromRemote) {
-		console.log(`Fetching ${issueId} from Linear...`);
-		const remoteTask = await fetchIssueDetail(issueId);
+		const sourceName = getSourceName(run.config);
+		console.log(`Fetching ${issueId} from ${sourceName}...`);
+		const remoteTask = await fetchFromSource(issueId, run.config);
 
 		if (!remoteTask) {
 			return {
-				outcome: failed(issueId, `Issue ${issueId} not found in Linear.`),
+				outcome: failed(
+					issueId,
+					`Issue ${issueId} not found in ${sourceName}.`,
+				),
 			};
 		}
 		if (remoteTask.status === doneStatus || remoteTask.status === target) {
@@ -194,7 +211,7 @@ async function completeTask(task: Task, run: DoneRun): Promise<DoneOutcome> {
 			);
 		}
 	} else if (statusSource === "local") {
-		const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+		const sourceName = getSourceName(config);
 		console.log(`Local: ${task.id} marked as completed`);
 		console.log(
 			`(${sourceName} status not updated - use 'sync --update' to push)`,

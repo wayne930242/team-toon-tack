@@ -3,7 +3,7 @@
  * Wraps the @linear/sdk to implement TaskSourceAdapter interface
  */
 
-import { LinearClient } from "@linear/sdk";
+import { IssueRelationType, LinearClient } from "@linear/sdk";
 import { fetchIssuesPaged, MAX_FETCHED_ISSUES } from "../linear.js";
 import type {
 	CreateIssueOptions,
@@ -14,6 +14,7 @@ import type {
 	SourceCycle,
 	SourceIssue,
 	SourceLabel,
+	SourceRelationType,
 	SourceStatus,
 	SourceTeam,
 	SourceUser,
@@ -23,6 +24,7 @@ import type {
 
 export class LinearAdapter implements TaskSourceAdapter {
 	readonly type = "linear" as const;
+	readonly supportsEstimate = true;
 	private client: LinearClient;
 
 	constructor() {
@@ -321,6 +323,7 @@ export class LinearAdapter implements TaskSourceAdapter {
 				stateId: options.statusId,
 				parentId: options.parentIssueId,
 				cycleId: options.cycleId,
+				estimate: options.estimate,
 			});
 			if (!payload.success) {
 				return {
@@ -360,6 +363,7 @@ export class LinearAdapter implements TaskSourceAdapter {
 			if (fields.statusId !== undefined) input.stateId = fields.statusId;
 			if (fields.parentIssueId !== undefined)
 				input.parentId = fields.parentIssueId;
+			if (fields.estimate !== undefined) input.estimate = fields.estimate;
 
 			const payload = await this.client.updateIssue(sourceId, input);
 			if (!payload.success) {
@@ -369,6 +373,39 @@ export class LinearAdapter implements TaskSourceAdapter {
 				};
 			}
 			return { success: true };
+		} catch (e) {
+			return {
+				success: false,
+				error: e instanceof Error ? e.message : "Unknown error",
+			};
+		}
+	}
+
+	async addRelation(
+		sourceId: string,
+		type: SourceRelationType,
+		relatedSourceId: string,
+	): Promise<{ success: boolean; error?: string }> {
+		try {
+			// Linear stores one "blocks" relation; blocked_by is its other side
+			const [issueId, relatedIssueId] =
+				type === "blocked_by"
+					? [relatedSourceId, sourceId]
+					: [sourceId, relatedSourceId];
+			const payload = await this.client.createIssueRelation({
+				issueId,
+				relatedIssueId,
+				type:
+					type === "related"
+						? IssueRelationType.Related
+						: IssueRelationType.Blocks,
+			});
+			return payload.success
+				? { success: true }
+				: {
+						success: false,
+						error: "Linear createIssueRelation returned success=false",
+					};
 		} catch (e) {
 			return {
 				success: false,

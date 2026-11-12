@@ -30,6 +30,7 @@ const PRIORITY_NAMES: Record<number, string> = {
 
 export class TrelloAdapter implements TaskSourceAdapter {
 	readonly type = "trello" as const;
+	readonly supportsEstimate = false;
 	private client: TrelloClient;
 	private listsCache: Map<string, { id: string; name: string }[]> = new Map();
 	private membersCache: Map<

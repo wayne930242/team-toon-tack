@@ -32,5 +32,11 @@ export function sourceIssueToTask(
 			createdAt: c.createdAt,
 			user: c.user,
 		})),
+		// Only sources that have them add these keys, so cycle.toon for
+		// other sources stays as it was
+		...(issue.estimate !== undefined ? { points: issue.estimate } : {}),
+		...(issue.relations
+			? { relations: issue.relations.map((r) => ({ ...r })) }
+			: {}),
 	};
 }

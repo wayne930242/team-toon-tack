@@ -12,6 +12,7 @@ import { getStatusTransitions } from "./lib/linear.js";
 import { sourceIssueToTask } from "./lib/remote-task.js";
 import { getSyncStatuses } from "./lib/status-helpers.js";
 import {
+	getSourceName,
 	getSourceType,
 	getUserEmails,
 	loadConfig,
@@ -490,7 +491,7 @@ Examples:
 		if (useRemote) {
 			const config = await loadConfig();
 			const sourceType = getSourceType(config);
-			const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+			const sourceName = getSourceName(config);
 			let creator: CreatorFilter | undefined;
 			if (filters.creator) {
 				if (sourceType === "trello") {
@@ -547,8 +548,7 @@ Examples:
 	// Fetch from remote
 	if (useRemote) {
 		const config = await loadConfig();
-		const sourceType = getSourceType(config);
-		const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+		const sourceName = getSourceName(config);
 		console.error(`Fetching ${issueId} from ${sourceName}...`);
 		const task = await fetchIssueFromRemote(issueId);
 

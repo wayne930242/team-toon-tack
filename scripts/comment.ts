@@ -3,6 +3,7 @@ import { createAdapter } from "./lib/adapters/index.js";
 import {
 	type Config,
 	findTaskByIssueId,
+	getSourceName,
 	getSourceType,
 	loadConfig,
 	loadCycleData,
@@ -124,8 +125,7 @@ Examples:
 	const result = await adapter.addComment(sourceId, message);
 
 	if (result.success) {
-		const sourceType = getSourceType(config);
-		const sourceName = sourceType === "trello" ? "Trello" : "Linear";
+		const sourceName = getSourceName(config);
 		console.log(`${sourceName}: Comment added to ${issueId}`);
 	} else {
 		console.error(`Failed to add comment: ${result.error}`);

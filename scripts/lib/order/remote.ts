@@ -6,7 +6,7 @@
 import {
 	type Config,
 	findTaskByIssueId,
-	getSourceType,
+	getSourceName,
 	type LocalConfig,
 	loadCycleData,
 	saveCycleData,
@@ -35,7 +35,7 @@ export interface TicketResult {
 }
 
 export function sourceNameOf(config: Config): string {
-	return getSourceType(config) === "trello" ? "Trello" : "Linear";
+	return getSourceName(config);
 }
 
 /** True when commands change the source; false keeps them local-only. */

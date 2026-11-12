@@ -10,6 +10,7 @@ import type {
 } from "./lib/adapters/types.js";
 import {
 	type Config,
+	getSourceName,
 	getSourceType,
 	getTeamId,
 	loadConfig,
@@ -27,6 +28,7 @@ interface CreateArgs {
 	label?: string;
 	status?: string;
 	parent?: string;
+	estimate?: number;
 	interactive: boolean;
 }
 
@@ -70,6 +72,18 @@ function parseArgs(args: string[]): CreateArgs {
 			case "--parent":
 				result.parent = args[++i];
 				break;
+			case "--estimate": {
+				const value = args[++i];
+				const n = Number(value);
+				if (!value || !Number.isInteger(n) || n < 0) {
+					console.error(
+						"Estimate must be a whole number of points (0 or more).",
+					);
+					process.exit(1);
+				}
+				result.estimate = n;
+				break;
+			}
 			case "--no-interactive":
 				result.interactive = false;
 				break;
@@ -216,7 +230,8 @@ export async function create(args = process.argv.slice(2)) {
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(`Usage: ttt create [options]
 
-Create a new issue in Linear/Trello and add to local cycle data.
+Create a new issue in Linear/Trello/the local board and add it to local
+cycle data.
 
 Options:
   -t, --title <text>       Issue title (required)
@@ -226,6 +241,7 @@ Options:
   -l, --label <names>      Label names (comma-separated)
   -s, --status <name>      Initial status name
   --parent <id>            Parent issue identifier (e.g., MP-100)
+  --estimate <points>      Estimate points (Linear, local board)
   --no-interactive         Skip interactive prompts
 
 Examples:
@@ -306,6 +322,10 @@ Examples:
 	console.log("Creating issue...");
 
 	const adapter = createAdapter(config);
+	if (parsed.estimate !== undefined && !adapter.supportsEstimate) {
+		console.error(`${getSourceName(config)} has no estimate field.`);
+		process.exit(1);
+	}
 	let cycleData = sourceType === "trello" ? await loadCycleData() : null;
 	if (sourceType === "trello" && !cycleData) {
 		console.error("No cycle data found. Run ttt sync before creating a card.");
@@ -336,6 +356,7 @@ Examples:
 		statusId,
 		parentIssueId: parentSourceId,
 		cycleId: currentCycle?.id,
+		estimate: parsed.estimate,
 	};
 
 	const result = await adapter.createIssue(options);

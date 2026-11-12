@@ -12,6 +12,14 @@ export interface InitOptions {
 	user?: string;
 	team?: string;
 	labels?: string[];
+	/** Local source: team display name */
+	teamName?: string;
+	/** Local source: the current user's email */
+	email?: string;
+	/** Local source: other team members' names */
+	members?: string[];
+	/** Local source: "Todo, Doing:started, Done" */
+	statuses?: string;
 	force?: boolean;
 	interactive?: boolean;
 }

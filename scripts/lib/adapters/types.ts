@@ -3,7 +3,7 @@
  * Supports Linear, Trello, and future integrations
  */
 
-export type TaskSourceType = "linear" | "trello";
+export type TaskSourceType = "linear" | "trello" | "local";
 
 // ============================================
 // Source-agnostic data types
@@ -81,6 +81,17 @@ export interface SourceComment {
 }
 
 /**
+ * A link between two issues. `blocked_by` is the other side of `blocks`.
+ */
+export type SourceRelationType = "blocks" | "blocked_by" | "related";
+
+export interface SourceRelation {
+	type: SourceRelationType;
+	/** Display ID of the other issue */
+	issueId: string;
+}
+
+/**
  * Unified issue/card concept
  */
 export interface SourceIssue {
@@ -99,6 +110,10 @@ export interface SourceIssue {
 	branchName?: string;
 	attachments?: SourceAttachment[];
 	comments?: SourceComment[];
+	/** Estimate points, where the source has them */
+	estimate?: number;
+	/** Filled by sources that return relations with the issue */
+	relations?: SourceRelation[];
 }
 
 // ============================================
@@ -141,6 +156,7 @@ export interface CreateIssueOptions {
 	statusId?: string;
 	parentIssueId?: string; // Linear UUID of parent
 	cycleId?: string;
+	estimate?: number; // Estimate points; not every source has them
 }
 
 /**
@@ -154,6 +170,7 @@ export interface UpdateIssueFields {
 	labelIds?: string[];
 	statusId?: string;
 	parentIssueId?: string | null; // null to unlink
+	estimate?: number; // Estimate points; not every source has them
 }
 
 /**
@@ -259,6 +276,19 @@ export interface TaskSourceAdapter {
 	 * Get all initialization data in a single call (optimization)
 	 */
 	getInitData(teamId?: string): Promise<InitData>;
+
+	/**
+	 * Link two issues (`sourceId` blocks / is blocked by / relates to
+	 * `relatedSourceId`). Absent on sources without relations.
+	 */
+	addRelation?(
+		sourceId: string,
+		type: SourceRelationType,
+		relatedSourceId: string,
+	): Promise<{ success: boolean; error?: string }>;
+
+	/** False when the source has no estimate field (create/edit --estimate). */
+	readonly supportsEstimate: boolean;
 }
 
 // ============================================

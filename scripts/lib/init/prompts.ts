@@ -7,6 +7,29 @@ import type { TaskSourceType } from "../adapters/types.js";
 import type { LinearLabel, LinearUser } from "../config-builder.js";
 import type { InitOptions } from "./types.js";
 
+export const TASK_SOURCE_CHOICES: {
+	name: string;
+	value: TaskSourceType;
+	description: string;
+}[] = [
+	{
+		name: "Linear (recommended)",
+		value: "linear",
+		description: "Full feature support with cycles and workflows",
+	},
+	{
+		name: "Trello",
+		value: "trello",
+		description: "Board-based task management with lists as statuses",
+	},
+	{
+		name: "Local board (no account)",
+		value: "local",
+		description:
+			"Issues kept as TOON files in .ttt/local; move them to Linear later with 'ttt migrate'",
+	},
+];
+
 export async function selectTaskSource(
 	options: InitOptions,
 ): Promise<TaskSourceType> {
@@ -21,18 +44,7 @@ export async function selectTaskSource(
 	console.log("\n📦 Select Task Source:");
 	const source = await select({
 		message: "Which task management system do you use?",
-		choices: [
-			{
-				name: "Linear (recommended)",
-				value: "linear" as const,
-				description: "Full feature support with cycles and workflows",
-			},
-			{
-				name: "Trello",
-				value: "trello" as const,
-				description: "Board-based task management with lists as statuses",
-			},
-		],
+		choices: TASK_SOURCE_CHOICES,
 		default: "linear",
 	});
 

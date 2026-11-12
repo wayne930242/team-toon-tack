@@ -4,6 +4,7 @@
 
 import type { Config } from "../../utils.js";
 import { LinearAdapter } from "./linear-adapter.js";
+import { LocalAdapter } from "./local-adapter.js";
 import { TrelloAdapter } from "./trello-adapter.js";
 import type { TaskSourceAdapter, TaskSourceType } from "./types.js";
 
@@ -41,6 +42,9 @@ export function createAdapter(config: Config): TaskSourceAdapter {
 			return new TrelloAdapter(apiKey, token);
 		}
 
+		case "local":
+			return new LocalAdapter(config);
+
 		default:
 			console.error(`Error: Unknown source type "${sourceType}"`);
 			process.exit(1);
@@ -69,6 +73,11 @@ export function createAdapterForInit(
 			return new TrelloAdapter(apiKey, token);
 		}
 
+		case "local":
+			throw new Error(
+				"The local source needs no adapter during init; it writes the board itself",
+			);
+
 		default:
 			throw new Error(`Unknown source type: ${sourceType}`);
 	}
@@ -78,5 +87,5 @@ export function createAdapterForInit(
  * Check if the given source type is valid
  */
 export function isValidSourceType(type: string): type is TaskSourceType {
-	return type === "linear" || type === "trello";
+	return type === "linear" || type === "trello" || type === "local";
 }

@@ -58,6 +58,21 @@ export function displayTaskInfo(
 		const suffix = task.estimate.note ? ` (${task.estimate.note})` : "";
 		console.log(`Estimate: ${task.estimate.hours}h${suffix}`);
 	}
+	if (task.points !== undefined && task.points !== null) {
+		console.log(`Points: ${task.points}`);
+	}
+	if (task.parentIssueId) console.log(`Parent: ${task.parentIssueId}`);
+	const relationNames = {
+		blocks: "Blocks",
+		blocked_by: "Blocked by",
+		related: "Related",
+	} as const;
+	for (const [type, name] of Object.entries(relationNames)) {
+		const ids = (task.relations ?? [])
+			.filter((r) => r.type === type)
+			.map((r) => r.issueId);
+		if (ids.length > 0) console.log(`${name}: ${ids.join(", ")}`);
+	}
 	if (task.url) console.log(`URL: ${task.url}`);
 }
 

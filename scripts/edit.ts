@@ -1,8 +1,13 @@
 #!/usr/bin/env bun
 import { checkbox, input, select } from "@inquirer/prompts";
 import { createAdapter } from "./lib/adapters/index.js";
-import type { UpdateIssueFields } from "./lib/adapters/types.js";
+import type {
+	SourceRelationType,
+	TaskSourceAdapter,
+	UpdateIssueFields,
+} from "./lib/adapters/types.js";
 import {
+	getSourceName,
 	getSourceType,
 	getTaskSourceId,
 	loadConfig,
@@ -18,11 +23,28 @@ interface EditArgs {
 	description?: string;
 	priority?: number;
 	label?: string;
+	estimate?: number;
+	relations: { type: SourceRelationType; issueId: string }[];
 	interactive: boolean;
 }
 
+const RELATION_FLAGS: Record<string, SourceRelationType> = {
+	"--blocks": "blocks",
+	"--blocked-by": "blocked_by",
+	"--related": "related",
+};
+
+function parseEstimate(value: string | undefined): number {
+	const n = Number(value);
+	if (value === undefined || value === "" || !Number.isInteger(n) || n < 0) {
+		console.error("Estimate must be a whole number of points (0 or more).");
+		process.exit(1);
+	}
+	return n;
+}
+
 function parseArgs(args: string[]): EditArgs {
-	const result: EditArgs = { interactive: true };
+	const result: EditArgs = { interactive: true, relations: [] };
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
@@ -53,6 +75,27 @@ function parseArgs(args: string[]): EditArgs {
 				result.label = args[++i];
 				result.interactive = false;
 				break;
+			case "--estimate":
+				result.estimate = parseEstimate(args[++i]);
+				result.interactive = false;
+				break;
+			case "--blocks":
+			case "--blocked-by":
+			case "--related": {
+				const ids = (args[++i] ?? "")
+					.split(",")
+					.map((id) => id.trim())
+					.filter(Boolean);
+				if (ids.length === 0) {
+					console.error(`${arg} needs one or more issue IDs.`);
+					process.exit(1);
+				}
+				for (const issueId of ids) {
+					result.relations.push({ type: RELATION_FLAGS[arg], issueId });
+				}
+				result.interactive = false;
+				break;
+			}
 			case "--no-interactive":
 				result.interactive = false;
 				break;
@@ -64,6 +107,40 @@ function parseArgs(args: string[]): EditArgs {
 	}
 
 	return result;
+}
+
+async function addRelations(
+	adapter: TaskSourceAdapter,
+	taskId: string,
+	sourceId: string,
+	relations: EditArgs["relations"],
+): Promise<void> {
+	if (relations.length === 0) return;
+	if (!adapter.addRelation) {
+		console.error(
+			`Relations are not supported by this source (${adapter.type}).`,
+		);
+		process.exit(1);
+	}
+	for (const relation of relations) {
+		const other = await adapter.searchIssue(relation.issueId);
+		if (!other) {
+			console.error(`Issue ${relation.issueId} not found.`);
+			process.exit(1);
+		}
+		const result = await adapter.addRelation(
+			sourceId,
+			relation.type,
+			other.sourceId,
+		);
+		if (!result.success) {
+			console.error(
+				`Failed to relate ${taskId} to ${other.id}: ${result.error}`,
+			);
+			process.exit(1);
+		}
+		console.log(`   ${taskId} ${relation.type.replace("_", " ")} ${other.id}`);
+	}
 }
 
 async function edit() {
@@ -82,11 +159,16 @@ Options:
   -d, --description <text>  New description
   -p, --priority <0-4>      New priority
   -l, --label <names>       Set labels (comma-separated, replaces existing)
+  --estimate <points>       Set the source's estimate points (Linear, local)
+  --blocks <ids>            Add "blocks" relations to these issues (comma-separated)
+  --blocked-by <ids>        Add "blocked by" relations
+  --related <ids>           Add "related" relations
   --no-interactive          Skip interactive prompts
 
 Examples:
   ttt edit MP-123 -t "New title"          # Update title
   ttt edit MP-123 -p 2                    # Set priority to high
+  ttt edit MP-123 --blocked-by MP-120     # MP-120 must land first
   ttt edit -t "Updated" -p 3              # Edit current task
   ttt edit MP-123                         # Interactive edit`);
 		process.exit(0);
@@ -154,6 +236,11 @@ Examples:
 			}
 		}
 		fields.labelIds = ids;
+		hasChanges = true;
+	}
+
+	if (parsed.estimate !== undefined) {
+		fields.estimate = parsed.estimate;
 		hasChanges = true;
 	}
 
@@ -227,7 +314,7 @@ Examples:
 		}
 	}
 
-	if (!hasChanges) {
+	if (!hasChanges && parsed.relations.length === 0) {
 		console.log("No changes specified.");
 		process.exit(0);
 	}
@@ -240,11 +327,18 @@ Examples:
 
 	console.log(`Updating ${task.id}...`);
 	const adapter = createAdapter(config);
-	const result = await adapter.updateIssue(sourceId, fields);
-	if (!result.success) {
-		console.error(`Failed: ${result.error}`);
+	if (fields.estimate !== undefined && !adapter.supportsEstimate) {
+		console.error(`${getSourceName(config)} has no estimate field.`);
 		process.exit(1);
 	}
+	if (hasChanges) {
+		const result = await adapter.updateIssue(sourceId, fields);
+		if (!result.success) {
+			console.error(`Failed: ${result.error}`);
+			process.exit(1);
+		}
+	}
+	await addRelations(adapter, task.id, sourceId, parsed.relations);
 
 	console.log(`\n✅ ${task.id} updated.`);
 
