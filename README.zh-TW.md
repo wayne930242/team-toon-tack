@@ -2,12 +2,12 @@
 
 繁體中文 | [English](./README.md)
 
-為 Claude Code 最佳化的任務工作流 — 支援 Linear 和 Trello，比 MCP 節省大量 token。
+為 Claude Code 最佳化的任務工作流 — 支援 Linear、Trello，以及不用帳號的本機看板，比 MCP 節省大量 token。
 
 ## 特色功能
 
 - **節省 Token** — 本地 cycle 快取避免重複 API 呼叫，比 MCP 省下大量 token
-- **多來源支援** — 支援 Linear 和 Trello
+- **多來源支援** — 支援 Linear、Trello，或存在 `.ttt` 的本機看板（不用登入），之後可用 `ttt migrate --to linear` 搬進 Linear
 - **批次領票** — `ttt claim` 可一次領一張或多張票，`ttt claim next <n>` 自動領取最高優先級的待辦任務
 - **工單** — 一個列車批次一份檔案，把這批票從領票帶到 Done：`ttt claim --order` 領票入單，合併後 `ttt order close` 一次完成整批
 - **多團隊支援** — 跨多個團隊/看板同步與過濾 issue
@@ -36,9 +36,12 @@ export TRELLO_TOKEN="your-token"
 
 cd your-project
 ttt init
+
+# 完全不用帳號：本機看板存在 .ttt/local
+ttt init --source local --team MP -y
 ```
 
-初始化時會提示選擇任務來源（Linear 或 Trello），然後設定：
+初始化時會提示選擇任務來源（Linear、Trello 或本機看板），然後設定：
 
 **Linear：**
 - **開發團隊**：你的開發團隊（單選）
@@ -53,6 +56,12 @@ ttt init
 - **狀態映射**：將 Trello 列表映射到 Todo（支援多個列表）/In Progress/Done
 - **標籤過濾**：可選的卡片過濾標籤
 
+**本機看板**（見[本機看板](#本機看板)）：
+- **團隊代號**：issue 前綴（`MP` → `MP-1`、`MP-2`……）
+- **你與團隊**：你的名字、可選的 email、其他成員
+- **狀態**：依工作流程排序，預設 Backlog、Todo、In Progress、In Review、Done、Canceled
+- **標籤**：可不填
+
 ### 完成模式（僅 Linear）
 
 | 模式 | 行為 |
@@ -62,7 +71,7 @@ ttt init
 | `upstream_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent，fallback 到開發團隊的 testing 狀態（此時任務直接進 testing，不會先寫 Done）。設定 QA 團隊時的預設值。 |
 | `upstream_not_strict` | 任務標記為 Done，parent 移動到 Testing。若無 parent 不做 fallback。 |
 
-> **注意**：Trello 因不支援 parent issue，一律使用簡單完成模式。
+> **注意**：Trello 與本機看板一律使用簡單完成模式：`ttt done` 把任務移到 Done 並留 commit 訊息。
 
 ### 2. 安裝 Claude Code Plugin（選擇性）
 
@@ -126,6 +135,7 @@ ttt done -m "完成任務"
 ttt init                           # 互動模式（選擇來源）
 ttt init --source=linear           # 初始化 Linear
 ttt init --source=trello           # 初始化 Trello
+ttt init --source local --team MP  # 本機看板，issue 編號 MP-1、MP-2……
 ttt init --user alice@example.com  # 預選使用者
 ttt init --label Frontend          # 設定預設標籤
 ttt init --force                   # 覆蓋現有配置
@@ -341,11 +351,68 @@ your-project/
     └── output/         # 下載的附件（圖片、檔案）
 ```
 
+### 本機看板
+
+`ttt init --source local` 在 `.ttt/local` 存一個與 Linear 同形的工作看板，不用登入
+Linear 或 Trello。所有指令照常可用：`create`、`show`（`--remote` 讀整個看板）、
+`status`、`assign`、`edit`、`cancel`、`comment`、`claim`、`done`、`estimate` 與工單。
+`ttt sync` 沒有東西可同步，會直接說明。
+
+```bash
+ttt init --source local --team MP --user "Alice" --members "Bob,Carol" \
+  --labels "Bug,Feature" -y
+ttt create -t "Fix login" -p 2 -l Bug --estimate 3
+ttt create -t "Write the test" --parent MP-1
+ttt edit MP-2 --blocked-by MP-1
+ttt claim next
+ttt done MP-1 -m "Fixed"
+```
+
+`--statuses "Todo, Doing, Review:started, Shipped:completed, Dropped"` 可自訂工作流程；
+每個狀態都有 Linear 的狀態類型（`backlog`、`unstarted`、`started`、`completed`、
+`canceled`），寫在 `:` 後面，或由名稱推斷。init 依類型決定 claim、done、review 要移到哪個狀態。
+再跑一次 init 會保留看板上的 issue、編號與狀態，只加上新的標籤與成員。
+
+磁碟上全是 TOON：
+
+```
+.ttt/local/
+├── board.toon              # 團隊代號與名稱、next_number、狀態、標籤
+├── issues/MP-1.toon        # 一個 issue 一個檔
+└── migration-linear.toon   # ttt migrate 寫的對照與進度
+```
+
+issue 欄位有 `identifier`、`number`、`title`、`description`、`state`、`priority`、
+`labels`、`assignee`、`estimate`、`parent`、`relations`（`blocks`、`blocked_by`、
+`related`，兩邊的 issue 都會寫）、`comments`、`cycle`、`creator`、`created_at`／`updated_at`
+（另有 `started_at`、`completed_at`、`canceled_at`）。子 issue 就是指向某個 parent 的 issue。
+編號在鎖檔保護下由 `next_number` 配發，兩個同時跑的 `ttt create` 會拿到不同編號，
+同一個編號也不會發第二次。使用者仍記在 `config.toon`；沒填 email 的使用者記為 `<名字>@local`。
+
+`.ttt` 在 `.gitignore` 裡，看板只存在這個工作目錄：請自行備份，或搬到 Linear。
+
+#### 搬到 Linear
+
+```bash
+export LINEAR_API_KEY="lin_api_xxxxx"
+ttt migrate --to linear --dry-run          # 只列計畫，不寫任何東西
+ttt migrate --to linear --team ENG         # 實際搬
+ttt sync
+```
+
+migrate 在 Linear 團隊建立每個 issue，帶上狀態（同名，否則取同類型的第一個狀態）、
+標籤（缺的會建立）、優先度、估點、負責人（先比 email 再比名字，對不上就不指派）、
+parent、留言（第一行記原作者與日期）以及 blocks／related 關聯。每一步送出前都先把
+Linear 將使用的 id 寫進 `.ttt/local/migration-linear.toon`，所以中途失敗或被中斷時，
+用同一個指令重跑即可接續，不會重複建立 issue。全部成功後 `config.toon` 才切到 Linear；
+`cycle.toon` 的任務改用新編號，本機看板留作紀錄。工單仍記著本機編號，對照檔可查
+Linear 編號。週期（cycle）不搬。
+
 ### 環境變數
 
 | 變數 | 說明 |
 |------|------|
-| `LINEAR_API_KEY` | **Linear 必填**。你的 Linear API 金鑰 |
+| `LINEAR_API_KEY` | **Linear 必填**（`ttt migrate` 也要）。你的 Linear API 金鑰 |
 | `TRELLO_API_KEY` | **Trello 必填**。你的 Trello API 金鑰 |
 | `TRELLO_TOKEN` | **Trello 必填**。你的 Trello 授權 token |
 | `TOON_DIR` | 配置目錄（預設：`.ttt`） |
@@ -357,16 +424,17 @@ your-project/
 2. 在 `ttt init` 時會顯示授權網址，前往取得 token
 3. 在環境變數中設定 `TRELLO_API_KEY` 和 `TRELLO_TOKEN`
 
-### 概念對照：Linear vs Trello
+### 概念對照：Linear vs Trello vs 本機看板
 
-| 概念 | Linear | Trello |
-|------|--------|--------|
-| 容器 | Team | Board（看板）|
-| 任務 | Issue | Card（卡片）|
-| 狀態 | Workflow State | List（列表）|
-| 標籤 | Label | Label |
-| 週期 | Cycle | -（不支援）|
-| 上層 | Parent Issue | -（不支援）|
+| 概念 | Linear | Trello | 本機看板 |
+|------|--------|--------|----------|
+| 容器 | Team | Board（看板）| `board.toon` 的團隊代號 |
+| 任務 | Issue | Card（卡片）| `issues/<代號>-<n>.toon` |
+| 狀態 | Workflow State | List（列表）| 帶狀態類型的狀態 |
+| 標籤 | Label | Label | Label |
+| 週期 | Cycle | -（不支援）| `current_cycle`（可不設）|
+| 上層 | Parent Issue | -（不支援）| `parent` |
+| 關聯 | Blocks / Related | -（不支援）| `relations` |
 
 ## Claude Code Plugin
 

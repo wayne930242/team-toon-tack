@@ -2,12 +2,12 @@
 
 [繁體中文](./README.zh-TW.md) | English
 
-Optimized task workflow for Claude Code — supports Linear and Trello, saves significant tokens compared to MCP.
+Optimized task workflow for Claude Code — supports Linear, Trello, and a local board with no account, saves significant tokens compared to MCP.
 
 ## Features
 
 - **Token Efficient** — Local cycle cache eliminates repeated API calls, saving significant tokens vs MCP
-- **Multi-source Support** — Works with both Linear and Trello
+- **Multi-source Support** — Works with Linear, Trello, or a local board kept in `.ttt` (no login), which `ttt migrate --to linear` moves into Linear later
 - **Batch Ticket Claiming** — Claim one or many tickets at once with `ttt claim`, or auto-pick your highest priority pending tasks with `ttt claim next <n>`
 - **Work Orders** — One file per train batch carries its tickets from claim to Done: `ttt claim --order`, then `ttt order close` completes the whole batch after the merge
 - **Multi-team Support** — Sync and filter issues across multiple teams/boards
@@ -36,9 +36,12 @@ export TRELLO_TOKEN="your-token"
 
 cd your-project
 ttt init
+
+# Or no account at all: a local board in .ttt/local
+ttt init --source local --team MP -y
 ```
 
-During init, you'll be prompted to select your task source (Linear or Trello) and configure:
+During init, you'll be prompted to select your task source (Linear, Trello, or Local board) and configure:
 
 **For Linear:**
 - **Dev team**: Your development team (single selection)
@@ -53,6 +56,12 @@ During init, you'll be prompted to select your task source (Linear or Trello) an
 - **Status mappings**: Map Trello lists to Todo (supports multiple lists)/In Progress/Done
 - **Label filter**: Optional label to filter cards
 
+**For a local board** (see [Local board](#local-board)):
+- **Team key**: The issue prefix (`MP` → `MP-1`, `MP-2`, ...)
+- **You and your team**: Your name and optional email, other members
+- **Statuses**: In workflow order, default Backlog, Todo, In Progress, In Review, Done, Canceled
+- **Labels**: Optional
+
 ### Completion Modes (Linear only)
 
 | Mode | Behavior |
@@ -62,7 +71,7 @@ During init, you'll be prompted to select your task source (Linear or Trello) an
 | `upstream_strict` | Mark task as Done + parent to Testing. Falls back to dev testing if no parent (the task then goes straight to testing, without a Done step). Default when QA team configured. |
 | `upstream_not_strict` | Mark task as Done + parent to Testing. No fallback if no parent. |
 
-> **Note:** Trello always uses simple completion mode as it doesn't support parent issues.
+> **Note:** Trello and the local board always use simple completion mode: `ttt done` moves the task to Done and comments the commit.
 
 ### 2. Install Claude Code Plugin (Optional)
 
@@ -126,6 +135,7 @@ Initialize configuration in current directory.
 ttt init                           # Interactive mode (select source)
 ttt init --source=linear           # Initialize for Linear
 ttt init --source=trello           # Initialize for Trello
+ttt init --source local --team MP  # Local board, issues MP-1, MP-2, ...
 ttt init --user alice@example.com  # Pre-select user
 ttt init --label Frontend          # Set default label
 ttt init --force                   # Overwrite existing config
@@ -351,11 +361,78 @@ your-project/
     └── output/         # Downloaded attachments (images, files)
 ```
 
+### Local board
+
+`ttt init --source local` keeps a Linear-shaped work board in `.ttt/local`,
+with no Linear or Trello login. Every command works on it the same way:
+`create`, `show` (also `--remote`, which reads the whole board), `status`,
+`assign`, `edit`, `cancel`, `comment`, `claim`, `done`, `estimate`, and work
+orders. `ttt sync` has nothing to do and says so.
+
+```bash
+ttt init --source local --team MP --user "Alice" --members "Bob,Carol" \
+  --labels "Bug,Feature" -y
+ttt create -t "Fix login" -p 2 -l Bug --estimate 3
+ttt create -t "Write the test" --parent MP-1
+ttt edit MP-2 --blocked-by MP-1
+ttt claim next
+ttt done MP-1 -m "Fixed"
+```
+
+`--statuses "Todo, Doing, Review:started, Shipped:completed, Dropped"` sets
+your own workflow; each status has a Linear state type (`backlog`,
+`unstarted`, `started`, `completed`, `canceled`), written after `:` or
+guessed from the name. Init picks claim, done, and review statuses from the
+types. Running init again keeps the board's issues, numbering, and statuses
+and adds new labels and members.
+
+On disk, everything is TOON:
+
+```
+.ttt/local/
+├── board.toon              # team key and name, next_number, statuses, labels
+├── issues/MP-1.toon        # one issue per file
+└── migration-linear.toon   # written by ttt migrate
+```
+
+An issue holds `identifier`, `number`, `title`, `description`, `state`,
+`priority`, `labels`, `assignee`, `estimate`, `parent`, `relations`
+(`blocks`, `blocked_by`, `related`, written on both issues), `comments`,
+`cycle`, `creator`, and `created_at`/`updated_at` (plus `started_at`,
+`completed_at`, `canceled_at`). Children are the issues that name a parent.
+Numbers come from `next_number` under a lock file, so two `ttt create` runs
+at once get different numbers, and a number is never handed out twice.
+Users stay in `config.toon`; a user without an email gets `<name>@local`.
+
+`.ttt` is in `.gitignore`, so the board lives only in this checkout: back it
+up or migrate it.
+
+#### Moving to Linear
+
+```bash
+export LINEAR_API_KEY="lin_api_xxxxx"
+ttt migrate --to linear --dry-run          # The plan; writes nothing
+ttt migrate --to linear --team ENG         # Do it
+ttt sync
+```
+
+Migrate creates every issue in the Linear team with its state (same name,
+else the first state of the same type), labels (created when missing),
+priority, estimate, assignee (matched by email, then name; else unassigned),
+parent, comments (author and date on the first line), and blocks/related
+relations. It writes each step to `.ttt/local/migration-linear.toon` with
+the id Linear will store before sending it, so a failed or interrupted run
+is rerun with the same command and never creates an issue twice. Only after
+every step succeeded does `config.toon` switch to Linear; `cycle.toon` keeps
+its tasks under their new IDs, and the local board stays as a record.
+Work orders keep naming the local IDs; the mapping file gives the Linear
+ones. Cycles are not carried over.
+
 ### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `LINEAR_API_KEY` | **Required for Linear.** Your Linear API key |
+| `LINEAR_API_KEY` | **Required for Linear** (and `ttt migrate`). Your Linear API key |
 | `TRELLO_API_KEY` | **Required for Trello.** Your Trello API key |
 | `TRELLO_TOKEN` | **Required for Trello.** Your Trello authorization token |
 | `TOON_DIR` | Config directory (default: `.ttt`) |
@@ -367,16 +444,17 @@ your-project/
 2. Generate a token by visiting the authorization URL shown during `ttt init`
 3. Set both `TRELLO_API_KEY` and `TRELLO_TOKEN` in your environment
 
-### Concept Mapping: Linear vs Trello
+### Concept Mapping: Linear vs Trello vs local
 
-| Concept | Linear | Trello |
-|---------|--------|--------|
-| Container | Team | Board |
-| Task | Issue | Card |
-| Status | Workflow State | List |
-| Tag | Label | Label |
-| Sprint | Cycle | - (not supported) |
-| Parent | Parent Issue | - (not supported) |
+| Concept | Linear | Trello | Local board |
+|---------|--------|--------|-------------|
+| Container | Team | Board | Team key in `board.toon` |
+| Task | Issue | Card | `issues/<KEY>-<n>.toon` |
+| Status | Workflow State | List | Status with a state type |
+| Tag | Label | Label | Label |
+| Sprint | Cycle | - (not supported) | `current_cycle` (optional) |
+| Parent | Parent Issue | - (not supported) | `parent` |
+| Relations | Blocks / Related | - (not supported) | `relations` |
 
 ## Claude Code Plugin
 
