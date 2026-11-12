@@ -27,6 +27,7 @@ const COMMANDS = [
 	"edit",
 	"cancel",
 	"order",
+	"migrate",
 	"skills",
 	"skill",
 	"config",
@@ -37,7 +38,7 @@ type Command = (typeof COMMANDS)[number];
 
 function printHelp() {
 	console.log(`
-team-toon-tack (ttt) - Linear task sync & management CLI
+team-toon-tack (ttt) - Linear/Trello/local task sync & management CLI
 
 USAGE:
   ttt <command> [options]
@@ -57,6 +58,7 @@ COMMANDS:
   edit       Edit issue fields (title, description, priority, labels)
   cancel     Cancel an issue
   order      Work orders: carry a train batch of tickets from claim to Done
+  migrate    Move a local board into Linear: ttt migrate --to linear
   skills     List the agent skills bundled with this version
   skill      Print a bundled skill: ttt skill <name> [page]
   config     Configure settings (status mappings, filters)
@@ -73,6 +75,7 @@ GLOBAL OPTIONS:
 EXAMPLES:
   ttt init                      # Initialize .ttt directory
   ttt init -d ./custom          # Initialize in custom directory
+  ttt init --source local --team MP -y   # Local board, no account needed
   ttt sync                      # Sync from Linear
   ttt claim                     # Interactive multi-select
   ttt claim MP-123 MP-124       # Claim several tickets at once
@@ -89,7 +92,7 @@ EXAMPLES:
   ttt show --status "In Progress"  # Filter by status
 
 ENVIRONMENT:
-  LINEAR_API_KEY    Required. Your Linear API key
+  LINEAR_API_KEY    Your Linear API key (Linear source, ttt migrate)
   TOON_DIR          Optional. Default config directory
 
 More info: https://github.com/wayne930242/team-toon-tack
@@ -261,6 +264,10 @@ async function main() {
 			case "order":
 				process.argv = ["node", "order.js", ...commandArgs];
 				await importScript("order.js");
+				break;
+			case "migrate":
+				process.argv = ["node", "migrate.js", ...commandArgs];
+				await importScript("migrate.js");
 				break;
 			case "skills":
 			case "skill":

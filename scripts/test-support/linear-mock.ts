@@ -8,6 +8,11 @@
  * `{ issues: { "MP-1": { state, parent?, comments? } } }`; status updates and
  * new comments are written back, so a test can run several CLI processes
  * against one fake workspace and read the result.
+ *
+ * Creates (issues, comments, labels, relations) take the client's `id`, as
+ * Linear does, and refuse an id that exists. A missing entity is answered
+ * with Linear's "Entity not found" GraphQL error. Created issues are numbered
+ * ENG-<n> (team-dev's key).
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -27,11 +32,51 @@ interface MockIssue {
 	/** Identifier of the parent ticket */
 	parent?: string;
 	comments?: string[];
+	/** Ids of `comments`, same order, for comments created with an id */
+	commentIds?: string[];
+	/** UUID; default uuid-<identifier> */
+	id?: string;
+	title?: string;
+	description?: string;
+	priority?: number;
+	labelIds?: string[];
+	assigneeId?: string;
+	estimate?: number;
+	createdAt?: string;
 }
 
 interface MockState {
 	issues: Record<string, MockIssue>;
+	labels?: { id: string; name: string; color?: string }[];
+	relations?: {
+		id: string;
+		issueId: string;
+		relatedIssueId: string;
+		type: string;
+	}[];
+	nextNumber?: number;
 }
+
+const TEAM = { id: "team-dev", name: "Dev", key: "ENG" };
+const USERS = [
+	{
+		id: "u-alice",
+		name: "Alice",
+		displayName: "alice",
+		email: "alice@example.com",
+		active: true,
+	},
+	{
+		id: "u-zed",
+		name: "Zed",
+		displayName: "zed",
+		email: "zed@example.com",
+		active: true,
+	},
+];
+
+/** Answered as a GraphQL error, the way Linear reports a missing entity. */
+class NotFound extends Error {}
 
 const statePath = process.env.MOCK_LINEAR_STATE;
 
@@ -49,22 +94,30 @@ function saveState(state: MockState): void {
 	if (statePath) writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
 
+let currentState: MockState | undefined;
+
 const uuid = (identifier: string) =>
-	identifier === "MP-7" && !statePath ? "uuid-backlog-7" : `uuid-${identifier}`;
+	currentState?.issues[identifier]?.id ??
+	(identifier === "MP-7" && !statePath
+		? "uuid-backlog-7"
+		: `uuid-${identifier}`);
 
 function issueNode(identifier: string, issue: MockIssue) {
 	return {
 		__typename: "Issue",
 		id: uuid(identifier),
 		identifier,
-		title: statePath ? `Task ${identifier}` : "Backlog follow-up",
-		priority: 3,
+		title:
+			issue.title ?? (statePath ? `Task ${identifier}` : "Backlog follow-up"),
+		description: issue.description,
+		priority: issue.priority ?? 3,
+		estimate: issue.estimate,
 		branchName: identifier.toLowerCase(),
 		url: `https://linear.app/x/issue/${identifier}`,
 		team: { id: "team-dev" },
 		state: { id: issue.state },
 		parent: issue.parent ? { id: uuid(issue.parent) } : undefined,
-		labelIds: [],
+		labelIds: issue.labelIds ?? [],
 		previousIdentifiers: [],
 		reactionData: [],
 		reactions: [],
@@ -94,7 +147,38 @@ interface Variables {
 	first?: number;
 	after?: string;
 	filter?: { parent?: { id?: { eq?: string } } };
-	input?: { stateId?: string; issueId?: string; body?: string };
+	input?: {
+		id?: string;
+		stateId?: string;
+		issueId?: string;
+		relatedIssueId?: string;
+		type?: string;
+		body?: string;
+		title?: string;
+		description?: string;
+		priority?: number;
+		labelIds?: string[];
+		assigneeId?: string;
+		parentId?: string;
+		estimate?: number;
+		createdAt?: string;
+		name?: string;
+		color?: string;
+	};
+}
+
+function envList(name: string): string[] {
+	return (process.env[name] ?? "").split(",").filter(Boolean);
+}
+
+function idTaken(state: MockState, id: string | undefined): boolean {
+	if (!id) return false;
+	return (
+		Object.keys(state.issues).some((key) => uuid(key) === id) ||
+		Object.values(state.issues).some((i) => i.commentIds?.includes(id)) ||
+		(state.labels ?? []).some((l) => l.id === id) ||
+		(state.relations ?? []).some((r) => r.id === id)
+	);
 }
 
 function respond(
@@ -102,6 +186,7 @@ function respond(
 	variables: Variables = {},
 ): Record<string, unknown> {
 	const state = loadState();
+	currentState = state;
 	const allIssues = () =>
 		Object.entries(state.issues).map(([key, issue]) => issueNode(key, issue));
 
@@ -120,7 +205,127 @@ function respond(
 		};
 	}
 	if (query.includes("query team(")) {
-		return { team: { __typename: "Team", id: variables.id, name: "Dev" } };
+		return { team: { __typename: "Team", ...TEAM, id: variables.id } };
+	}
+	if (query.includes("query teams(")) {
+		return page("teams", [{ __typename: "Team", ...TEAM }]);
+	}
+	if (query.includes("query users(")) {
+		return page(
+			"users",
+			USERS.map((u) => ({ __typename: "User", ...u })),
+		);
+	}
+	if (query.includes("query issueLabel(")) {
+		const label = (state.labels ?? []).find((l) => l.id === variables.id);
+		if (!label) throw new NotFound("Entity not found: IssueLabel");
+		return { issueLabel: { __typename: "IssueLabel", ...label } };
+	}
+	if (query.includes("query issueRelation(")) {
+		const relation = (state.relations ?? []).find((r) => r.id === variables.id);
+		if (!relation) throw new NotFound("Entity not found: IssueRelation");
+		return { issueRelation: { __typename: "IssueRelation", ...relation } };
+	}
+	if (query.includes("query comment(")) {
+		for (const issue of Object.values(state.issues)) {
+			const index = issue.commentIds?.indexOf(variables.id ?? "") ?? -1;
+			if (index >= 0) {
+				return {
+					comment: {
+						__typename: "Comment",
+						id: variables.id,
+						body: issue.comments?.[index] ?? "",
+						createdAt: "2026-11-01T00:00:00.000Z",
+						reactionData: [],
+						reactions: [],
+					},
+				};
+			}
+		}
+		throw new NotFound("Entity not found: Comment");
+	}
+	if (query.includes("mutation") && query.includes("issueCreate")) {
+		const input = variables.input ?? {};
+		if (envList("MOCK_LINEAR_FAIL_CREATE").includes(input.title ?? "")) {
+			throw new Error(`Refused to create "${input.title}"`);
+		}
+		if (idTaken(state, input.id)) {
+			throw new Error(`Entity already exists: ${input.id}`);
+		}
+		const number = state.nextNumber ?? 1;
+		state.nextNumber = number + 1;
+		const identifier = `${TEAM.key}-${number}`;
+		const parent = Object.keys(state.issues).find(
+			(key) => uuid(key) === input.parentId,
+		);
+		state.issues[identifier] = {
+			id: input.id ?? `uuid-${identifier}`,
+			state: input.stateId ?? "s-todo",
+			title: input.title,
+			description: input.description,
+			priority: input.priority,
+			labelIds: input.labelIds,
+			assigneeId: input.assigneeId,
+			estimate: input.estimate,
+			createdAt: input.createdAt,
+			parent,
+		};
+		saveState(state);
+		if (envList("MOCK_LINEAR_CRASH_AFTER_CREATE").includes(input.title ?? "")) {
+			// The process dies after Linear stored the issue, before any answer
+			process.exit(137);
+		}
+		return {
+			issueCreate: {
+				__typename: "IssuePayload",
+				success: true,
+				lastSyncId: 1,
+				issue: issueNode(identifier, state.issues[identifier]),
+			},
+		};
+	}
+	if (query.includes("mutation") && query.includes("issueLabelCreate")) {
+		const input = variables.input ?? {};
+		if (idTaken(state, input.id)) {
+			throw new Error(`Entity already exists: ${input.id}`);
+		}
+		const label = {
+			id: input.id ?? `label-${input.name}`,
+			name: input.name ?? "",
+			...(input.color ? { color: input.color } : {}),
+		};
+		state.labels = [...(state.labels ?? []), label];
+		saveState(state);
+		return {
+			issueLabelCreate: {
+				__typename: "IssueLabelPayload",
+				success: true,
+				lastSyncId: 1,
+				issueLabel: { __typename: "IssueLabel", ...label },
+			},
+		};
+	}
+	if (query.includes("mutation") && query.includes("issueRelationCreate")) {
+		const input = variables.input ?? {};
+		if (idTaken(state, input.id)) {
+			throw new Error(`Entity already exists: ${input.id}`);
+		}
+		const relation = {
+			id: input.id ?? `relation-${(state.relations ?? []).length}`,
+			issueId: input.issueId ?? "",
+			relatedIssueId: input.relatedIssueId ?? "",
+			type: input.type ?? "related",
+		};
+		state.relations = [...(state.relations ?? []), relation];
+		saveState(state);
+		return {
+			issueRelationCreate: {
+				__typename: "IssueRelationPayload",
+				success: true,
+				lastSyncId: 1,
+				issueRelation: { __typename: "IssueRelation", ...relation },
+			},
+		};
 	}
 	if (query.includes("query issues(")) {
 		const parentId = variables.filter?.parent?.id?.eq;
@@ -154,7 +359,11 @@ function respond(
 	}
 	if (query.includes("query issue(")) {
 		const found = findByUuid(state, variables.id);
-		if (!found) throw new Error(`Unknown mock issue: ${variables.id}`);
+		if (!found) {
+			throw new NotFound(
+				`Entity not found: Issue - Unknown mock issue: ${variables.id}`,
+			);
+		}
 		return { issue: issueNode(...found) };
 	}
 	if (query.includes("query issue_comments(")) {
@@ -182,7 +391,12 @@ function respond(
 			},
 		};
 	}
-	if (query.includes("query issueLabels(")) return page("issueLabels", []);
+	if (query.includes("query issueLabels(")) {
+		return page(
+			"issueLabels",
+			(state.labels ?? []).map((l) => ({ __typename: "IssueLabel", ...l })),
+		);
+	}
 	if (query.includes("mutation") && query.includes("issueUpdate")) {
 		const found = findByUuid(state, variables.id);
 		if (!found) throw new Error(`Unknown mock issue: ${variables.id}`);
@@ -193,6 +407,12 @@ function respond(
 			.includes(identifier);
 		if (!refused && variables.input?.stateId) {
 			issue.state = variables.input.stateId;
+			saveState(state);
+		}
+		if (!refused && variables.input?.parentId) {
+			issue.parent = Object.keys(state.issues).find(
+				(key) => uuid(key) === variables.input?.parentId,
+			);
 			saveState(state);
 		}
 		return {
@@ -208,17 +428,31 @@ function respond(
 		if (!found) {
 			throw new Error(`Unknown mock issue: ${variables.input?.issueId}`);
 		}
+		if (idTaken(state, variables.input?.id)) {
+			throw new Error(`Entity already exists: ${variables.input?.id}`);
+		}
 		found[1].comments = [
 			...(found[1].comments ?? []),
 			variables.input?.body ?? "",
 		];
+		const commentId =
+			variables.input?.id ?? `comment-${found[1].comments.length - 1}`;
+		if (variables.input?.id || found[1].commentIds) {
+			// Pad ids of comments seeded without one
+			const ids = found[1].commentIds ?? [];
+			while (ids.length < found[1].comments.length - 1) {
+				ids.push(`comment-${ids.length}`);
+			}
+			ids.push(commentId);
+			found[1].commentIds = ids;
+		}
 		saveState(state);
 		return {
 			commentCreate: {
 				__typename: "CommentPayload",
 				success: true,
 				lastSyncId: 1,
-				comment: { id: `comment-${found[1].comments.length - 1}` },
+				comment: { id: commentId },
 			},
 		};
 	}
@@ -237,11 +471,23 @@ globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
 			`${JSON.stringify({ name, variables: body.variables })}\n`,
 		);
 	}
-	return new Response(
-		JSON.stringify({ data: respond(String(body.query), body.variables) }),
-		{
-			status: 200,
-			headers: { "Content-Type": "application/json" },
-		},
-	);
+	let payload: unknown;
+	try {
+		payload = { data: respond(String(body.query), body.variables) };
+	} catch (error) {
+		if (!(error instanceof NotFound)) throw error;
+		payload = {
+			data: null,
+			errors: [
+				{
+					message: error.message,
+					extensions: { type: "invalid input", code: "INPUT_ERROR" },
+				},
+			],
+		};
+	}
+	return new Response(JSON.stringify(payload), {
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+	});
 }) as typeof fetch;
