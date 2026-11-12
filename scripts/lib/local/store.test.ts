@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { decode, encode } from "@toon-format/toon";
@@ -74,6 +75,67 @@ test("an issue file above the counter (left by a crash) is never reused", async 
 		readFileSync(path.join(dir, "local", "board.toon"), "utf8"),
 	) as { next_number: number };
 	expect(board.next_number).toBe(7);
+});
+
+test("a new issue whose write dies halfway leaves no file behind", async () => {
+	await transact((tx) => tx.create(fields("One")));
+	const issuesDir = path.join(dir, "local", "issues");
+	const underIssues = (file: unknown) =>
+		String(file).startsWith(`${issuesDir}${path.sep}`);
+	// Disk full (or a crash) halfway through the content of the new issue,
+	// whichever way the store writes it
+	const halfThenFail = async (
+		write: (data: string) => Promise<void>,
+		data: unknown,
+	) => {
+		const text = String(data);
+		await write(text.slice(0, text.length / 2));
+		throw Object.assign(new Error("ENOSPC: no space left on device"), {
+			code: "ENOSPC",
+		});
+	};
+	const realWriteFile = fsp.writeFile;
+	const realOpen = fsp.open;
+	const writeSpy = spyOn(fsp, "writeFile").mockImplementation((async (
+		file: string,
+		data: string,
+		...rest: unknown[]
+	) => {
+		if (!underIssues(file)) {
+			return (realWriteFile as (...a: unknown[]) => Promise<void>)(
+				file,
+				data,
+				...rest,
+			);
+		}
+		return halfThenFail((part) => realWriteFile(file, part), data);
+	}) as typeof fsp.writeFile);
+	const openSpy = spyOn(fsp, "open").mockImplementation((async (
+		file: string,
+		flags: string,
+	) => {
+		const handle = await realOpen(file, flags);
+		if (!underIssues(file)) return handle;
+		return Object.assign(Object.create(handle), {
+			writeFile: (data: string) =>
+				halfThenFail((part) => handle.writeFile(part), data),
+			close: () => handle.close(),
+		});
+	}) as typeof fsp.open);
+	try {
+		await expect(transact((tx) => tx.create(fields("Torn")))).rejects.toThrow(
+			"ENOSPC",
+		);
+	} finally {
+		writeSpy.mockRestore();
+		openSpy.mockRestore();
+	}
+
+	// The board still lists, and nothing is left beside the issues
+	expect((await listIssues()).map((i) => i.title)).toEqual(["One"]);
+	expect(readdirSync(issuesDir)).toEqual(["MP-1.toon"]);
+	const next = await transact((tx) => tx.create(fields("Next")));
+	expect(next.identifier).toBe("MP-2");
 });
 
 test("text with newlines, quotes, and colons survives the file", async () => {

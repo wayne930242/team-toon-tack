@@ -43,10 +43,33 @@ function compact<T extends object>(value: T): T {
 	) as T;
 }
 
+function tempPath(file: string): string {
+	return `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+}
+
 async function writeAtomic(file: string, value: unknown): Promise<void> {
-	const temp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-	await fs.writeFile(temp, encode(value), "utf8");
-	await fs.rename(temp, file);
+	const temp = tempPath(file);
+	try {
+		await fs.writeFile(temp, encode(value), "utf8");
+		await fs.rename(temp, file);
+	} finally {
+		await fs.rm(temp, { force: true });
+	}
+}
+
+/**
+ * Write a file that must not exist yet. It appears complete or not at all:
+ * the content goes to a temp file, which is then hard-linked to the name
+ * (refused with EEXIST when the name is taken, unlike rename).
+ */
+async function writeNew(file: string, value: unknown): Promise<void> {
+	const temp = tempPath(file);
+	try {
+		await fs.writeFile(temp, encode(value), "utf8");
+		await fs.link(temp, file);
+	} finally {
+		await fs.rm(temp, { force: true });
+	}
 }
 
 async function readToon(file: string): Promise<unknown | undefined> {
@@ -361,7 +384,7 @@ export async function transact<T>(
 				if (created.has(id)) {
 					// A file at a fresh number means another writer bypassed the
 					// lock; refuse rather than overwrite its issue
-					const handle = await fs.open(file, "wx").catch((error) => {
+					await writeNew(file, validateIssue(issue, file)).catch((error) => {
 						if ((error as NodeJS.ErrnoException).code === "EEXIST") {
 							throw new LocalBoardError(
 								`${file} appeared while the board was locked; nothing overwritten. Retry.`,
@@ -369,8 +392,6 @@ export async function transact<T>(
 						}
 						throw error;
 					});
-					await handle.writeFile(encode(validateIssue(issue, file)), "utf8");
-					await handle.close();
 				} else {
 					await writeAtomic(file, validateIssue(issue, file));
 				}
