@@ -26,6 +26,9 @@ import { buildConfig, buildLocalConfig } from "../config-builder.js";
 import { withProcessLock } from "../file-lock.js";
 import { listIssues, localBoardDir, readBoard } from "../local/store.js";
 import type { LocalBoard, LocalIssue, LocalStatusDef } from "../local/types.js";
+import { hasLeft } from "../order/model.js";
+import { listOrders, renameTickets, stampFor } from "../order/store.js";
+import type { WorkOrder } from "../order/types.js";
 
 export class MigrateError extends Error {}
 
@@ -95,11 +98,15 @@ async function readMapping(): Promise<MigrationFile | undefined> {
 	}
 }
 
-async function writeMapping(mapping: MigrationFile): Promise<void> {
-	const file = mappingPath();
+/** Write to a temp file, then rename: a crash leaves the old file or the new. */
+async function writeFileAtomic(file: string, content: string): Promise<void> {
 	const temp = `${file}.${process.pid}.tmp`;
-	await fs.writeFile(temp, encode(mapping), "utf8");
+	await fs.writeFile(temp, content, "utf8");
 	await fs.rename(temp, file);
+}
+
+async function writeMapping(mapping: MigrationFile): Promise<void> {
+	await writeFileAtomic(mappingPath(), encode(mapping));
 }
 
 function message(error: unknown): string {
@@ -368,6 +375,36 @@ function extendMapping(
 	}
 }
 
+/**
+ * Orders holding tickets this migration renames. Refuses when an order still
+ * working a ticket names an id that is neither on the board nor migrated:
+ * after the switch `ttt order` would look it up in Linear and could act on
+ * an unrelated issue there.
+ */
+function checkOrders(
+	orders: WorkOrder[],
+	issues: LocalIssue[],
+	mapping: MigrationFile,
+): WorkOrder[] {
+	const known = new Set([
+		...issues.map((i) => i.identifier),
+		...mapping.issues.filter((e) => e.identifier).map((e) => e.local),
+	]);
+	const dangling = orders.flatMap((order) =>
+		order.stage === "closed"
+			? []
+			: order.tickets
+					.filter((t) => !known.has(t.id) && !hasLeft(t) && t.state !== "done")
+					.map((t) => `${t.id} (${order.id})`),
+	);
+	if (dangling.length > 0) {
+		throw new MigrateError(
+			`Work orders still work tickets that are not on the local board: ${dangling.join(", ")}. After the switch, ttt order would look these ids up in Linear. Drop them first ('ttt order drop <order> <ticket> --reason ...').`,
+		);
+	}
+	return orders.filter((order) => order.tickets.some((t) => known.has(t.id)));
+}
+
 export interface MigrateOptions {
 	client: LinearClient;
 	config: Config;
@@ -458,6 +495,12 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 	}
 	if (issues.some((i) => i.cycle)) {
 		log("Cycles are not carried over: Linear cycles are dated per team.");
+	}
+	const orders = checkOrders(await listOrders(), issues, mapping);
+	if (orders.length > 0) {
+		log(
+			`Work orders that switch to the Linear ids: ${orders.map((o) => `${o.id}${o.handed_off ? " (handed off: its writer's copy keeps the local ids)" : ""}`).join(", ")}`,
+		);
 	}
 	const describeAssignee = (id: string) => {
 		const linearId = users.map.get(id);
@@ -694,15 +737,31 @@ async function switchToLinear(
 		"remote",
 		localConfig.linear_api_key_env,
 	);
-	await fs.writeFile(options.configPath, encode(stripUndefined(linearConfig)));
-	await fs.writeFile(options.localPath, encode(stripUndefined(nextLocal)));
 
-	// cycle.toon: same tasks under their Linear ids; estimates and branches stay
+	// Work orders: once config.toon names Linear, `ttt order` looks each
+	// ticket up there, where a local id may name another team's issue
+	const ids = new Map(
+		mapping.issues
+			.filter((e) => e.identifier)
+			.map((e) => [e.local, e.identifier as string]),
+	);
+	const renamed = await renameTickets(
+		ids,
+		`ttt migrate moved the tickets to Linear (${mapping.started_at})`,
+		stampFor(localConfig),
+	);
+	if (renamed.length > 0) {
+		options.log(`Work orders now naming the Linear ids: ${renamed.join(", ")}`);
+	}
+
+	// cycle.toon: same tasks under their Linear ids; estimates and branches
+	// stay. A task already moved (a rerun after a crash) is left alone.
 	try {
 		const cycle = decode(await fs.readFile(options.cyclePath, "utf8"), {
 			strict: false,
 		}) as unknown as CycleData;
 		for (const task of cycle.tasks) {
+			if (task.sourceType === "linear") continue;
 			const entry = mapping.issues.find((e) => e.local === task.id);
 			if (!entry?.identifier) continue;
 			task.id = entry.identifier;
@@ -720,10 +779,17 @@ async function switchToLinear(
 		}
 		cycle.cycleName = `Migrated from local board ${board.team.key}`;
 		cycle.updatedAt = new Date().toISOString();
-		await fs.writeFile(options.cyclePath, encode(stripUndefined(cycle)));
+		await writeFileAtomic(options.cyclePath, encode(stripUndefined(cycle)));
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 	}
+
+	// config.toon last: until it names Linear, a rerun can finish the switch
+	await writeFileAtomic(options.localPath, encode(stripUndefined(nextLocal)));
+	await writeFileAtomic(
+		options.configPath,
+		encode(stripUndefined(linearConfig)),
+	);
 	if (currentKeys.length === 0) {
 		options.log(
 			"No Linear user matched current_user: local.toon now tracks all users. Set it with 'ttt init' or by hand.",

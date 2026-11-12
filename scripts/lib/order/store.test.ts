@@ -28,6 +28,7 @@ import {
 	listOrders,
 	loadOrder,
 	openOrder,
+	renameTickets,
 	updateOrder,
 } from "./store.js";
 import { OrderError } from "./types.js";
@@ -292,4 +293,46 @@ test("a note on a handed-off copy keeps its revision; on a writable copy it coun
 	const noted = await annotateOrder(order.id, touch);
 	assert.equal(noted.rev, handed.rev);
 	assert.equal((await loadOrder(order.id)).reviewer, "xx");
+});
+
+test("renaming tickets across orders happens once, even when old and new ids overlap", async () => {
+	const first = await addClaimedTickets(
+		{ order: "auto", project: "app" },
+		["MP-3", "MP-5"],
+		stamp,
+	);
+	const second = await addClaimedTickets(
+		{ order: "auto", project: "web" },
+		["MP-9"],
+		stamp,
+	);
+	const untouched = await addClaimedTickets(
+		{ order: "auto", project: "ops" },
+		["OPS-1"],
+		stamp,
+	);
+	// MP-3 → MP-5 and MP-5 → MP-7: a second pass would move MP-3 on to MP-7
+	const ids = new Map([
+		["MP-3", "MP-5"],
+		["MP-5", "MP-7"],
+		["MP-9", "MP-1"],
+	]);
+	const note = "moved to Linear (run 1)";
+
+	const changed = await renameTickets(ids, note, stamp);
+	const again = await renameTickets(ids, note, stamp);
+
+	assert.deepEqual(changed.sort(), [first.order.id, second.order.id].sort());
+	assert.deepEqual(again, []);
+	const app = await loadOrder(first.order.id);
+	assert.deepEqual(
+		app.tickets.map((t) => t.id),
+		["MP-5", "MP-7"],
+	);
+	assert.equal(app.log.at(-1)?.event, `${note}: MP-3 → MP-5, MP-5 → MP-7`);
+	assert.deepEqual(
+		(await loadOrder(second.order.id)).tickets.map((t) => t.id),
+		["MP-1"],
+	);
+	assert.deepEqual(await loadOrder(untouched.order.id), untouched.order);
 });

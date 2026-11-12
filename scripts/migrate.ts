@@ -29,6 +29,9 @@ Options:
                     sees more than one team)
   --dry-run         Show the plan; write nothing to Linear or .ttt
 
+Work orders under .ttt/orders and the tasks in cycle.toon switch to the
+Linear ids with the config, so 'ttt order' acts on the migrated issues.
+
 Each step is recorded in .ttt/local/migration-linear.toon before it is sent,
 with the id Linear will store, so a failed or interrupted run can be rerun:
 it continues where it stopped and never creates an issue twice. config.toon
@@ -128,9 +131,6 @@ async function migrate(): Promise<void> {
 			`\n✅ Migrated. config.toon now points at Linear; the mapping is in ${mappingPath()}.`,
 		);
 		console.log("Next: ttt sync");
-		console.log(
-			"Work orders under .ttt/orders still name the local IDs; the mapping file gives the Linear ones.",
-		);
 	}
 }
 

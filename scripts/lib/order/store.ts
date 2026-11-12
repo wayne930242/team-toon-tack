@@ -451,6 +451,45 @@ export async function carryTickets(
 	});
 }
 
+/**
+ * Rename tickets in every order on this machine through `ids` (old id → new
+ * id), when the source they live at changes. Each changed order logs
+ * `<note>: <old> → <new>, ...`, and an order whose log already holds `note`
+ * is skipped: a rerun must not rename an id twice when old and new ids
+ * overlap (MP-3 → MP-5, MP-5 → MP-7). A handed-off copy keeps its revision,
+ * as an annotation does. Returns the ids of the orders changed.
+ */
+export async function renameTickets(
+	ids: ReadonlyMap<string, string>,
+	note: string,
+	stamp: Stamp,
+): Promise<string[]> {
+	const changed: string[] = [];
+	for (const project of await listProjects()) {
+		await withProjectLock(project, async () => {
+			for (const order of await listOrders(project)) {
+				if (order.log.some((e) => e.event.startsWith(`${note}:`))) continue;
+				const renamed: string[] = [];
+				for (const ticket of order.tickets) {
+					const next = ids.get(ticket.id);
+					if (!next || next === ticket.id) continue;
+					renamed.push(`${ticket.id} → ${next}`);
+					ticket.id = next;
+				}
+				if (renamed.length === 0) continue;
+				order.log.push({
+					at: stamp.at,
+					by: stamp.by,
+					event: `${note}: ${renamed.join(", ")}`,
+				});
+				await writeOrderFile(order, { keepRev: Boolean(order.handed_off) });
+				changed.push(order.id);
+			}
+		});
+	}
+	return changed;
+}
+
 /** Store an imported copy; `adopt` decides against the local copy, if any. */
 export async function saveImported(
 	id: string,

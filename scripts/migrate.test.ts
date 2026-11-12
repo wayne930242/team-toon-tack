@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { hostname } from "node:os";
 import path from "node:path";
 import {
@@ -225,6 +231,96 @@ describe("ttt migrate --to linear", () => {
 		expect(third.exitCode).not.toBe(0);
 		expect(third.requests.filter((r) => MUTATIONS.test(r.name))).toEqual([]);
 	}, 90_000);
+
+	test("open work orders move to the Linear ids, so order commands leave Linear's own MP-1 alone", async () => {
+		const ws = await makeLocalWorkspace();
+		// The workspace already has issues of its own under the same key
+		writeFileSync(
+			ws.statePath,
+			JSON.stringify({
+				issues: {
+					"MP-1": { state: "s-review", title: "Someone else's MP-1" },
+					"MP-2": { state: "s-review", title: "Someone else's MP-2" },
+				},
+			}),
+		);
+		const order = "app/2026-11-12-a";
+		const steps: [string, string[]][] = [
+			["create.ts", ["-t", "One", "-a", "alice"]],
+			["create.ts", ["-t", "Two", "-a", "alice"]],
+			["order.ts", ["open", order]],
+			["claim.ts", ["MP-1", "MP-2", "--order", order]],
+			["order.ts", ["review", order, "MP-1", "MP-2"]],
+		];
+		for (const [script, args] of steps) {
+			const result = await runLocal(ws, script, args);
+			expect(result.exitCode, `${script}: ${result.stderr}`).toBe(0);
+		}
+
+		const result = await migrate(ws, []);
+		expect(result.exitCode, result.stderr).toBe(0);
+
+		const mapping = readToonFile<{
+			issues: { local: string; identifier: string }[];
+		}>(path.join(ws.dir, "local", "migration-linear.toon"));
+		const linearId = (local: string) =>
+			mapping.issues.find((e) => e.local === local)?.identifier as string;
+		const orderFile = path.join(ws.dir, "orders", "app", "2026-11-12-a.toon");
+		const stored = readToonFile<{
+			tickets: { id: string }[];
+			log: { event: string }[];
+		}>(orderFile);
+		expect(stored.tickets.map((t) => t.id)).toEqual([
+			linearId("MP-1"),
+			linearId("MP-2"),
+		]);
+		expect(stored.log.at(-1)?.event).toContain(`MP-1 → ${linearId("MP-1")}`);
+
+		// The integrator closes the batch, now against Linear
+		const linear = { LINEAR_API_KEY: "test-key" };
+		for (const args of [
+			["seal", order, "--gated-head", "abc1234"],
+			["close", order, "--merged", "def5678"],
+		]) {
+			const run = await runLocal(ws, "order.ts", args, linear);
+			expect(run.exitCode, `${run.stdout}\n${run.stderr}`).toBe(0);
+		}
+
+		const remote = readRemoteState(ws);
+		for (const id of ["MP-1", "MP-2"]) {
+			expect(remote.issues[id].state).toBe("s-review");
+			expect(remote.issues[id].comments ?? []).toEqual([]);
+			const migrated = remote.issues[linearId(id)];
+			expect(migrated.state).toBe("s-done");
+			expect(migrated.comments?.at(-1)).toContain(
+				`**Work order:** \`${order}\``,
+			);
+		}
+	}, 90_000);
+
+	test("an order still working a ticket that is not on the board refuses the migration", async () => {
+		const ws = await makeLocalWorkspace();
+		for (const [script, args] of [
+			["create.ts", ["-t", "One", "-a", "alice"]],
+			["create.ts", ["-t", "Two", "-a", "alice"]],
+			["claim.ts", ["MP-1", "MP-2", "--order", "auto", "--project", "app"]],
+		] as [string, string[]][]) {
+			const result = await runLocal(ws, script, args);
+			expect(result.exitCode, `${script}: ${result.stderr}`).toBe(0);
+		}
+		const [order] = readdirSync(path.join(ws.dir, "orders", "app"))
+			.filter((f) => f.endsWith(".toon"))
+			.map((f) => `app/${f.slice(0, -".toon".length)}`);
+		// Removed by hand from the board
+		rmSync(path.join(ws.dir, "local", "issues", "MP-2.toon"));
+
+		for (const args of [["--dry-run"], []]) {
+			const result = await migrate(ws, args);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(`MP-2 (${order})`);
+			expect(result.requests.filter((r) => MUTATIONS.test(r.name))).toEqual([]);
+		}
+	}, 60_000);
 
 	test("two runs at once: one migrates, the other is refused", async () => {
 		const ws = await seededBoard();
