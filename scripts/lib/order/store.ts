@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { decode, encode } from "@toon-format/toon";
 import { getPaths, type LocalConfig } from "../../utils.js";
+import { withFileLock } from "../file-lock.js";
 import {
 	addTickets,
 	adoptCarried,
@@ -25,11 +26,6 @@ import {
 	validateOrder,
 } from "./model.js";
 import { OrderError, type OrderTicket, type WorkOrder } from "./types.js";
-
-const LOCK_WAIT_MS = 10_000;
-const LOCK_RETRY_MS = 50;
-/** No critical section does more than local file work, so an old lock is a dead one. */
-const LOCK_STALE_MS = 30_000;
 
 function ordersDir(): string {
 	return path.join(getPaths().baseDir, "orders");
@@ -73,68 +69,14 @@ async function withProjectLock<T>(
 	const dir = path.join(ordersDir(), project);
 	await fs.mkdir(dir, { recursive: true });
 	const lockPath = path.join(dir, ".lock");
-	const deadline = Date.now() + LOCK_WAIT_MS;
-
-	const token = `${process.pid}@${os.hostname()} ${new Date().toISOString()} ${Math.random().toString(36).slice(2)}\n`;
-	const isStale = (file: string) =>
-		fs
-			.stat(file)
-			.then((stat) => Date.now() - stat.mtimeMs > LOCK_STALE_MS)
-			.catch(() => false);
-
-	for (;;) {
-		try {
-			const handle = await fs.open(lockPath, "wx");
-			await handle.writeFile(token);
-			await handle.close();
-			break;
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-			if (await isStale(lockPath)) {
-				await takeOverStaleLock(lockPath, isStale);
-				continue;
-			}
-			if (Date.now() > deadline) {
-				const holder = await fs.readFile(lockPath, "utf8").catch(() => "");
-				throw new OrderError(
-					`Orders of project ${project} are locked by ${holder.trim() || "another process"} (${lockPath}). Retry in a moment.`,
-				);
-			}
-			await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
-		}
-	}
-
-	try {
-		return await fn();
-	} finally {
-		// Release only our own lock: if it went stale, another process owns it now
-		const current = await fs.readFile(lockPath, "utf8").catch(() => "");
-		if (current === token) await fs.rm(lockPath, { force: true });
-	}
-}
-
-/**
- * Move a stale lock aside under a unique name before deleting it, so two
- * processes that both saw it stale cannot delete a fresh lock between them.
- * If what got moved turns out to be fresh, it goes back.
- */
-async function takeOverStaleLock(
-	lockPath: string,
-	isStale: (file: string) => Promise<boolean>,
-): Promise<void> {
-	const aside = `${lockPath}.${process.pid}.${Math.random().toString(36).slice(2)}.stale`;
-	try {
-		await fs.rename(lockPath, aside);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-		throw error;
-	}
-	if (!(await isStale(aside))) {
-		// Another process locked in between: restore its lock unless a third
-		// one already holds the path
-		await fs.link(aside, lockPath).catch(() => undefined);
-	}
-	await fs.rm(aside, { force: true });
+	return withFileLock(
+		lockPath,
+		(holder) =>
+			new OrderError(
+				`Orders of project ${project} are locked by ${holder} (${lockPath}). Retry in a moment.`,
+			),
+		fn,
+	);
 }
 
 async function readOrderFile(id: string): Promise<WorkOrder | undefined> {
