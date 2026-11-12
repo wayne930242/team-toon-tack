@@ -176,6 +176,9 @@ ttt claim MP-123 --order auto --project app   # 同時記進該專案目前開�
 已關閉（完成或取消）的票會回報並跳過。
 注意：完整的 `ttt sync` 會依目前 cycle 重寫本地資料，不在 cycle 內的票下次同步後會消失（仍可用 `ttt done <id> --from-remote` 完成）。
 
+本機看板沒有人派票，所以沒有指派給你的待辦時，`next` 會改領 Todo 狀態、未指派的票，
+領了也不會指派給你。
+
 加 `--order <id|auto>` 會把領到的票同時記進[工單](#ttt-order)。
 `auto` 指該專案目前開著的工單；上一張已封單時，會開一張新的 `<project>/<YYYY-MM-DD>-<下一個字母>`。
 `--project <name>` 指定 `auto` 用的專案（預設：`.ttt` 所在的目錄名稱）。
@@ -405,8 +408,15 @@ migrate 在 Linear 團隊建立每個 issue，帶上狀態（同名，否則取�
 parent、留言（第一行記原作者與日期）以及 blocks／related 關聯。每一步送出前都先把
 Linear 將使用的 id 寫進 `.ttt/local/migration-linear.toon`，所以中途失敗或被中斷時，
 用同一個指令重跑即可接續，不會重複建立 issue。全部成功後 `config.toon` 才切到 Linear；
-`cycle.toon` 的任務改用新編號，本機看板留作紀錄。工單仍記著本機編號，對照檔可查
-Linear 編號。週期（cycle）不搬。
+`cycle.toon` 的任務改用新編號，本機看板留作紀錄。`.ttt/orders` 下的工單也同時改記
+Linear 編號，所以 `ttt order review`、`close` 作用在搬過去的 issue 上，不會碰到別的
+團隊剛好與本機編號相同的 issue；工單裡還在處理的票若已不在看板上，migrate 會拒絕執行。
+
+重跑時，前一次已建立、之後又在本機改過的 issue，會以更新送出。執行期間持有
+`.ttt/local/migration.lock`，同時啟動的第二次執行會被拒絕。計畫會列出搬不過去的部分：
+不在團隊估點刻度上的估點、週期（cycle），以及建立者與開始、完成、取消日期（由 Linear
+自行設定）。好幾位 Linear 使用者同名時一律不指派；要指定其中一位，請在 `config.toon`
+填上該使用者的 email。
 
 ### 環境變數
 

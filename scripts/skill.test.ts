@@ -37,6 +37,7 @@ test("ttt skills lists each bundled skill with its description, pages, and the t
 	assert.equal(list.exitCode, 0, list.stderr);
 	assert.match(list.stdout, new RegExp(`^team-toon-tack v${version} bundled`));
 	assert.match(list.stdout, new RegExp(`\n${SKILL}  Drive Linear/Trello`));
+	assert.match(list.stdout, new RegExp(`${SKILL} local  Local board`));
 	assert.match(list.stdout, new RegExp(`${SKILL} orders-coordinator  Coord`));
 	assert.match(list.stdout, new RegExp(`${SKILL} orders-integrator  Integ`));
 });
@@ -44,10 +45,11 @@ test("ttt skills lists each bundled skill with its description, pages, and the t
 test("ttt skill prints a skill with its pages in the header, one page, or what exists", () => {
 	const main = skill(SKILL);
 	assert.equal(main.exitCode, 0, main.stderr);
-	const [header, pages, coordinator, integrator, blank] =
+	const [header, pages, local, coordinator, integrator, blank] =
 		main.stdout.split("\n");
 	assert.equal(header, `ttt skill ${SKILL} (team-toon-tack v${version})`);
 	assert.match(pages, new RegExp(`ttt skill ${SKILL} <page>`));
+	assert.match(local, /^ {2}local {15}Local board/);
 	assert.match(coordinator, /^ {2}orders-coordinator {2}Coordinator's side/);
 	assert.match(integrator, /^ {2}orders-integrator {3}Integrator's side/);
 	assert.equal(blank, "");
@@ -63,7 +65,10 @@ test("ttt skill prints a skill with its pages in the header, one page, or what e
 	assert.match(unknown.stderr, new RegExp(`Bundled skills: ${SKILL}`));
 	const noPage = skill(SKILL, "../index");
 	assert.equal(noPage.exitCode, 1);
-	assert.match(noPage.stderr, /Pages: orders-coordinator, orders-integrator/);
+	assert.match(
+		noPage.stderr,
+		/Pages: local, orders-coordinator, orders-integrator/,
+	);
 });
 
 test("the installed skill is a stub that sends the agent to ttt skill, and the bundled text names only real order commands", () => {

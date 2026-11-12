@@ -180,6 +180,10 @@ that a full `ttt sync` rewrites local data from the current cycle, so a stored
 ticket outside it drops out on the next sync (`ttt done <id> --from-remote`
 still completes it).
 
+On a local board, where no one hands tickets out, `next` takes unassigned
+tickets in a Todo status when none is assigned to you, and leaves them
+unassigned.
+
 `--order <id|auto>` also records the claimed tickets in a [work order](#ttt-order).
 `auto` means the project's open order; when the last one was sealed, a new order `<project>/<YYYY-MM-DD>-<next letter>` is opened.
 `--project <name>` names the project for `auto` (default: the directory that holds `.ttt`).
@@ -425,8 +429,18 @@ the id Linear will store before sending it, so a failed or interrupted run
 is rerun with the same command and never creates an issue twice. Only after
 every step succeeded does `config.toon` switch to Linear; `cycle.toon` keeps
 its tasks under their new IDs, and the local board stays as a record.
-Work orders keep naming the local IDs; the mapping file gives the Linear
-ones. Cycles are not carried over.
+Work orders under `.ttt/orders` switch to the Linear IDs at the same time, so
+`ttt order review` and `close` act on the migrated issues, not on another
+team's issue that happens to share a local ID; an order still working a
+ticket that is no longer on the board refuses the migration.
+
+A rerun also sends issues edited since an earlier run created them as
+updates. A run holds `.ttt/local/migration.lock`, so a second run started
+meanwhile is refused. The plan names what does not go over: estimates off
+the team's scale, cycles, the creator, and the started, completed, and
+canceled dates (Linear sets those itself). A name that several Linear users
+share matches none of them; set the user's email in `config.toon` to pick
+one.
 
 ### Environment Variables
 

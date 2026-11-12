@@ -1,6 +1,6 @@
 ---
 name: managing-linear-tasks
-description: Drive Linear/Trello task work through the ttt CLI (sync, claim, record, complete) and carry a train batch of tickets in a work order.
+description: Drive Linear/Trello or local-board task work through the ttt CLI (sync, claim, record, complete), move a local board into Linear, and carry a train batch of tickets in a work order.
 ---
 
 ## 執行方式
@@ -33,6 +33,7 @@ Manage developer task workflows using the `ttt` CLI.
 | Add a comment | `ttt comment` | "comment on MP-624", "add note to task" |
 | Complete task(s) | `ttt done` | "done", "mark complete", "finish task", "close MP-624 MP-625" |
 | Track a train batch | `ttt order` | "開工單", "seal the order", "hand off the train", "close the batch after merge" |
+| Move a local board to Linear | `ttt migrate` | "migrate to Linear", "搬到 Linear", "move the local board" |
 
 **意圖符合時，透過 shell 工具執行對應的 `ttt` CLI 指令。**
 
@@ -67,6 +68,7 @@ ttt done MP-624 --from-remote  # Complete a Todo ticket without claiming it firs
 ttt done MP-624 MP-625 -m "summary"  # Complete several tickets; done ones are skipped, exit non-zero if any failed
 ttt claim MP-624 --order auto --project app  # Claim into the project's open work order
 ttt order close app/2026-11-11-a --merged <sha> --version v1.2.0  # After the merge: whole batch → Done
+ttt migrate --to linear --dry-run  # Local board only: plan the move into Linear (see the local page)
 ttt skills                  # Skills bundled with this ttt version; print one with: ttt skill <name> [page]
 ```
 
@@ -74,6 +76,7 @@ ttt skills                  # Skills bundled with this ttt version; print one wi
 
 - **Linear**: `LINEAR_API_KEY` env var set
 - **Trello**: `TRELLO_API_KEY` + `TRELLO_TOKEN` env vars set
+- **Local board** (`source.type: local` in `config.toon`): no key; print `ttt skill managing-linear-tasks local` before working on it or moving it to Linear
 - `.ttt/` directory initialized (`ttt init`)
 
 ## Standard Workflow
@@ -118,6 +121,7 @@ Dropped and returned tickets are never completed and do not keep the order open.
 ├── local.toon      # Personal settings
 ├── cycle.toon      # Current cycle tasks + local estimates (auto-generated)
 ├── orders/         # Work orders: <project>/<code>.toon (never commit, never edit by hand)
+├── local/          # Local board: board.toon, issues/<ID>.toon (local source only; never edit by hand)
 └── output/         # Downloaded attachments
 ```
 
@@ -168,6 +172,7 @@ digraph ttt_router {
     comment  [label="ttt comment", shape=box];
     done     [label="ttt done",    shape=box];
     order    [label="ttt order",   shape=box];
+    migrate  [label="ttt migrate", shape=box];
 
     user -> classify;
     classify -> sync     [label="fetch / pull"];
@@ -182,5 +187,6 @@ digraph ttt_router {
     classify -> comment  [label="comment / note"];
     classify -> done     [label="done / complete"];
     classify -> order    [label="train batch / work order"];
+    classify -> migrate  [label="local board → Linear"];
 }
 ```
