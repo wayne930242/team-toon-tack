@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import path from "node:path";
+import { encode } from "@toon-format/toon";
 import {
 	type LocalWorkspace,
 	makeLocalWorkspace,
@@ -230,6 +231,63 @@ describe("ttt migrate --to linear", () => {
 		const third = await migrate(ws, []);
 		expect(third.exitCode).not.toBe(0);
 		expect(third.requests.filter((r) => MUTATIONS.test(r.name))).toEqual([]);
+	}, 90_000);
+
+	test("a rerun carries local edits made to issues an earlier run created", async () => {
+		const ws = await seededBoard();
+		const failed = await migrate(ws, [], {
+			MOCK_LINEAR_FAIL_CREATE: "Dropped",
+		});
+		expect(failed.exitCode).toBe(1);
+
+		// Between the runs: edits through ttt, and a parent set by hand
+		for (const [script, args] of [
+			[
+				"edit.ts",
+				[
+					"MP-1",
+					"-t",
+					"Parent v2",
+					"-l",
+					"Feature",
+					"--estimate",
+					"5",
+					"--no-interactive",
+				],
+			],
+			["assign.ts", ["MP-3", "-a", "alice"]],
+			["cancel.ts", ["MP-3", "-y"]],
+		] as [string, string[]][]) {
+			const result = await runLocal(ws, script, args);
+			expect(result.exitCode, `${script}: ${result.stderr}`).toBe(0);
+		}
+		const file = path.join(ws.dir, "local", "issues", "MP-3.toon");
+		const blocked = readToonFile<Record<string, unknown>>(file);
+		writeFileSync(file, encode({ ...blocked, parent: "MP-1" }));
+
+		const finished = await migrate(ws, []);
+
+		expect(finished.exitCode, finished.stderr).toBe(0);
+		const remote = readRemoteState(ws);
+		const key = (title: string) =>
+			Object.entries(remote.issues).find(([, i]) => i.title === title)?.[0];
+		expect(key("Parent"), "the old title is gone").toBeUndefined();
+		const parent = remote.issues[key("Parent v2") as string];
+		const feature = remote.labels?.find((l) => l.name === "Feature");
+		expect(parent.labelIds).toEqual([feature?.id as string]);
+		expect(parent.estimate).toBe(5);
+		const moved = remote.issues[key("Blocked") as string];
+		expect(moved.assigneeId).toBe("u-alice");
+		expect(moved.state).toBe("s-canceled");
+		expect(moved.parent).toBe(key("Parent v2"));
+		// Child was not edited: its only update sets the parent, which the
+		// failed run had not reached
+		const childId = remote.issues[key("Child") as string].id;
+		expect(
+			finished.requests
+				.filter((r) => r.name === "updateIssue" && r.variables.id === childId)
+				.map((r) => Object.keys(r.variables.input as object)),
+		).toEqual([["parentId"]]);
 	}, 90_000);
 
 	test("open work orders move to the Linear ids, so order commands leave Linear's own MP-1 alone", async () => {

@@ -155,12 +155,12 @@ interface Variables {
 		type?: string;
 		body?: string;
 		title?: string;
-		description?: string;
+		description?: string | null;
 		priority?: number;
 		labelIds?: string[];
-		assigneeId?: string;
-		parentId?: string;
-		estimate?: number;
+		assigneeId?: string | null;
+		parentId?: string | null;
+		estimate?: number | null;
 		createdAt?: string;
 		name?: string;
 		color?: string;
@@ -262,11 +262,11 @@ function respond(
 			id: input.id ?? `uuid-${identifier}`,
 			state: input.stateId ?? "s-todo",
 			title: input.title,
-			description: input.description,
+			description: input.description ?? undefined,
 			priority: input.priority,
 			labelIds: input.labelIds,
-			assigneeId: input.assigneeId,
-			estimate: input.estimate,
+			assigneeId: input.assigneeId ?? undefined,
+			estimate: input.estimate ?? undefined,
 			createdAt: input.createdAt,
 			parent,
 		};
@@ -405,14 +405,31 @@ function respond(
 		const refused = (process.env.MOCK_LINEAR_FAIL_UPDATE ?? "")
 			.split(",")
 			.includes(identifier);
-		if (!refused && variables.input?.stateId) {
-			issue.state = variables.input.stateId;
-			saveState(state);
-		}
-		if (!refused && variables.input?.parentId) {
-			issue.parent = Object.keys(state.issues).find(
-				(key) => uuid(key) === variables.input?.parentId,
-			);
+		const input = variables.input ?? {};
+		if (!refused) {
+			if (input.stateId) issue.state = input.stateId;
+			if (input.parentId !== undefined) {
+				issue.parent =
+					input.parentId === null
+						? undefined
+						: Object.keys(state.issues).find(
+								(key) => uuid(key) === input.parentId,
+							);
+			}
+			// Any other field the update names, null clearing it
+			for (const field of [
+				"title",
+				"description",
+				"priority",
+				"labelIds",
+				"assigneeId",
+				"estimate",
+			] as const) {
+				if (field in input) {
+					(issue as unknown as Record<string, unknown>)[field] =
+						input[field] ?? undefined;
+				}
+			}
 			saveState(state);
 		}
 		return {

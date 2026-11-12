@@ -57,7 +57,13 @@ interface IssueEntry extends Progress {
 	local: string;
 	/** Linear identifier, known once created */
 	identifier?: string;
-	parent_set: boolean;
+	/**
+	 * Local `updated_at` of the version Linear holds: recorded when the create
+	 * is sent and after each update. A later local one is sent as an update.
+	 */
+	updated_at?: string;
+	/** Local identifier of the parent Linear holds; absent for none */
+	parent?: string;
 	comments: CommentEntry[];
 }
 
@@ -127,7 +133,8 @@ async function exists(lookup: () => Promise<unknown>): Promise<boolean> {
 /**
  * Create once: an earlier attempt that may have reached Linear is looked up
  * first; a failed create is looked up before it counts as failed, since the
- * answer may be what got lost.
+ * answer may be what got lost. `onAttempt` records, with the attempt, what
+ * the create sends.
  */
 async function createOnce(
 	entry: Progress,
@@ -135,6 +142,7 @@ async function createOnce(
 	create: () => Promise<{ success: boolean }>,
 	save: () => Promise<void>,
 	what: string,
+	onAttempt?: () => void,
 ): Promise<void> {
 	if (entry.created) return;
 	if (entry.attempted && (await exists(lookup))) {
@@ -142,6 +150,7 @@ async function createOnce(
 		await save();
 		return;
 	}
+	onAttempt?.();
 	entry.attempted = true;
 	await save();
 	try {
@@ -342,7 +351,6 @@ function extendMapping(
 				id: randomUUID(),
 				attempted: false,
 				created: false,
-				parent_set: false,
 				comments: [],
 			};
 			mapping.issues.push(entry);
@@ -469,6 +477,12 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 	extendMapping(mapping, issues, labelNames, target);
 	const entryOf = (local: string) =>
 		mapping.issues.find((e) => e.local === local) as IssueEntry;
+	/** Created earlier, and edited locally since Linear got it */
+	const stale = (issue: LocalIssue, entry: IssueEntry | undefined) =>
+		Boolean(
+			entry?.created &&
+				(!entry.updated_at || issue.updated_at > entry.updated_at),
+		);
 
 	// The plan, printed for a dry run and a real one alike
 	log(
@@ -519,7 +533,7 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 			issue.comments.length > 0 ? `${issue.comments.length} comment(s)` : "",
 		].filter(Boolean);
 		const done = entry.created
-			? `already ${entry.identifier ?? "created"}`
+			? `${stale(issue, entry) ? "update" : "already"} ${entry.identifier ?? "created"}`
 			: options.dryRun
 				? "would create"
 				: "create";
@@ -561,6 +575,16 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 	}
 	const labelId = (name: string) =>
 		mapping.labels.find((l) => l.name === name)?.id as string;
+	/** What Linear holds of an issue, parent aside; null clears a field */
+	const fieldsOf = (issue: LocalIssue) => ({
+		title: issue.title,
+		description: issue.description ?? null,
+		priority: issue.priority,
+		stateId: states.get(issue.state)?.id,
+		labelIds: issue.labels.map(labelId),
+		assigneeId: (issue.assignee && users.map.get(issue.assignee)) || null,
+		estimate: issue.estimate ?? null,
+	});
 
 	for (const issue of issues) {
 		const entry = entryOf(issue.identifier);
@@ -571,19 +595,14 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 				client.createIssue({
 					id: entry.id,
 					teamId: target.team.id,
-					title: issue.title,
-					description: issue.description,
-					priority: issue.priority,
-					stateId: states.get(issue.state)?.id,
-					labelIds: issue.labels.map(labelId),
-					assigneeId: issue.assignee
-						? users.map.get(issue.assignee)
-						: undefined,
-					estimate: issue.estimate,
+					...fieldsOf(issue),
 					createdAt: new Date(issue.created_at),
 				}),
 			save,
 			`${issue.identifier}`,
+			() => {
+				entry.updated_at = issue.updated_at;
+			},
 		);
 		if (!entry.identifier) {
 			entry.identifier = (
@@ -591,24 +610,45 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 			).identifier;
 			await save();
 		}
-		log(`✓ ${issue.identifier} → ${entry.identifier}`);
+		if (stale(issue, entry)) {
+			// Edited locally after an earlier run created it
+			const payload = await withRetry(() =>
+				client.updateIssue(entry.id, fieldsOf(issue)),
+			);
+			if (!payload.success) {
+				throw new MigrateError(`Updating ${entry.identifier} failed.`);
+			}
+			entry.updated_at = issue.updated_at;
+			await save();
+			log(`↻ ${issue.identifier} → ${entry.identifier} (updated)`);
+		} else {
+			log(`✓ ${issue.identifier} → ${entry.identifier}`);
+		}
 	}
 
 	for (const issue of issues) {
 		const entry = entryOf(issue.identifier);
-		if (issue.parent && !entry.parent_set) {
-			const parent = entryOf(issue.parent);
-			if (parent) {
-				const payload = await withRetry(() =>
-					client.updateIssue(entry.id, { parentId: parent.id }),
+		// The parent Linear should hold: the local one, once it is migrated
+		const wanted =
+			issue.parent && entryOf(issue.parent)?.created ? issue.parent : undefined;
+		if (issue.parent && !wanted) {
+			log(
+				`  ${issue.identifier}: its parent ${issue.parent} is not on the board; left without a parent.`,
+			);
+		}
+		if (wanted !== (entry.parent ?? undefined)) {
+			const payload = await withRetry(() =>
+				client.updateIssue(entry.id, {
+					parentId: wanted ? entryOf(wanted).id : null,
+				}),
+			);
+			if (!payload.success) {
+				throw new MigrateError(
+					`Setting the parent of ${issue.identifier} failed.`,
 				);
-				if (!payload.success) {
-					throw new MigrateError(
-						`Setting the parent of ${issue.identifier} failed.`,
-					);
-				}
 			}
-			entry.parent_set = true;
+			if (wanted) entry.parent = wanted;
+			else delete entry.parent;
 			await save();
 		}
 		for (const comment of issue.comments) {
@@ -652,14 +692,15 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 		);
 	}
 
-	// Issues added to the board while this ran are not migrated yet
+	// Issues added or edited on the board while this ran: Linear lacks them
 	const now = await listIssues();
-	const late = now.filter(
-		(i) => !mapping.issues.some((e) => e.local === i.identifier && e.created),
-	);
+	const late = now.filter((i) => {
+		const entry = mapping.issues.find((e) => e.local === i.identifier);
+		return !entry?.created || stale(i, entry);
+	});
 	if (late.length > 0) {
 		throw new MigrateError(
-			`${late.map((i) => i.identifier).join(", ")} appeared on the board during the run; rerun to migrate them.`,
+			`${late.map((i) => i.identifier).join(", ")} appeared or changed on the board during the run; rerun to carry them over.`,
 		);
 	}
 
