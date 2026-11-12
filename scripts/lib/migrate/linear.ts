@@ -303,29 +303,41 @@ function mapStates(
 	return map;
 }
 
-/** Local user id → Linear user: same email, else same name. */
+/**
+ * Local user id → Linear user: same email, else the one user of the same
+ * name. A name several Linear users share matches none of them.
+ */
 function mapUsers(
 	config: Config,
 	target: LinearTarget,
-): { map: Map<string, string>; unmatched: string[] } {
+): { map: Map<string, string>; unmatched: string[]; ambiguous: string[] } {
 	const map = new Map<string, string>();
 	const unmatched: string[] = [];
+	const ambiguous: string[] = [];
 	for (const [key, user] of Object.entries(config.users ?? {})) {
 		const email = user.email?.toLowerCase();
 		const name = user.displayName.toLowerCase();
-		const found =
-			(email && !email.endsWith("@local")
+		const byEmail =
+			email && !email.endsWith("@local")
 				? target.users.find((u) => u.email?.toLowerCase() === email)
-				: undefined) ??
-			target.users.find(
-				(u) =>
-					u.name?.toLowerCase() === name ||
-					u.displayName?.toLowerCase() === name,
+				: undefined;
+		const byName = target.users.filter(
+			(u) =>
+				u.name?.toLowerCase() === name || u.displayName?.toLowerCase() === name,
+		);
+		if (byEmail) {
+			map.set(user.id, byEmail.id);
+		} else if (byName.length === 1) {
+			map.set(user.id, byName[0].id);
+		} else if (byName.length > 1) {
+			ambiguous.push(
+				`${user.displayName} (${key}) matches ${byName.map((u) => `${u.name ?? u.displayName} <${u.email ?? u.id}>`).join(", ")}`,
 			);
-		if (found) map.set(user.id, found.id);
-		else unmatched.push(`${user.displayName} (${key})`);
+		} else {
+			unmatched.push(`${user.displayName} (${key})`);
+		}
 	}
-	return { map, unmatched };
+	return { map, unmatched, ambiguous };
 }
 
 /** Blocks and related relations, one per pair; blocked_by is the other side. */
@@ -370,10 +382,26 @@ function extendMapping(
 	target: LinearTarget,
 ): void {
 	for (const name of labelNames) {
-		if (mapping.labels.some((l) => l.name === name)) continue;
-		const existing = target.labels.find(
+		const same = target.labels.filter(
 			(l) => l.name.toLowerCase() === name.toLowerCase(),
 		);
+		const entry = mapping.labels.find((l) => l.name === name);
+		if (entry) {
+			if (!entry.created) {
+				// Ours, from an attempt whose answer was lost; or one someone
+				// made in Linear since, which Linear would not take twice
+				const ours = same.find((l) => l.id === entry.id);
+				if (ours) {
+					entry.created = true;
+				} else if (same.length > 0) {
+					entry.id = same[0].id;
+					entry.existing = true;
+					entry.created = true;
+				}
+			}
+			continue;
+		}
+		const existing = same[0];
 		mapping.labels.push({
 			name,
 			id: existing?.id ?? randomUUID(),
@@ -546,6 +574,27 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 			`No Linear user for ${users.unmatched.join(", ")}: their issues go in unassigned.`,
 		);
 	}
+	for (const line of users.ambiguous) {
+		log(
+			`Several Linear users share a name: ${line}. Their issues go in unassigned; set the user's email in config.toon to pick one.`,
+		);
+	}
+	const dated = issues.filter(
+		(i) => i.started_at || i.completed_at || i.canceled_at,
+	);
+	const linearSets = [
+		issues.some((i) => i.creator)
+			? "the creator of every issue (the API key's user)"
+			: "",
+		dated.length > 0
+			? `the started, completed, and canceled dates of ${dated.map((i) => i.identifier).join(", ")} (the time of the migration)`
+			: "",
+	].filter(Boolean);
+	if (linearSets.length > 0) {
+		log(
+			`Not carried over, Linear sets them itself: ${linearSets.join("; ")}. The local board keeps the originals.`,
+		);
+	}
 	if (issues.some((i) => i.cycle)) {
 		log("Cycles are not carried over: Linear cycles are dated per team.");
 	}
@@ -562,7 +611,7 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 				? `takes ${target.team.estimation.type} estimates ${allowed.join(", ")}`
 				: "does not use estimates";
 		log(
-			`Team ${target.team.key} ${scale}: ${offScale.map((i) => `${i.identifier} (${i.estimate})`).join(", ")} go in without an estimate; the local board keeps it.`,
+			`Team ${target.team.key} ${scale}; these estimates are left out (the local board keeps them): ${offScale.map((i) => `${i.identifier} (${i.estimate})`).join(", ")}`,
 		);
 	}
 	const orders = checkOrders(await listOrders(), issues, mapping);
@@ -596,10 +645,20 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 			`  ${issue.identifier} "${issue.title}" → ${done} (${parts.join("; ")})`,
 		);
 	}
+	// A relation not created yet is created only while the board still has it
+	const relationKey = (r: { from: string; to: string; type: string }) =>
+		`${r.type}:${r.from}:${r.to}`;
+	const onBoard = new Set(collectRelations(issues).map(relationKey));
+	const describe = (r: RelationEntry) => `${r.from} ${r.type} ${r.to}`;
 	const relations = mapping.relations.filter((r) => !r.created);
-	if (relations.length > 0) {
+	const pending = relations.filter((r) => onBoard.has(relationKey(r)));
+	const gone = relations.filter((r) => !onBoard.has(relationKey(r)));
+	if (pending.length > 0) {
+		log(`Relations: ${pending.map(describe).join(", ")}`);
+	}
+	if (gone.length > 0) {
 		log(
-			`Relations: ${relations.map((r) => `${r.from} ${r.type} ${r.to}`).join(", ")}`,
+			`Relations no longer on the board, skipped: ${gone.map(describe).join(", ")}`,
 		);
 	}
 
@@ -725,10 +784,13 @@ async function runMigration(options: MigrateOptions): Promise<void> {
 		}
 	}
 
-	for (const rel of mapping.relations) {
+	for (const rel of pending) {
 		const from = entryOf(rel.from);
 		const to = entryOf(rel.to);
-		if (!from || !to) continue;
+		if (!from?.created || !to?.created) {
+			log(`  Skipped ${describe(rel)}: one of its issues is not in Linear.`);
+			continue;
+		}
 		await createOnce(
 			rel,
 			() => client.issueRelation(rel.id),

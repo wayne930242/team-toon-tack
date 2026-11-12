@@ -290,6 +290,74 @@ describe("ttt migrate --to linear", () => {
 		).toEqual([["parentId"]]);
 	}, 90_000);
 
+	test("a rerun skips a relation whose issue left the board before it was created", async () => {
+		const ws = await seededBoard();
+		// Linear refuses MP-3, which MP-2 blocks; then MP-3 is removed by hand
+		const failed = await migrate(ws, [], {
+			MOCK_LINEAR_FAIL_CREATE: "Blocked",
+		});
+		expect(failed.exitCode).toBe(1);
+		rmSync(path.join(ws.dir, "local", "issues", "MP-3.toon"));
+
+		const result = await migrate(ws, []);
+
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(result.stdout).toContain("MP-2 blocks MP-3");
+		expect(readRemoteState(ws).relations ?? []).toEqual([]);
+		expect(
+			Object.values(readRemoteState(ws).issues)
+				.map((i) => i.title)
+				.sort(),
+		).toEqual(["Child", "Dropped", "Parent"]);
+	}, 60_000);
+
+	test("a rerun takes a label someone made in Linear after the first run missed it", async () => {
+		const ws = await seededBoard();
+		const failed = await migrate(ws, [], {
+			MOCK_LINEAR_FAIL_CREATE: "Feature",
+		});
+		expect(failed.exitCode).toBe(1);
+		const state = readRemoteState(ws);
+		state.labels = [
+			...(state.labels ?? []),
+			{ id: "by-hand", name: "feature" },
+		];
+		writeFileSync(ws.statePath, JSON.stringify(state));
+
+		const result = await migrate(ws, []);
+
+		expect(result.exitCode, result.stderr).toBe(0);
+		const remote = readRemoteState(ws);
+		expect(remote.labels?.map((l) => l.name).sort()).toEqual([
+			"Bug",
+			"feature",
+		]);
+		const blocked = Object.values(remote.issues).find(
+			(i) => i.title === "Blocked",
+		);
+		expect(blocked?.labelIds).toEqual(["by-hand"]);
+	}, 60_000);
+
+	test("the plan names what Linear sets itself and flags a name two Linear users share", async () => {
+		const ws = await seededBoard();
+		const twin = { MOCK_LINEAR_DUPLICATE_USER: "Alice" };
+
+		const plan = await migrate(ws, ["--dry-run"], twin);
+
+		expect(plan.exitCode, plan.stderr).toBe(0);
+		expect(plan.stdout).toContain("creator");
+		expect(plan.stdout).toContain("MP-4"); // canceled_at
+		expect(plan.stdout).toMatch(
+			/Alice.*alice@example\.com.*alice2@example\.com/,
+		);
+		const result = await migrate(ws, [], twin);
+		expect(result.exitCode, result.stderr).toBe(0);
+		const parent = Object.values(readRemoteState(ws).issues).find(
+			(i) => i.title === "Parent",
+		);
+		expect(parent?.assigneeId).toBeUndefined();
+	}, 60_000);
+
 	test("an estimate off the team's scale is named in the plan and left out", async () => {
 		const ws = await makeLocalWorkspace();
 		for (const [title, estimate] of [

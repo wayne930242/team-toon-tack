@@ -245,9 +245,23 @@ function respond(
 		return page("teams", [{ __typename: "Team", ...TEAM }]);
 	}
 	if (query.includes("query users(")) {
+		// MOCK_LINEAR_DUPLICATE_USER=Alice adds a second user of that name
+		const twin = process.env.MOCK_LINEAR_DUPLICATE_USER;
+		const users = twin
+			? [
+					...USERS,
+					{
+						id: "u-twin",
+						name: twin,
+						displayName: `${twin.toLowerCase()}2`,
+						email: `${twin.toLowerCase()}2@example.com`,
+						active: true,
+					},
+				]
+			: USERS;
 		return page(
 			"users",
-			USERS.map((u) => ({ __typename: "User", ...u })),
+			users.map((u) => ({ __typename: "User", ...u })),
 		);
 	}
 	if (query.includes("query issueLabel(")) {
@@ -321,8 +335,15 @@ function respond(
 	}
 	if (query.includes("mutation") && query.includes("issueLabelCreate")) {
 		const input = variables.input ?? {};
+		if (envList("MOCK_LINEAR_FAIL_CREATE").includes(input.name ?? "")) {
+			throw new Error(`Refused to create "${input.name}"`);
+		}
 		if (idTaken(state, input.id)) {
 			throw new Error(`Entity already exists: ${input.id}`);
+		}
+		const lower = (input.name ?? "").toLowerCase();
+		if ((state.labels ?? []).some((l) => l.name.toLowerCase() === lower)) {
+			throw new InputError(`Duplicate label name: ${input.name}`);
 		}
 		const label = {
 			id: input.id ?? `label-${input.name}`,
@@ -344,6 +365,11 @@ function respond(
 		const input = variables.input ?? {};
 		if (idTaken(state, input.id)) {
 			throw new Error(`Entity already exists: ${input.id}`);
+		}
+		for (const end of [input.issueId, input.relatedIssueId]) {
+			if (!findByUuid(state, end)) {
+				throw new NotFound(`Entity not found: Issue - ${end}`);
+			}
 		}
 		const relation = {
 			id: input.id ?? `relation-${(state.relations ?? []).length}`,

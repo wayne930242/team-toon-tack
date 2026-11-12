@@ -21,7 +21,10 @@ const HELP = `Usage: ttt migrate --to linear [--team <key>] [--dry-run]
 Move the local board (.ttt/local) into a Linear team: every issue with its
 state, labels, priority, estimate, assignee, parent, comments, and
 blocks/related relations. Labels missing in Linear are created; users are
-matched by email, then by name (no match: unassigned).
+matched by email, then by name (no match, or a name several Linear users
+share: unassigned). The plan names what does not go over: estimates off
+the team's scale, cycles, and the creator and started/completed/canceled
+dates, which Linear sets itself.
 
 Options:
   --to linear       Target source (only linear for now)
@@ -34,10 +37,11 @@ Linear ids with the config, so 'ttt order' acts on the migrated issues.
 
 Each step is recorded in .ttt/local/migration-linear.toon before it is sent,
 with the id Linear will store, so a failed or interrupted run can be rerun:
-it continues where it stopped and never creates an issue twice. config.toon
-switches to Linear only after everything succeeded; the board stays as the
-record of what was migrated. A run holds .ttt/local/migration.lock, so a
-second run started meanwhile is refused. Needs LINEAR_API_KEY.
+it continues where it stopped, never creates an issue twice, and sends
+issues edited since they were created as updates. config.toon switches to
+Linear only after everything succeeded; the board stays as the record of
+what was migrated. A run holds .ttt/local/migration.lock, so a second run
+started meanwhile is refused. Needs LINEAR_API_KEY.
 
 Examples:
   ttt migrate --to linear --dry-run
