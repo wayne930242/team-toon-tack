@@ -20,11 +20,14 @@ Importing it makes you the order's one writer; the coordinator's copy is read-on
 | A ticket leaves the train and goes back to its coordinator (it breaks the gate, or waits for a paired change) | `ttt order return <order> <ticket>... --reason "<why>"`, and send the printed notice block to the coordinator |
 | You fix a ticket inside this train | `ttt order rework <order> <ticket> --reason "<why>"`; then `ttt order set` the new head, review, and tests, `ttt order review <order> <ticket>`, and `ttt order seal <order> --gated-head <new sha>` |
 | A ticket is void (canceled, duplicate) | `ttt order drop <order> <ticket> --reason "<why>"` |
+| A ticket is pulled out of the batch by a revert or a cut | `ttt order drop <order> <ticket> --reason "<why>" --notice`, and send the printed notice block to the coordinator |
+| A ticket was dropped from an order that has since closed | `ttt order return <order> <ticket>...`: nothing changes, and the printed notice block goes to the coordinator |
 | The whole train goes back | `ttt order export <order> --handoff` into the return message; the coordinator imports it |
 
 `return` moves the ticket to in-progress at the source with the assignee unchanged, and the notice carries the ticket's whole record, so the coordinator's `carry` takes branch, MR, head, review, and test runs into its next order.
 For a ticket that will ride a later train use `return`, not `drop`: the coordinator's copy is read-only and learns of a drop only when the order itself comes back.
 Repeating `return` prints the notice again and changes nothing.
+`drop --notice` prints the same kind of notice for the dropped ticket (message on stderr, block alone on stdout). On a closed order `return` takes no `--reason`, moves nothing at the source, and writes nothing to the order: it prints the notice for tickets that were dropped or returned, with their whole record, so the coordinator's `carry --text -` keeps branch, MR, head, review, and test runs. It refuses done tickets and tickets that were carried on to another order (send that order's notice instead), so you never post the whole closed order block for this.
 
 `rework` on a sealed order reopens it and clears the gated head, so `close` refuses until you seal again on the head you gated.
 

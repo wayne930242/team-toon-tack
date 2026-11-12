@@ -1104,3 +1104,104 @@ test("an order file written by 3.13 loads, shows, and takes the new commands", a
 		/MP-1 \(in-review\), MP-2 \(in-review\), MP-3 \(dropped\)/,
 	);
 });
+
+/** As `handedToMac`, then the Mac drops MP-2 (a revert) and closes the order. */
+async function withDroppedTicketOnClosedOrder() {
+	const state = await handedToMac();
+	const dropped = await order(
+		state.mac,
+		["drop", ORDER, "MP-2", "--reason", "reverted out of the train"],
+		asMac,
+	);
+	assert.equal(dropped.exitCode, 0, dropped.stderr);
+	const closed = await order(
+		state.mac,
+		["close", ORDER, "--merged", "9a8b7c6"],
+		asMac,
+	);
+	assert.equal(closed.exitCode, 0, closed.stderr);
+	assert.equal(readOrder(state.mac).stage, "closed");
+	return state;
+}
+
+test("return on a closed order hands over a notice for its dropped tickets that carry accepts with their history, and changes nothing", async () => {
+	const { mac, box } = await withDroppedTicketOnClosedOrder();
+	const before = readFileSync(
+		path.join(mac.dir, "orders", `${ORDER}.toon`),
+		"utf8",
+	);
+
+	const notice = await order(mac, ["return", ORDER, "MP-2"], asMac);
+
+	assert.equal(notice.exitCode, 0, notice.stderr);
+	assert.match(notice.stderr, /closed: nothing changed/);
+	assert.match(notice.stdout, /^```toon ttt-return\n/);
+	assert.equal(
+		notice.requests.filter((r) => /update|create/i.test(r.name)).length,
+		0,
+		"nothing moves at the source",
+	);
+	assert.equal(
+		readFileSync(path.join(mac.dir, "orders", `${ORDER}.toon`), "utf8"),
+		before,
+		"a closed order stays as it was",
+	);
+
+	// The coordinator carries from the notice alone
+	const carried = await order(
+		box,
+		["carry", "MP-2", "--to", "auto", "--project", "app", "--text", "-"],
+		{},
+		`Dropped by a revert:\n\n${notice.stdout}\n`,
+	);
+	assert.equal(carried.exitCode, 0, carried.stderr);
+	const next = readOrder(box, NEXT);
+	assert.deepEqual(states(next), { "MP-2": "in-progress" });
+	assert.deepEqual(historyOf(next, "MP-2"), MP2_HISTORY);
+	assert.equal(ticketOf(next, "MP-2").carried_from?.order, ORDER);
+});
+
+test("return on a closed order refuses done tickets, and an open order still refuses a dropped one", async () => {
+	const { mac } = await withDroppedTicketOnClosedOrder();
+
+	const done = await order(mac, ["return", ORDER, "MP-1"], asMac);
+	assert.equal(done.exitCode, 1);
+	assert.match(done.stderr, /MP-1 is done in order/);
+	assert.equal(done.stdout, "");
+
+	const open = await sealedOnBox(threeTodo);
+	const refused = await order(open, ["return", ORDER, "MP-3", "--reason", "x"]);
+	assert.equal(refused.exitCode, 1);
+	assert.match(refused.stderr, /was dropped from order/);
+});
+
+test("drop --notice prints a notice for the dropped ticket that carry accepts with its history", async () => {
+	const { mac, box } = await handedToMac();
+	const plain = await order(
+		mac,
+		["drop", ORDER, "MP-1", "--reason", "plain"],
+		asMac,
+	);
+	assert.equal(plain.exitCode, 0, plain.stderr);
+	assert.match(plain.stdout, /dropped MP-1/);
+	assert.doesNotMatch(plain.stdout, /ttt-return/);
+
+	const dropped = await order(
+		mac,
+		["drop", ORDER, "MP-2", "--reason", "reverted", "--notice"],
+		asMac,
+	);
+	assert.equal(dropped.exitCode, 0, dropped.stderr);
+	assert.match(dropped.stderr, /dropped MP-2/);
+	assert.match(dropped.stdout, /^```toon ttt-return\n/);
+	assert.equal(ticketOf(readOrder(mac), "MP-2").state, "dropped");
+
+	const carried = await order(
+		box,
+		["carry", "MP-2", "--to", "auto", "--project", "app", "--text", "-"],
+		{},
+		dropped.stdout,
+	);
+	assert.equal(carried.exitCode, 0, carried.stderr);
+	assert.deepEqual(historyOf(readOrder(box, NEXT), "MP-2"), MP2_HISTORY);
+});

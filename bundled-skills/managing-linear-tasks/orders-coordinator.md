@@ -30,7 +30,7 @@ When the head moves afterwards, `show` marks it `stale: reviewed <old>, head now
 | Not ready for this train, rides the next | `ttt order drop <order> <ticket> --reason "next train"`, seal, then `ttt order carry <ticket> --to auto --project <p> --from <order>` |
 | Its work failed for good | `ttt order drop <order> <ticket> --reason "<failure>"`, then hand the ticket back by your project's rule (status, assignee, comment) |
 | It broke the train's gate and its worker is fixing it | `ttt order rework <order> <ticket> --reason "<gate>"`; when fixed, `set` the new head, review, and tests, then `review` it again |
-| The integrator pulled it out and sent a return notice | `ttt order carry <ticket> --to auto --project <p> --text <notice file or ->` |
+| The integrator pulled it out (returned, or dropped after the order closed) and sent a notice | `ttt order carry <ticket> --to auto --project <p> --text <notice file or ->` |
 
 `carry` keeps branch, MR, head, review, and test runs and records `carried_from`; it does not touch the ticket's status at the source.
 `ttt claim --order auto` on a ticket that left an order starts an empty record, so use it only when there is no history to keep.

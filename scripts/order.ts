@@ -8,7 +8,9 @@ import { type CloseResult, closeTicket } from "./lib/order/close.js";
 import {
 	adoptImported,
 	applyReturnNotice,
+	assertNoticeable,
 	assertReturnable,
+	buildCarryNotice,
 	assertReviewable,
 	assertReworkable,
 	assertSegment,
@@ -116,8 +118,10 @@ Commands:
   seal <id> --gated-head <sha>
         Fix the batch: no more tickets. Every ticket must be in review,
         dropped, or returned. Sealing again records a new gated head.
-  drop <id> <ticket> --reason <text>
+  drop <id> <ticket> --reason <text> [--notice]
         Leave a ticket out of the batch; its remote status is not touched.
+        --notice also prints a return notice block for the ticket on stdout
+        (the message goes to stderr), for the side that will carry it on.
   rework <id> <ticket> --reason <text>
         Send an in-review ticket back to work inside its order: in-progress
         here and at the source (assignee unchanged). A sealed order opens
@@ -128,6 +132,9 @@ Commands:
         record; its remote status goes back to in-progress (assignee
         unchanged). Prints a return notice block for the coordinator.
         Close skips returned tickets. Safe to repeat.
+        On a closed order nothing changes and --reason is optional: tickets
+        that were dropped or returned (not ones carried on) are printed as a
+        notice, so carry --text takes them with their history.
   carry <ticket>... --to <id|auto> [--project <p>] [--from <id> | --text <file|->]
         Coordinator: take tickets into another open order with their branch,
         MR, head, review, and test runs, plus a carried_from record. auto is
@@ -508,19 +515,32 @@ async function cmdSeal(args: string[]): Promise<void> {
 }
 
 async function cmdDrop(args: string[]): Promise<void> {
-	const parsed = parseFlags(args, { "--reason": "value" });
-	const id = requireId(parsed, "drop <id> <ticket> --reason <text>");
+	const usage = "drop <id> <ticket> --reason <text> [--notice]";
+	const parsed = parseFlags(args, {
+		"--reason": "value",
+		"--notice": "switch",
+	});
+	const id = requireId(parsed, usage);
 	const ticketId = parsed.positional[1];
 	if (!ticketId || parsed.positional.length > 2) {
-		throw new OrderError("Usage: ttt order drop <id> <ticket> --reason <text>");
+		throw new OrderError(`Usage: ttt order ${usage}`);
 	}
 	const stamp = stampFor(await loadLocalConfig());
 	await updateOrder(id, (o) =>
 		dropTicket(o, ticketId, parsed.values["--reason"] ?? "", stamp),
 	);
-	console.log(
-		`Order ${id}: dropped ${ticketId} (its status at the source is unchanged)`,
+	const message = `Order ${id}: dropped ${ticketId} (its status at the source is unchanged)`;
+	if (!parsed.switches.has("--notice")) {
+		console.log(message);
+		return;
+	}
+	// With the notice, stdout holds only the block, so it can be piped or pasted
+	console.error(message);
+	const notice = buildCarryNotice(await loadOrder(id), [ticketId], stamp);
+	console.error(
+		`Send the block below to the coordinator, who takes the ticket on with 'ttt order carry ${ticketId} --to auto --text <file|->'.`,
 	);
+	console.log(renderReturnBlock(notice));
 }
 
 /**
@@ -616,13 +636,30 @@ async function cmdReturn(args: string[]): Promise<void> {
 		throw new OrderError(`Usage: ttt order ${usage}`);
 	}
 	const reason = parsed.values["--reason"] ?? "";
+	const current = await loadOrder(id);
+	const stampNow = stampFor(await loadLocalConfig());
+
+	// A closed order takes no change: hand over the notice for tickets that
+	// left the batch and touch neither the order nor the source
+	if (current.stage === "closed") {
+		assertNoticeable(current, ticketIds);
+		const notice = buildCarryNotice(current, ticketIds, stampNow);
+		console.error(
+			`Order ${id} is closed: nothing changed. Notice for ${ticketIds.join(", ")}.`,
+		);
+		console.error(
+			`Send the block below to the coordinator, who takes the tickets on with 'ttt order carry ${ticketIds.join(" ")} --to auto --text <file|->'.`,
+		);
+		console.log(renderReturnBlock(notice));
+		return;
+	}
+
 	if (!reason.trim()) throw new OrderError("return needs --reason <text>.");
 	const config = await loadConfig();
 	const localConfig = await loadLocalConfig();
 	const stamp = stampFor(localConfig);
 
 	// Refuse before anything moves at the source
-	const current = await loadOrder(id);
 	assertReturnable(current, ticketIds);
 	// A ticket returned by an earlier run may be in review again elsewhere by
 	// now: a repeat leaves it alone

@@ -647,6 +647,70 @@ export function buildReturnNotice(
 	};
 }
 
+/**
+ * Tickets a closed order may still hand over in a notice: ones that left the
+ * batch (dropped or returned). A closed order changes nothing, so this only
+ * checks. A ticket dropped because it was carried on lives in another order
+ * now; its notice must come from there.
+ */
+export function assertNoticeable(order: WorkOrder, ticketIds: string[]): void {
+	for (const id of ticketIds) {
+		const ticket = requireHeld(order, id);
+		if (ticket.state === "done") {
+			throw new OrderError(
+				`${id} is done in order ${order.id}; there is nothing to hand over.`,
+			);
+		}
+		if (!hasLeft(ticket)) {
+			throw new OrderError(
+				`${id} is still ${ticket.state} in closed order ${order.id}; only dropped or returned tickets can be handed over from a closed order.`,
+			);
+		}
+		if (
+			ticket.state === "dropped" &&
+			ticket.reason?.startsWith("carried to ")
+		) {
+			throw new OrderError(
+				`${id} was ${ticket.reason} from order ${order.id}; send the notice from the order that holds it now.`,
+			);
+		}
+	}
+}
+
+/**
+ * The notice for tickets that have left the batch, dropped or returned. A
+ * dropped ticket travels as a returned one (its drop reason is the reason),
+ * so every reader of a return notice, `carry` included, takes it unchanged.
+ */
+export function buildCarryNotice(
+	order: WorkOrder,
+	ticketIds: string[],
+	stamp: Stamp,
+): ReturnNotice {
+	const tickets = order.tickets
+		.filter((t) => ticketIds.includes(t.id) && hasLeft(t))
+		.map((t) => {
+			const record = structuredClone(t);
+			if (record.state === "dropped") {
+				record.state = "returned";
+				record.returned = {
+					at: stamp.at,
+					by: stamp.by,
+					reason: `dropped: ${record.reason ?? "no reason recorded"}`,
+				};
+				delete record.reason;
+			}
+			return record;
+		});
+	return {
+		order: order.id,
+		rev: order.rev,
+		by: stamp.by,
+		at: stamp.at,
+		tickets,
+	};
+}
+
 const sameNote = (a?: OrderTicketNote, b?: OrderTicketNote) =>
 	a?.at === b?.at && a?.by === b?.by && a?.reason === b?.reason;
 
