@@ -4,6 +4,7 @@
  */
 import { LinearClient } from "@linear/sdk";
 import {
+	MigrateBusyError,
 	MigrateError,
 	mappingPath,
 	migrateToLinear,
@@ -32,7 +33,8 @@ Each step is recorded in .ttt/local/migration-linear.toon before it is sent,
 with the id Linear will store, so a failed or interrupted run can be rerun:
 it continues where it stopped and never creates an issue twice. config.toon
 switches to Linear only after everything succeeded; the board stays as the
-record of what was migrated. Needs LINEAR_API_KEY.
+record of what was migrated. A run holds .ttt/local/migration.lock, so a
+second run started meanwhile is refused. Needs LINEAR_API_KEY.
 
 Examples:
   ttt migrate --to linear --dry-run
@@ -113,7 +115,7 @@ async function migrate(): Promise<void> {
 			cyclePath: paths.cyclePath,
 		});
 	} catch (error) {
-		if (!parsed.dryRun) {
+		if (!parsed.dryRun && !(error instanceof MigrateBusyError)) {
 			console.error(
 				"The source is still local. Nothing is lost: rerun the same command to continue where it stopped.",
 			);

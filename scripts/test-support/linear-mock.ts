@@ -462,9 +462,20 @@ function respond(
 	throw new Error(`Unmocked Linear query: ${query.slice(0, 80)}`);
 }
 
+/** MOCK_LINEAR_DELAY="teams=1500,...": hold these operations that many ms. */
+function delayFor(name: string | undefined): number {
+	for (const item of envList("MOCK_LINEAR_DELAY")) {
+		const [op, ms] = item.split("=");
+		if (op === name) return Number(ms);
+	}
+	return 0;
+}
+
 globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
 	const body = JSON.parse(String(init?.body));
 	const name = /(?:query|mutation)\s+(\w+)/.exec(body.query)?.[1];
+	const delay = delayFor(name);
+	if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 	if (process.env.MOCK_LINEAR_LOG) {
 		appendFileSync(
 			process.env.MOCK_LINEAR_LOG,

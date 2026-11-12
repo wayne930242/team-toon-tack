@@ -1,9 +1,12 @@
 /**
- * An exclusive lock file for short read-modify-write sections on local files.
+ * Exclusive lock files, created with O_EXCL; each holds a token naming its
+ * owner (`<pid>@<host> <time> <random>`).
  *
- * The lock is a file created with O_EXCL; it holds a token naming its owner.
- * No critical section does more than local file work, so a lock older than
- * the stale limit belongs to a dead process and is taken over.
+ * `withFileLock` guards short read-modify-write sections on local files: no
+ * such section does more than local file work, so a lock older than the
+ * stale limit belongs to a dead process and is taken over.
+ * `withProcessLock` guards long runs: its lock is stale only once the
+ * process that holds it is gone.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -53,6 +56,68 @@ export async function withFileLock<T>(
 		return await fn();
 	} finally {
 		// Release only our own lock: if it went stale, another process owns it now
+		const current = await fs.readFile(lockPath, "utf8").catch(() => "");
+		if (current === token) await fs.rm(lockPath, { force: true });
+	}
+}
+
+/** True while process `pid` exists (EPERM: it exists, under another user). */
+function processAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
+
+/**
+ * Run `fn` while holding `lockPath`, for a section that may run as long as
+ * it needs (network work), so age says nothing about the holder. The lock
+ * is stale only when its holder, a process on this host, has exited; one
+ * held by another host is never taken over. A busy lock is not waited for:
+ * `onBusy(holder)` builds the error to throw at once.
+ */
+export async function withProcessLock<T>(
+	lockPath: string,
+	onBusy: (holder: string) => Error,
+	fn: () => Promise<T>,
+): Promise<T> {
+	const host = os.hostname();
+	const token = `${process.pid}@${host} ${new Date().toISOString()} ${Math.random().toString(36).slice(2)}\n`;
+	const isStale = async (file: string) => {
+		const [content, stat] = await Promise.all([
+			fs.readFile(file, "utf8").catch(() => undefined),
+			fs.stat(file).catch(() => undefined),
+		]);
+		if (content === undefined || !stat) return false;
+		const match = /^(\d+)@(\S+) /.exec(content);
+		// Created but never written: its writer died at once, unless it is
+		// still writing
+		if (!match) return Date.now() - stat.mtimeMs > LOCK_STALE_MS;
+		return match[2] === host && !processAlive(Number(match[1]));
+	};
+
+	for (;;) {
+		try {
+			const handle = await fs.open(lockPath, "wx");
+			await handle.writeFile(token);
+			await handle.close();
+			break;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			if (await isStale(lockPath)) {
+				await takeOverStaleLock(lockPath, isStale);
+				continue;
+			}
+			const holder = await fs.readFile(lockPath, "utf8").catch(() => "");
+			throw onBusy(holder.trim() || "another process");
+		}
+	}
+
+	try {
+		return await fn();
+	} finally {
 		const current = await fs.readFile(lockPath, "utf8").catch(() => "");
 		if (current === token) await fs.rm(lockPath, { force: true });
 	}

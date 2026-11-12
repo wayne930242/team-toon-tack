@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
 import path from "node:path";
 import {
 	type LocalWorkspace,
@@ -223,4 +225,51 @@ describe("ttt migrate --to linear", () => {
 		expect(third.exitCode).not.toBe(0);
 		expect(third.requests.filter((r) => MUTATIONS.test(r.name))).toEqual([]);
 	}, 90_000);
+
+	test("two runs at once: one migrates, the other is refused", async () => {
+		const ws = await seededBoard();
+		// Both runs sit in their first Linear query, before any mapping exists
+		const slow = { MOCK_LINEAR_DELAY: "teams=1500" };
+
+		const runs = await Promise.all([
+			migrate(ws, [], slow),
+			migrate(ws, [], slow),
+		]);
+
+		expect(runs.map((r) => r.exitCode).sort()).toEqual([0, 1]);
+		const refused = runs.find((r) => r.exitCode === 1);
+		expect(refused?.stderr).toContain("migration.lock");
+		expect(refused?.stderr).not.toContain("Nothing is lost");
+		expect(refused?.requests.filter((r) => MUTATIONS.test(r.name))).toEqual([]);
+		expect(
+			Object.values(readRemoteState(ws).issues)
+				.map((i) => i.title)
+				.sort(),
+		).toEqual(["Blocked", "Child", "Dropped", "Parent"]);
+	}, 60_000);
+
+	test("a lock left by a live process refuses; one left by a dead process is taken over", async () => {
+		const ws = await seededBoard();
+		const lock = path.join(ws.dir, "local", "migration.lock");
+		const holder = (pid: number) =>
+			`${pid}@${hostname()} 2026-11-12T00:00:00.000Z test\n`;
+
+		// This test process is alive
+		writeFileSync(lock, holder(process.pid));
+		const busy = await migrate(ws, []);
+		expect(busy.exitCode).toBe(1);
+		expect(busy.stderr).toContain(`${process.pid}@`);
+		expect(busy.requests.filter((r) => MUTATIONS.test(r.name))).toEqual([]);
+		expect(
+			existsSync(path.join(ws.dir, "local", "migration-linear.toon")),
+		).toBe(false);
+
+		// A process that has exited
+		const dead = spawnSync("true").pid as number;
+		writeFileSync(lock, holder(dead));
+		const taken = await migrate(ws, []);
+		expect(taken.exitCode).toBe(0);
+		expect(Object.keys(readRemoteState(ws).issues).length).toBe(4);
+		expect(existsSync(lock)).toBe(false);
+	}, 60_000);
 });

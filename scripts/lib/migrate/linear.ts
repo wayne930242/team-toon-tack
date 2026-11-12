@@ -23,10 +23,14 @@ import {
 	withRetry,
 } from "../../utils.js";
 import { buildConfig, buildLocalConfig } from "../config-builder.js";
+import { withProcessLock } from "../file-lock.js";
 import { listIssues, localBoardDir, readBoard } from "../local/store.js";
 import type { LocalBoard, LocalIssue, LocalStatusDef } from "../local/types.js";
 
 export class MigrateError extends Error {}
+
+/** Another migrate run holds the lock; this one changed nothing. */
+export class MigrateBusyError extends MigrateError {}
 
 interface Progress {
 	/** Our UUID for the object in Linear */
@@ -71,6 +75,11 @@ export interface MigrationFile {
 
 export function mappingPath(): string {
 	return path.join(localBoardDir(), "migration-linear.toon");
+}
+
+/** Held by a real (not dry) run from start to end. */
+export function lockPath(): string {
+	return path.join(localBoardDir(), "migration.lock");
 }
 
 async function readMapping(): Promise<MigrationFile | undefined> {
@@ -372,11 +381,34 @@ export interface MigrateOptions {
 	cyclePath: string;
 }
 
+/**
+ * A real run holds `.ttt/local/migration.lock` throughout: two runs that
+ * both found no mapping would each create the whole board under their own
+ * ids. A dry run only reads.
+ */
 export async function migrateToLinear(options: MigrateOptions): Promise<void> {
+	if (options.dryRun) return runMigration(options);
+	await fs.mkdir(localBoardDir(), { recursive: true });
+	return withProcessLock(
+		lockPath(),
+		(holder) =>
+			new MigrateBusyError(
+				`Another ttt migrate is running (${lockPath()}: ${holder}). Wait for it to finish; if no migrate runs on this machine, remove the file.`,
+			),
+		() => runMigration(options),
+	);
+}
+
+async function runMigration(options: MigrateOptions): Promise<void> {
 	const { client, config, log } = options;
 	const board: LocalBoard = await readBoard();
 	const issues = await listIssues();
 	const previous = await readMapping();
+	if (previous?.finished_at) {
+		throw new MigrateError(
+			`This board was already migrated to Linear team ${previous.target.team_key ?? previous.target.team_id} at ${previous.finished_at} (${mappingPath()}).`,
+		);
+	}
 	const target = await loadTarget(
 		client,
 		options.team,
