@@ -446,11 +446,38 @@ one.
 
 | Variable | Description |
 |----------|-------------|
-| `LINEAR_API_KEY` | **Required for Linear** (and `ttt migrate`). Your Linear API key |
+| `LINEAR_API_KEY` | **Required for Linear** (and `ttt migrate`) unless you use an OAuth app. Your Linear API key; wins over the OAuth variables when set |
+| `LINEAR_ACCESS_TOKEN` | A ready Linear OAuth access token (used when `LINEAR_API_KEY` is not set) |
+| `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear OAuth app with Client credentials (used when neither of the above is set). See [Linear OAuth app](#linear-oauth-app-own-rate-limit) |
+| `LINEAR_OAUTH_SCOPE` | Scopes for the OAuth app token (default: `read,write`) |
+| `LINEAR_OAUTH_TOKEN_CACHE` | Token cache file (default: `$XDG_STATE_HOME/team-toon-tack/linear-oauth-<hash>.json`, i.e. `~/.local/state/team-toon-tack/`) |
+| `LINEAR_TTT_USER` | Who "me" is under an OAuth app: a user email, config key or Linear id. Used when `local.toon` has no `current_user` |
 | `TRELLO_API_KEY` | **Required for Trello.** Your Trello API key |
 | `TRELLO_TOKEN` | **Required for Trello.** Your Trello authorization token |
 | `TOON_DIR` | Config directory (default: `.ttt`) |
 | `TTT_ACTOR` | Writer's name in work orders (default: `<current_user>@<hostname>`) |
+
+### Linear OAuth app (own rate limit)
+
+An unattended machine can authenticate as its own Linear OAuth app instead of sharing a personal API key, which gives it a separate rate-limit quota.
+
+1. In Linear, open **Settings → API → OAuth applications → New** and create an app. Turn on **Client credentials**.
+2. Export the app's credentials (and, optionally, the scope):
+
+   ```bash
+   export LINEAR_CLIENT_ID="..."
+   export LINEAR_CLIENT_SECRET="..."
+   export LINEAR_OAUTH_SCOPE="read,write"   # optional, this is the default
+   export LINEAR_TTT_USER="you@example.com" # who "me" means, see below
+   ```
+
+3. Run `ttt` as usual. It requests a `client_credentials` token (about 30 days, no refresh token), caches it in a `0600` file under `~/.local/state/team-toon-tack/`, reuses it until less than 24 hours remain, and on a `401` refetches once before failing. Tokens and secrets are never printed; errors name the variable, not the value.
+
+Credential precedence: `LINEAR_API_KEY` → `LINEAR_ACCESS_TOKEN` → `LINEAR_CLIENT_ID` + `LINEAR_CLIENT_SECRET`. Existing API-key setups are unchanged.
+
+- **Scope:** keep `LINEAR_OAUTH_SCOPE` fixed per app. Requesting different scopes replaces the app's existing tokens, so two machines using different scopes would invalidate each other.
+- **"me":** under an OAuth app, Linear's `viewer` is the app, not a person. ttt never uses `viewer` to decide who "me" is; it uses `current_user` from `local.toon`, else `LINEAR_TTT_USER`. With neither set, commands that scope by user (`sync`, `claim`, `show --user me` / `--creator me`) fail with an error instead of silently covering every user. `LINEAR_ACCESS_TOKEN` is assumed to be an app token and follows the same rule.
+- Comments and updates you make appear as the app.
 
 ### Trello Setup
 

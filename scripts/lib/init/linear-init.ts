@@ -25,10 +25,12 @@ import {
 	type LinearUser,
 } from "../config-builder.js";
 import { writeDotEnv } from "../env.js";
+import { authMode, ENV_TTT_USER, prepareLinearAuth } from "../linear-auth.js";
 import { formatTodoStatus } from "../status-helpers.js";
 import { showPluginInstallInstructions, updateGitignore } from "./file-ops.js";
 import {
 	promptForApiKey,
+	type ResolvedApiKey,
 	selectCompletionMode,
 	selectDevTeam,
 	selectDevTestingStatus,
@@ -46,36 +48,61 @@ export async function initLinear(
 	options: InitOptions,
 	paths: InitPaths,
 ): Promise<void> {
-	// Get API key (workspace-aware)
-	const resolved = await promptForApiKey(options);
-	if (!resolved) {
-		console.error("Error: LINEAR_API_KEY is required.");
-		console.error("Get your API key from: https://linear.app/settings/api");
-		process.exit(1);
-	}
-	const { apiKey, envName, fromSystemEnv } = resolved;
-
-	// Mirror into LINEAR_API_KEY so getLinearClient() picks it up regardless
-	// of which env var name the user selected.
-	process.env.LINEAR_API_KEY = apiKey;
-
-	// Offer to persist to project-root .env so dotenv-aware tools (and future
-	// ttt runs) can reuse it without relying on the user's shell profile.
-	console.log("\n🔐 Local .env file:");
-	console.log(
-		`  Path: ${paths.envPath}${fromSystemEnv ? " (you already have this key in your shell — this just pins it per-project)" : ""}`,
-	);
+	// OAuth app (client credentials or access token) when no API key is given
+	// or exported: nothing secret is written to .env, the env vars stay in the
+	// shell or the caller's own env file.
+	const useOAuth =
+		!options.apiKey && !process.env.LINEAR_API_KEY && authMode() !== null;
+	let apiKey = "";
+	let envName = "LINEAR_API_KEY";
+	let fromSystemEnv = true;
 	let saveToEnvFile = false;
-	if (options.interactive) {
-		saveToEnvFile = await confirm({
-			message: `Write ${envName} to ${paths.envPath}?`,
-			default: true,
-		});
-	}
-	if (saveToEnvFile) {
-		await fs.mkdir(paths.baseDir, { recursive: true });
-		await writeDotEnv(paths.envPath, { [envName]: apiKey });
-		console.log(`  ✓ Wrote ${envName} to ${paths.envPath}`);
+	let resolved: ResolvedApiKey | undefined;
+	if (useOAuth) {
+		try {
+			await prepareLinearAuth();
+		} catch (error) {
+			console.error(`Error: ${(error as Error).message}`);
+			process.exit(1);
+		}
+		console.log("\n🔑 Using the Linear OAuth app from the environment.");
+		console.log(
+			`  Set ${ENV_TTT_USER} (or pick a user below) so "me" means a person, not the app.`,
+		);
+	} else {
+		// Get API key (workspace-aware)
+		resolved = await promptForApiKey(options);
+		if (!resolved) {
+			console.error("Error: LINEAR_API_KEY is required.");
+			console.error("Get your API key from: https://linear.app/settings/api");
+			console.error(
+				"Or set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET for a Linear OAuth app.",
+			);
+			process.exit(1);
+		}
+		({ apiKey, envName, fromSystemEnv } = resolved);
+
+		// Mirror into LINEAR_API_KEY so getLinearClient() picks it up regardless
+		// of which env var name the user selected.
+		process.env.LINEAR_API_KEY = apiKey;
+
+		// Offer to persist to project-root .env so dotenv-aware tools (and future
+		// ttt runs) can reuse it without relying on the user's shell profile.
+		console.log("\n🔐 Local .env file:");
+		console.log(
+			`  Path: ${paths.envPath}${fromSystemEnv ? " (you already have this key in your shell — this just pins it per-project)" : ""}`,
+		);
+		if (options.interactive) {
+			saveToEnvFile = await confirm({
+				message: `Write ${envName} to ${paths.envPath}?`,
+				default: true,
+			});
+		}
+		if (saveToEnvFile) {
+			await fs.mkdir(paths.baseDir, { recursive: true });
+			await writeDotEnv(paths.envPath, { [envName]: apiKey });
+			console.log(`  ✓ Wrote ${envName} to ${paths.envPath}`);
+		}
 	}
 
 	// Create Linear client
@@ -310,7 +337,11 @@ export async function initLinear(
 	// Summary
 	console.log("\n✅ Initialization complete!\n");
 	console.log("Configuration summary:");
-	if (resolved.organizationName) {
+	if (useOAuth) {
+		console.log(
+			"  Auth: Linear OAuth app (LINEAR_CLIENT_ID / LINEAR_ACCESS_TOKEN)",
+		);
+	} else if (resolved?.organizationName) {
 		console.log(`  Workspace: ${resolved.organizationName} (via ${envName})`);
 	} else {
 		console.log(`  API key env: ${envName}`);
@@ -355,7 +386,7 @@ export async function initLinear(
 	}
 
 	console.log("\nNext steps:");
-	const needsShellExport = !saveToEnvFile && !fromSystemEnv;
+	const needsShellExport = !useOAuth && !saveToEnvFile && !fromSystemEnv;
 	if (needsShellExport) {
 		const maskedKey = `${apiKey.slice(0, 12)}...${"*".repeat(8)}`;
 		console.log(`  1. Set ${envName} in your shell profile:`);

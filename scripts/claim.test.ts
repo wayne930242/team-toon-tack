@@ -69,11 +69,24 @@ function readStatuses(dir: string): Record<string, string> {
 	return Object.fromEntries(stored.tasks.map((t) => [t.id, t.localStatus]));
 }
 
-async function runClaim(dir: string, args: string[]) {
+async function runClaim(
+	dir: string,
+	args: string[],
+	extraEnv: Record<string, string> = {},
+) {
 	const proc = Bun.spawn(
 		["bun", path.join(import.meta.dirname, "claim.ts"), ...args],
 		{
-			env: { ...process.env, TOON_DIR: dir, LINEAR_API_KEY: "" },
+			env: {
+				...process.env,
+				TOON_DIR: dir,
+				LINEAR_API_KEY: "",
+				LINEAR_CLIENT_ID: "",
+				LINEAR_CLIENT_SECRET: "",
+				LINEAR_ACCESS_TOKEN: "",
+				LINEAR_TTT_USER: "",
+				...extraEnv,
+			},
 			stdout: "pipe",
 			stderr: "pipe",
 		},
@@ -263,4 +276,53 @@ test("ttt claim stores a remote-only ticket that is already in progress without 
 		requests.some((r) => r.name === "updateIssue"),
 		false,
 	);
+});
+
+/** The workspace with no current_user: "all users" for a person's API key. */
+function makeUnscopedWorkspace(): string {
+	const dir = makeWorkspace();
+	writeFileSync(
+		path.join(dir, "local.toon"),
+		encode({ team: "dev", status_source: "local" }),
+	);
+	return dir;
+}
+
+test("ttt claim as an OAuth app with no current_user fails and names LINEAR_TTT_USER", async () => {
+	const dir = makeUnscopedWorkspace();
+
+	const { stderr, exitCode } = await runClaim(dir, ["next"], {
+		LINEAR_ACCESS_TOKEN: "oauth-token-value",
+	});
+
+	assert.equal(exitCode, 1);
+	assert.match(stderr, /LINEAR_TTT_USER/);
+	assert.doesNotMatch(stderr, /oauth-token-value/);
+	assert.deepEqual(readStatuses(dir), {
+		"MP-1": "pending",
+		"MP-2": "pending",
+		"MP-3": "completed",
+	});
+});
+
+test("ttt claim as an OAuth app takes the user from LINEAR_TTT_USER", async () => {
+	const dir = makeUnscopedWorkspace();
+
+	const { stdout, exitCode } = await runClaim(dir, ["next"], {
+		LINEAR_ACCESS_TOKEN: "oauth-token-value",
+		LINEAR_TTT_USER: "me",
+	});
+
+	assert.equal(exitCode, 0);
+	assert.match(stdout, /Auto-selected: MP-2/);
+});
+
+test("ttt claim with an API key and no current_user still sees every user's tickets", async () => {
+	const dir = makeUnscopedWorkspace();
+
+	const { exitCode } = await runClaim(dir, ["next"], {
+		LINEAR_API_KEY: "lin_api_test",
+	});
+
+	assert.equal(exitCode, 0);
 });

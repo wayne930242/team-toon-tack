@@ -12,6 +12,7 @@ import {
 import { sourceIssueToTask } from "./lib/remote-task.js";
 import { mapRemoteToLocalStatus } from "./lib/status-helpers.js";
 import {
+	appActorUserEmails,
 	type Config,
 	type CycleData,
 	findTaskByIssueId,
@@ -91,9 +92,12 @@ function getPendingTasks(
 		: localConfig.current_user
 			? [localConfig.current_user]
 			: [];
-	const currentUserEmails = userKeys
-		.map((key) => config.users[key]?.email?.toLowerCase())
-		.filter((email): email is string => !!email);
+	const currentUserEmails =
+		userKeys.length === 0
+			? appActorUserEmails(config).map((e) => e.toLowerCase())
+			: userKeys
+					.map((key) => config.users[key]?.email?.toLowerCase())
+					.filter((email): email is string => !!email);
 
 	const byPriority = (tasks: Task[]) =>
 		tasks.sort((a, b) => {

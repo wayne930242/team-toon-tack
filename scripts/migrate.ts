@@ -2,7 +2,8 @@
 /**
  * ttt migrate --to linear - move the local board into a Linear team
  */
-import { LinearClient } from "@linear/sdk";
+import type { LinearClient } from "@linear/sdk";
+import { createLinearClient } from "./lib/linear-auth.js";
 import {
 	MigrateBusyError,
 	MigrateError,
@@ -41,7 +42,7 @@ it continues where it stopped, never creates an issue twice, and sends
 issues edited since they were created as updates. config.toon switches to
 Linear only after everything succeeded; the board stays as the record of
 what was migrated. A run holds .ttt/local/migration.lock, so a second run
-started meanwhile is refused. Needs LINEAR_API_KEY.
+started meanwhile is refused. Needs Linear credentials (LINEAR_API_KEY or OAuth).
 
 Examples:
   ttt migrate --to linear --dry-run
@@ -101,17 +102,17 @@ async function migrate(): Promise<void> {
 	}
 	const localConfig = await loadLocalConfig();
 
-	const apiKey = process.env.LINEAR_API_KEY;
-	if (!apiKey) {
-		throw new MigrateError(
-			'LINEAR_API_KEY is not set. Export it first: export LINEAR_API_KEY="lin_api_..."',
-		);
+	let client: LinearClient;
+	try {
+		client = createLinearClient();
+	} catch (error) {
+		throw new MigrateError((error as Error).message);
 	}
 
 	const paths = getPaths();
 	try {
 		await migrateToLinear({
-			client: new LinearClient({ apiKey }),
+			client,
 			config,
 			localConfig,
 			team: parsed.team,

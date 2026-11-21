@@ -422,11 +422,38 @@ Linear 編號，所以 `ttt order review`、`close` 作用在搬過去的 issue 
 
 | 變數 | 說明 |
 |------|------|
-| `LINEAR_API_KEY` | **Linear 必填**（`ttt migrate` 也要）。你的 Linear API 金鑰 |
+| `LINEAR_API_KEY` | **Linear 必填**（`ttt migrate` 也要），除非改用 OAuth app。你的 Linear API 金鑰；設了就優先於 OAuth 變數 |
+| `LINEAR_ACCESS_TOKEN` | 現成的 Linear OAuth access token（沒設 `LINEAR_API_KEY` 時使用） |
+| `LINEAR_CLIENT_ID`、`LINEAR_CLIENT_SECRET` | 開了 Client credentials 的 Linear OAuth app（上面兩者都沒設時使用），見 [Linear OAuth app](#linear-oauth-app獨立額度) |
+| `LINEAR_OAUTH_SCOPE` | OAuth app token 的 scope（預設：`read,write`） |
+| `LINEAR_OAUTH_TOKEN_CACHE` | token 快取檔（預設：`$XDG_STATE_HOME/team-toon-tack/linear-oauth-<hash>.json`，即 `~/.local/state/team-toon-tack/`） |
+| `LINEAR_TTT_USER` | OAuth app 下「我」是誰：使用者 email、config 的 user key 或 Linear id。`local.toon` 沒有 `current_user` 時使用 |
 | `TRELLO_API_KEY` | **Trello 必填**。你的 Trello API 金鑰 |
 | `TRELLO_TOKEN` | **Trello 必填**。你的 Trello 授權 token |
 | `TOON_DIR` | 配置目錄（預設：`.ttt`） |
 | `TTT_ACTOR` | 工單中的寫入者名稱（預設：`<current_user>@<hostname>`） |
+
+### Linear OAuth app（獨立額度）
+
+無人值守的機器可以用自己的 Linear OAuth app 登入，而不是共用個人 API 金鑰，這樣有獨立的 rate limit 額度。
+
+1. 在 Linear 開 **Settings → API → OAuth applications → New** 建立 app，並打開 **Client credentials**。
+2. 匯出 app 的憑證（scope 可省略）：
+
+   ```bash
+   export LINEAR_CLIENT_ID="..."
+   export LINEAR_CLIENT_SECRET="..."
+   export LINEAR_OAUTH_SCOPE="read,write"   # 選填，預設就是這個
+   export LINEAR_TTT_USER="you@example.com" # 「我」是誰，見下方
+   ```
+
+3. 照常執行 `ttt`。它會用 `client_credentials` 取得 token（約 30 天，沒有 refresh token），存進 `~/.local/state/team-toon-tack/` 下權限 `0600` 的檔案，到期前不足 24 小時才重取，遇到 `401` 會重取一次，再失敗就停。token 與金鑰不會被印出或寫進 log，錯誤訊息只講變數名稱，不講內容。
+
+憑證優先順序：`LINEAR_API_KEY` → `LINEAR_ACCESS_TOKEN` → `LINEAR_CLIENT_ID` + `LINEAR_CLIENT_SECRET`。既有的 API 金鑰用法不變。
+
+- **Scope：** 同一個 app 的 `LINEAR_OAUTH_SCOPE` 要固定。換 scope 重新申請 token 會讓該 app 既有的 token 失效，兩台機器用不同 scope 會互相踢掉。
+- **「我」：** 在 OAuth app 下，Linear 的 `viewer` 是 app 本身，不是人。ttt 從不用 `viewer` 判斷「我」是誰，而是讀 `local.toon` 的 `current_user`，沒有就讀 `LINEAR_TTT_USER`。兩者都沒設時，依使用者篩選的指令（`sync`、`claim`、`show --user me`／`--creator me`）會報錯，不會默默變成涵蓋所有人。`LINEAR_ACCESS_TOKEN` 視同 app token，適用同一條規則。
+- 你留的留言與更新會顯示為該 app。
 
 ### Trello 設定
 

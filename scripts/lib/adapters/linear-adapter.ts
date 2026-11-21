@@ -3,8 +3,9 @@
  * Wraps the @linear/sdk to implement TaskSourceAdapter interface
  */
 
-import { IssueRelationType, LinearClient } from "@linear/sdk";
+import { IssueRelationType, type LinearClient } from "@linear/sdk";
 import { fetchIssuesPaged, MAX_FETCHED_ISSUES } from "../linear.js";
+import { createLinearClient } from "../linear-auth.js";
 import type {
 	CreateIssueOptions,
 	GetIssuesOptions,
@@ -28,16 +29,11 @@ export class LinearAdapter implements TaskSourceAdapter {
 	private client: LinearClient;
 
 	constructor() {
-		const apiKey = process.env.LINEAR_API_KEY;
-		if (!apiKey) {
-			throw new Error(
-				"LINEAR_API_KEY environment variable is not set. " +
-					'Set it in your shell: export LINEAR_API_KEY="lin_api_xxxxx"',
-			);
-		}
-		this.client = new LinearClient({ apiKey });
+		// LINEAR_API_KEY, LINEAR_ACCESS_TOKEN or OAuth client credentials
+		this.client = createLinearClient();
 	}
 
+	/** Only proves the credential works: `viewer` is the app under an OAuth app actor, and nothing here treats it as "me". */
 	async validateConnection(): Promise<boolean> {
 		try {
 			await this.client.viewer;

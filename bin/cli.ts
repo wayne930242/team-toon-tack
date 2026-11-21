@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadDotEnv, resolveLinearApiKey } from "../scripts/lib/env.js";
+import { prepareLinearAuth } from "../scripts/lib/linear-auth.js";
 import { findAncestorWithTtt } from "../scripts/utils.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +36,18 @@ const COMMANDS = [
 	"version",
 ] as const;
 type Command = (typeof COMMANDS)[number];
+
+/** Commands that never talk to Linear, so they skip the OAuth token fetch. */
+const OFFLINE_COMMANDS: ReadonlySet<string> = new Set([
+	"help",
+	"version",
+	"skills",
+	"skill",
+	"--help",
+	"-h",
+	"--version",
+	"-v",
+]);
 
 function printHelp() {
 	console.log(`
@@ -92,7 +105,14 @@ EXAMPLES:
   ttt show --status "In Progress"  # Filter by status
 
 ENVIRONMENT:
-  LINEAR_API_KEY    Your Linear API key (Linear source, ttt migrate)
+  LINEAR_API_KEY    Your Linear API key (Linear source, ttt migrate). Wins over the OAuth vars
+  LINEAR_ACCESS_TOKEN
+                    A ready Linear OAuth access token (acts as an app: set LINEAR_TTT_USER)
+  LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
+                    Linear OAuth app with client_credentials (own rate limit, actor=app);
+                    token cached under ~/.local/state/team-toon-tack/ (LINEAR_OAUTH_TOKEN_CACHE)
+  LINEAR_OAUTH_SCOPE  Optional. Scopes for the OAuth app token (default: read,write)
+  LINEAR_TTT_USER   User email, key or id that "me" means when authenticated as an app
   TOON_DIR          Optional. Default config directory
 
 More info: https://github.com/wayne930242/team-toon-tack
@@ -198,6 +218,13 @@ async function main() {
 		if (command !== "init") {
 			await resolveLinearApiKey(join(dir, "local.toon"));
 		}
+	}
+
+	// OAuth client credentials: fetch (or reuse the cached) token up front so
+	// the synchronous client builders can use it. A failure is kept and
+	// reported only when a command actually reaches Linear.
+	if (!OFFLINE_COMMANDS.has(command)) {
+		await prepareLinearAuth({ lenient: true });
 	}
 
 	if (!COMMANDS.includes(command)) {

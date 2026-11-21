@@ -2,11 +2,19 @@ import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { LinearClient } from "@linear/sdk";
+import type { LinearClient } from "@linear/sdk";
 // decode uses { strict: false } because encode() produces inline arrays
 // that strict mode rejects (RangeError: Expected 0 inline array items).
 import { decode, encode } from "@toon-format/toon";
 import type { SourceIssue } from "./lib/adapters/types.js";
+import {
+	authMode,
+	createLinearClient,
+	ENV_TTT_USER,
+	isAppActor,
+	LinearAuthError,
+	resolveAppActorUser,
+} from "./lib/linear-auth.js";
 
 export interface AncestorSearch {
 	/** Directory the search started from (the process cwd). */
@@ -334,7 +342,7 @@ export async function getUserEmails(): Promise<string[]> {
 	const userKeys = getCurrentUserKeys(localConfig);
 
 	if (userKeys.length === 0) {
-		return []; // No user filter = all users
+		return appActorUserEmails(config); // No user filter = all users
 	}
 
 	const emails: string[] = [];
@@ -352,6 +360,23 @@ export async function getUserEmails(): Promise<string[]> {
 	return emails;
 }
 
+/**
+ * Who "me" is when no current_user is configured. A personal API key can be
+ * left unscoped (all users), but an OAuth app is not a person: it must be
+ * told whose tickets to track, via LINEAR_TTT_USER, or the command fails.
+ */
+export function appActorUserEmails(config: Config): string[] {
+	if ((config.source?.type ?? "linear") !== "linear" || !isAppActor()) {
+		return [];
+	}
+	try {
+		return resolveAppActorUser(config.users, process.env[ENV_TTT_USER]);
+	} catch (error) {
+		console.error(`Error: ${(error as Error).message}`);
+		process.exit(1);
+	}
+}
+
 /** @deprecated Use getUserEmails() instead. Returns first user email for backwards compatibility. */
 export async function getUserEmail(): Promise<string> {
 	const emails = await getUserEmails();
@@ -364,15 +389,17 @@ export async function getUserEmail(): Promise<string> {
 }
 
 export function getLinearClient(): LinearClient {
-	const apiKey = process.env.LINEAR_API_KEY;
-	if (!apiKey) {
-		console.error("Error: LINEAR_API_KEY environment variable is not set.");
-		console.error(
-			'Set it in your shell: export LINEAR_API_KEY="lin_api_xxxxx"',
-		);
+	try {
+		return createLinearClient();
+	} catch (error) {
+		console.error(`Error: ${(error as Error).message}`);
+		if (error instanceof LinearAuthError && authMode() === null) {
+			console.error(
+				'Set it in your shell: export LINEAR_API_KEY="lin_api_xxxxx"',
+			);
+		}
 		process.exit(1);
 	}
-	return new LinearClient({ apiKey });
 }
 
 const TRANSIENT_PATTERN =
