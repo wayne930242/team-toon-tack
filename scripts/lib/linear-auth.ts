@@ -13,7 +13,7 @@
  * errors name the variable, not the value.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
 	chmodSync,
 	mkdirSync,
@@ -161,8 +161,9 @@ function writeCachedToken(
 		scope: config.scope,
 	};
 	mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-	const tmp = `${file}.${process.pid}.tmp`;
-	writeFileSync(tmp, JSON.stringify(entry), { mode: 0o600 });
+	const tmp = `${file}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+	// wx: never follow or reuse a file someone else created at this path.
+	writeFileSync(tmp, JSON.stringify(entry), { mode: 0o600, flag: "wx" });
 	chmodSync(tmp, 0o600);
 	renameSync(tmp, file);
 }
@@ -214,19 +215,28 @@ export async function fetchClientCredentialsToken(
 			"Linear's OAuth token response had no access_token or expires_in.",
 		);
 	}
-	writeCachedToken(
-		config,
-		env,
-		payload.access_token,
-		now(),
-		payload.expires_in,
-	);
+	try {
+		writeCachedToken(
+			config,
+			env,
+			payload.access_token,
+			now(),
+			payload.expires_in,
+		);
+	} catch (error) {
+		// The token is still good for this run; only the cache failed.
+		console.warn(
+			`Warning: could not cache the Linear OAuth token (${error instanceof Error && "code" in error ? String(error.code) : "write failed"}); set ${ENV_TOKEN_CACHE} to a writable path.`,
+		);
+	}
 	return payload.access_token;
 }
 
 // --- module state: the active client_credentials token and fetch hook -------
 
 let activeToken: string | undefined;
+/** Authorization header values this module handed to a LinearClient. */
+const issuedTokens = new Set<string>();
 let prepareError: LinearAuthError | undefined;
 let refreshInFlight: Promise<string> | undefined;
 let installedFetch: typeof globalThis.fetch | undefined;
@@ -239,6 +249,7 @@ function underlyingFetch(): FetchFn {
 /** Forget cached state and restore fetch. For tests. */
 export function resetLinearAuth(): void {
 	activeToken = undefined;
+	issuedTokens.clear();
 	prepareError = undefined;
 	refreshInFlight = undefined;
 	if (originalFetch && globalThis.fetch === installedFetch) {
@@ -288,8 +299,14 @@ function installAuthFetch(config: OAuthConfig, env: Env): void {
 	originalFetch = base;
 	const wrapped = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		if (!isLinearGraphql(input) || !activeToken) return base(input, init);
+		// Only requests carrying a token this module issued; other clients pass through.
+		const sent = new Headers(init?.headers).get("Authorization");
+		if (sent !== `Bearer ${activeToken}` && !issuedTokens.has(sent ?? "")) {
+			return base(input, init);
+		}
 		const first = await base(input, withBearer(init, activeToken));
 		if (first.status !== 401) return first;
+		await first.body?.cancel().catch(() => {});
 		const token = await refreshToken(config, env);
 		const second = await base(input, withBearer(init, token));
 		if (second.status === 401) {
@@ -351,6 +368,7 @@ export function resolveLinearCredential(
 			);
 		}
 		activeToken = token;
+		issuedTokens.add(`Bearer ${token}`);
 		installAuthFetch(config, env);
 		return { kind: "accessToken", accessToken: token, refreshable: true };
 	}

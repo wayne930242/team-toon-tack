@@ -261,6 +261,7 @@ test("a 401 refetches the token once and replays the request", async () => {
 
 	const response = await fetch(GRAPHQL, {
 		method: "POST",
+		headers: { Authorization: "Bearer tok1" },
 		body: JSON.stringify({ query: "{ viewer { id } }" }),
 	});
 
@@ -276,9 +277,31 @@ test("a 401 refetches the token once and replays the request", async () => {
 		"tok2",
 	);
 
-	// later requests keep using the refreshed token without another refetch
-	await fetch(GRAPHQL, { method: "POST", body: "{}" });
+	// later requests (the SDK client still holds tok1) use the refreshed token without another refetch
+	await fetch(GRAPHQL, {
+		method: "POST",
+		headers: { Authorization: "Bearer tok1" },
+		body: "{}",
+	});
 	assert.equal(linear.tokenRequests().length, 2);
+});
+
+test("requests carrying another credential pass through untouched", async () => {
+	const linear = mockLinear({ accepted: () => new Set(["tok1"]) });
+	await prepareLinearAuth({ env });
+	resolveLinearCredential(env);
+
+	await fetch(GRAPHQL, {
+		method: "POST",
+		headers: { Authorization: "lin_api_other" },
+		body: "{}",
+	});
+	const graphql = linear.calls.filter((c) => c.url === GRAPHQL);
+	assert.deepEqual(
+		graphql.map((c) => c.authorization),
+		["lin_api_other"],
+	);
+	assert.equal(linear.tokenRequests().length, 1);
 });
 
 test("a second 401 fails fast without a further refetch and leaks no secret", async () => {
@@ -287,7 +310,11 @@ test("a second 401 fails fast without a further refetch and leaks no secret", as
 	resolveLinearCredential(env);
 
 	await assert.rejects(
-		fetch(GRAPHQL, { method: "POST", body: "{}" }),
+		fetch(GRAPHQL, {
+			method: "POST",
+			headers: { Authorization: "Bearer tok1" },
+			body: "{}",
+		}),
 		(error: Error) => {
 			assert.ok(error instanceof LinearAuthError);
 			assert.match(error.message, /LINEAR_CLIENT_ID/);
